@@ -2,6 +2,17 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v0.5.0 (2026-11-25): Inventory and hotbar
+- **Inventory (Tab or I):** a 30-slot grid. Items stack (nails up to 50, most things 20, food and water 10). Click a stack, then another slot to move it; dropping it on the same item merges, on a different one swaps. Right-click drops the whole stack. Esc or Tab closes it.
+- **Weight limit:** 50 kg. Over that you can't sprint; the inventory screen shows your weight. Scrap is heavy (1.5 kg), nails are light. I chose 50 instead of a tighter limit so a few trunks of scrap don't stop you sprinting before building arrives.
+- **Hotbar:** the first 9 slots, shown at the bottom of the screen. Keys 1–9 or the mouse wheel select one. Eating and drinking from it comes in v0.6.
+- **Drop (Q):** drops the selected hotbar stack in a bag on the sand. Walk up and press E to pick it back up. If your pockets are full when you search something, what doesn't fit is left in a bag at your feet ("Inventory full").
+- **Saved:** the inventory, the selected hotbar slot and dropped bags. v0.4 saves keep the items they had.
+- **Tests:** inventory checks (stacking, top-up, swap, merge, remove, weight limit, full inventory, no sprint when overloaded, drop and pick up a bag, bags saved, v0.4 saves). New screenshot view `10_inventory`.
+
+**Try:** loot a couple of wrecks, press Tab and rearrange your hotbar. Drop something with Q and pick it up again.
+**Next:** v0.6, health, hunger and thirst.
+
 ## v0.4.0 (2026-11-25): Scavenging
 - **Interact key (E):** look at something searchable within reach and a prompt appears under the crosshair ("[E] Search trunk"). Walls block it, so no looting through concrete.
 - **Wrecks** have a **glovebox** (reach in through the doors) and a **trunk** (at the back). **Ruins** now hide 1–2 wooden **supply crates** in the corner of the wall; searching knocks the lid off.

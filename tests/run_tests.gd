@@ -46,17 +46,19 @@ func _test_loot() -> void:
 	var seen: String = player.interact_target()
 	check(seen == crate.id, "crosshair finds the crate (%s)" % seen)
 	check(loot.prompt(crate.id).begins_with("[E] Search"), "prompt: " + loot.prompt(crate.id))
-	var got: Dictionary = loot.open(crate.id)
-	check(not got.is_empty(), "searching gives loot %s" % str(got))
+	var inv = main.inventory
+	main.interact(crate.id)
+	check(inv.weight() > 0.0, "searching puts loot in the inventory (%.1f kg)" % inv.weight())
 	check(loot.open(crate.id).is_empty(), "a searched crate is empty")
 	check(loot.prompt(crate.id).ends_with("(empty)"), "prompt shows empty")
 	var data: Dictionary = main.collect_save_data()
-	var before: Dictionary = loot.inventory.duplicate()
+	var before: Array = inv.slots.duplicate(true)
 	loot.containers[crate.id].opened = false
-	loot.inventory = {}
+	inv.load_data({})
 	main.apply_save_data(JSON.parse_string(JSON.stringify(data)))
 	check(loot.is_opened(crate.id), "opened containers are saved")
-	check(loot.inventory == before, "picked-up items are saved")
+	check(inv.slots == before, "inventory is saved")
+	_test_inventory()
 	# Same seed and id always roll the same loot.
 	var Items = load("res://scripts/items.gd")
 	var r1 := RandomNumberGenerator.new()
@@ -64,6 +66,54 @@ func _test_loot() -> void:
 	var r2 := RandomNumberGenerator.new()
 	r2.seed = 9
 	check(Items.roll("trunk", r1) == Items.roll("trunk", r2), "loot rolls are repeatable")
+
+
+## Stacking, weight limit, moving, dropping and picking up bags, old saves.
+func _test_inventory() -> void:
+	var Inventory = load("res://scripts/inventory.gd")
+	var inv = Inventory.new()
+	check(inv.add("nails", 70) == 0 and inv.slots[0].count == 50 and inv.slots[1].count == 20, "stacks split at the stack size")
+	inv.add("nails", 10)
+	check(inv.slots[1].count == 30, "new items top up existing stacks")
+	inv.add("wood", 3)
+	inv.move(2, 0)
+	check(inv.slots[0].item == "wood" and inv.slots[2].item == "nails", "moving onto another item swaps")
+	inv.move(1, 2)
+	check(inv.slots[2].count == 50 and inv.slots[1].count == 30, "moving onto the same item merges up to a full stack")
+	check(inv.remove("nails", 85) == 80 and inv.count_of("nails") == 0, "remove takes what there is")
+	check(not inv.overloaded(), "light load is fine")
+	inv.add("scrap", 40)
+	check(inv.overloaded(), "60 kg of scrap is too heavy")
+	var full = Inventory.new()
+	for i in Inventory.SIZE:
+		full.add("water", 10)
+	check(full.add("water", 3) == 3, "a full inventory reports what didn't fit")
+	# Overloaded player can't sprint.
+	var player = main.player
+	var real = main.inventory
+	real.add("scrap", 40)
+	check(player.overloaded, "player knows they are overloaded")
+	real.remove("scrap", 40)
+	check(not player.overloaded, "dropping weight allows sprint again")
+	# Drop a stack and pick the bag back up.
+	real.load_data({})
+	real.add("cloth", 4)
+	main.drop_slot(0)
+	check(real.count_of("cloth") == 0 and main.loot.drops.size() == 1, "dropping a stack leaves a bag")
+	var bag_id: String = main.loot.drops.keys()[0]
+	var data: Dictionary = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	main.interact(bag_id)
+	check(real.count_of("cloth") == 4 and main.loot.drops.is_empty(), "picking the bag up empties it")
+	main.apply_save_data(data)
+	check(main.loot.drops.size() == 1 and real.count_of("cloth") == 0, "dropped bags are saved")
+	main.interact(main.loot.drops.keys()[0])
+	# A v0.4 save (plain item counts) still loads.
+	data.erase("inventory")
+	data.loot["inventory"] = {"wood": 7}
+	main.apply_save_data(data)
+	check(real.count_of("wood") == 7, "v0.4 saves keep their items")
+	real.load_data({})
+	main.loot.load_data({})
 
 
 func _process(_delta: float) -> bool:

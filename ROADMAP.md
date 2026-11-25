@@ -14,7 +14,7 @@ One version per development run, in this order. The full plan with reasons is in
 
 ### M2: Scavenging and survival
 - [x] v0.4: Interact key (E) with an on-screen prompt. Search wrecks (glovebox, trunk) and ruins (crates). Pickup pop-ups. Loot: scrap metal, wood, cloth, nails, canned food, water bottles. Opened containers are saved
-- [ ] v0.5: Inventory (Tab) with a grid, stacking and a weight limit (too heavy means no sprint). Hotbar 1–9, drop items. Saved with the game
+- [x] v0.5: Inventory (Tab) with a grid, stacking and a weight limit (too heavy means no sprint). Hotbar 1–9, drop items. Saved with the game
 - [ ] v0.6: Health, hunger and thirst. Midday heat drains water faster, and shade helps. Eat and drink from the hotbar. Death screen, then respawn at the base flag, keeping your items
 - [ ] v0.7: Map (M) showing discovered places. Loot refills each morning at random spots. Rare supply crates with better loot
 

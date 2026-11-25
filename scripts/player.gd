@@ -29,6 +29,8 @@ var spawn_point := Vector3.ZERO
 var head: Node3D
 var camera: Camera3D
 var crouching := false
+## Carrying too much: no sprinting.
+var overloaded := false
 var _bob_time := 0.0
 var _last_step_phase := 0
 var _was_on_floor := true
@@ -87,7 +89,7 @@ func _physics_process(delta: float) -> void:
 	var dir := (transform.basis * Vector3(input.x, 0.0, input.y)).normalized()
 	var moving := input.length() > 0.1
 
-	var sprinting := Input.is_action_pressed("sprint") and moving and not exhausted and not crouching
+	var sprinting := Input.is_action_pressed("sprint") and moving and not exhausted and not crouching and not overloaded
 	if sprinting:
 		stamina = maxf(stamina - STAMINA_DRAIN * delta, 0.0)
 		if stamina <= 0.0:

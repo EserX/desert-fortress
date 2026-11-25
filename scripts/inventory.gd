@@ -80,6 +80,17 @@ func remove(item: String, count: int) -> int:
 
 
 ## Takes the whole stack out of a slot and returns it ({} if empty).
+## Uses up one item from a slot.
+func take_one(i: int) -> void:
+	var s: Dictionary = slots[i]
+	if s.is_empty():
+		return
+	s.count -= 1
+	if s.count <= 0:
+		slots[i] = {}
+	changed.emit()
+
+
 func take_slot(i: int) -> Dictionary:
 	var s: Dictionary = slots[i]
 	slots[i] = {}

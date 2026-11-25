@@ -13,6 +13,8 @@ const Loot = preload("res://scripts/loot.gd")
 const Items = preload("res://scripts/items.gd")
 const Inventory = preload("res://scripts/inventory.gd")
 const InventoryUI = preload("res://scripts/inventory_ui.gd")
+const Survival = preload("res://scripts/survival.gd")
+const DeathScreen = preload("res://scripts/death_screen.gd")
 
 ## When true the world is only a backdrop for the title screen:
 ## no player, HUD or pause menu, just a slowly orbiting camera.
@@ -31,6 +33,10 @@ var pause_menu: PauseMenu
 var loot: Loot
 var inventory: Inventory
 var inventory_ui: InventoryUI
+var survival: Survival
+var death_screen: DeathScreen
+var in_shade := false
+var _shade_timer := 0.0
 var sun: DirectionalLight3D
 var moon: DirectionalLight3D
 var env: Environment
@@ -87,7 +93,13 @@ func _ready() -> void:
 	inventory = Inventory.new()
 	inventory.changed.connect(func(): player.overloaded = inventory.overloaded())
 
+	survival = Survival.new()
+	survival.name = "Survival"
+	add_child(survival)
+	player.landed.connect(survival.fall)
+
 	hud = Hud.new()
+	hud.survival = survival
 	hud.inventory = inventory
 	hud.name = "HUD"
 	hud.player = player
@@ -105,6 +117,13 @@ func _ready() -> void:
 	inventory_ui.drop_requested.connect(drop_slot)
 	add_child(inventory_ui)
 
+	death_screen = DeathScreen.new()
+	death_screen.name = "DeathScreen"
+	death_screen.respawn_pressed.connect(respawn)
+	add_child(death_screen)
+	survival.died.connect(_on_died)
+	survival.warning.connect(hud.show_banner)
+
 	# Autosave every morning.
 	day_night.day_started.connect(func(_d): Game.save_game("auto", _screenshot()))
 	Game.saved.connect(func(slot): hud.show_banner("Game saved (%s)" % Game.slot_label(slot)))
@@ -120,6 +139,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	elif event.is_action_pressed("interact"):
 		interact(player.interact_target())
+	elif event.is_action_pressed("use_item"):
+		use_selected()
 	elif event.is_action_pressed("drop"):
 		drop_slot(inventory.selected)
 	elif event is InputEventMouseButton and event.pressed and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
@@ -131,6 +152,12 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _process(delta: float) -> void:
+	if survival and not get_tree().paused:
+		_shade_timer -= delta
+		if _shade_timer <= 0.0:
+			_shade_timer = 0.5
+			in_shade = _check_shade()
+		survival.tick(delta, day_night.hour, player.sprinting, in_shade)
 	if hud and not get_tree().paused:
 		hud.set_prompt("" if inventory_ui.is_open() else loot.prompt(player.interact_target()))
 		for i in Inventory.HOTBAR:
@@ -203,6 +230,48 @@ func drop_slot(i: int) -> void:
 		loot.spawn_drop({s.item: s.count}, _drop_spot())
 
 
+## Eat or drink the selected hotbar item.
+func use_selected() -> void:
+	var s := inventory.selected_stack()
+	if s.is_empty() or not Survival.can_consume(s.item):
+		return
+	survival.consume(s.item)
+	hud.show_pickup(["%s %s" % ["Drank" if s.item == "water" else "Ate", Items.display_name(s.item).to_lower()]])
+	inventory.take_one(inventory.selected)
+
+
+## True when something (a wall, a wreck, a dune) blocks the sun.
+func _check_shade() -> bool:
+	if day_night.is_night():
+		return true
+	var to_sun := sun.global_transform.basis.z.normalized()
+	if to_sun.y < 0.05:
+		return true
+	var from := player.head.global_position
+	var q := PhysicsRayQueryParameters3D.create(from, from + to_sun * 150.0, 1, [player.get_rid()])
+	return not get_world_3d().direct_space_state.intersect_ray(q).is_empty()
+
+
+func _on_died() -> void:
+	var cause := "You fell too far."
+	if survival.water <= 0.0:
+		cause = "You died of thirst."
+	elif survival.food <= 0.0:
+		cause = "You starved."
+	if inventory_ui.is_open():
+		inventory_ui.close()
+	death_screen.open(cause)
+
+
+## Back at the base flag with your items.
+func respawn() -> void:
+	survival.respawn()
+	player.position = player.spawn_point
+	player.velocity = Vector3.ZERO
+	player.stamina = player.STAMINA_MAX
+	death_screen.close()
+
+
 func select_hotbar(i: int) -> void:
 	inventory.selected = i
 	hud.refresh_hotbar()
@@ -232,6 +301,7 @@ func collect_save_data() -> Dictionary:
 		},
 		"loot": loot.save_data(),
 		"inventory": inventory.save_data(),
+		"survival": survival.save_data(),
 	}
 
 
@@ -239,6 +309,7 @@ func apply_save_data(data: Dictionary) -> void:
 	var w: Dictionary = data.get("world", {})
 	day_night.restore(int(w.get("day", 1)), float(w.get("hour", 9.0)))
 	loot.load_data(data.get("loot", {}))
+	survival.load_data(data.get("survival", {}))
 	if data.has("inventory"):
 		inventory.load_data(data.inventory)
 	else:

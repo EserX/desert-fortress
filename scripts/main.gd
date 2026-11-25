@@ -16,6 +16,8 @@ const InventoryUI = preload("res://scripts/inventory_ui.gd")
 const Survival = preload("res://scripts/survival.gd")
 const DeathScreen = preload("res://scripts/death_screen.gd")
 const MapUI = preload("res://scripts/map_ui.gd")
+const Building = preload("res://scripts/building.gd")
+const BuildMode = preload("res://scripts/build_mode.gd")
 
 const DISCOVER_RANGE := 45.0
 const REFILLS_PER_MORNING := 4
@@ -43,6 +45,8 @@ var death_screen: DeathScreen
 var in_shade := false
 var _shade_timer := 0.0
 var map_ui: MapUI
+var building: Building
+var build_mode: BuildMode
 ## Wrecks and ruins: {"key": "w3", "kind": "wreck", "pos": Vector3}.
 var places: Array = []
 ## Keys of places you have been near.
@@ -72,6 +76,11 @@ func _ready() -> void:
 		places.append({"key": "w%d" % i, "kind": "wreck", "pos": props.wreck_positions[i]})
 	for i in props.ruin_positions.size():
 		places.append({"key": "r%d" % i, "kind": "ruin", "pos": props.ruin_positions[i]})
+
+	building = Building.new()
+	building.name = "Building"
+	building.terrain = terrain
+	add_child(building)
 
 	loot = Loot.new()
 	loot.name = "Loot"
@@ -107,6 +116,13 @@ func _ready() -> void:
 
 	inventory = Inventory.new()
 	inventory.changed.connect(func(): player.overloaded = inventory.overloaded())
+
+	build_mode = BuildMode.new()
+	build_mode.name = "BuildMode"
+	build_mode.building = building
+	build_mode.inventory = inventory
+	build_mode.player = player
+	add_child(build_mode)
 
 	survival = Survival.new()
 	survival.name = "Survival"
@@ -158,6 +174,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		Game.save_game("quick", _screenshot())
 	elif inventory_ui.is_open():
 		return
+	elif event.is_action_pressed("build"):
+		build_mode.toggle()
+		hud.show_pickup(["Build mode on" if build_mode.active else "Build mode off"])
+	elif build_mode.active and _build_input(event):
+		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("interact"):
 		interact(player.interact_target())
 	elif event.is_action_pressed("use_item"):
@@ -184,7 +205,11 @@ func _process(delta: float) -> void:
 		hud.set_prompt("" if inventory_ui.is_open() else loot.prompt(player.interact_target()))
 		for i in Inventory.HOTBAR:
 			if Input.is_action_just_pressed("hotbar_%d" % (i + 1)) and not inventory_ui.is_open():
-				select_hotbar(i)
+				if build_mode.active:
+					build_mode.select(i)
+				else:
+					select_hotbar(i)
+		hud.build_label.text = build_mode.status_text() if build_mode.active else ""
 	if _orbit_camera:
 		_orbit_angle += delta * 0.04
 		var target := Vector3(0, terrain.BASE_HEIGHT + 3.0, 0)
@@ -217,6 +242,29 @@ func thumbnail_image() -> Image:
 	if pause_menu and pause_menu.is_open() and pause_menu._shot:
 		return pause_menu._shot
 	return _screenshot()
+
+
+## Mouse and R while building. Returns true if the event was used.
+func _build_input(event: InputEvent) -> bool:
+	if event.is_action_pressed("rotate"):
+		build_mode.rotate_piece()
+		return true
+	if not (event is InputEventMouseButton and event.pressed) or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+		return false
+	match event.button_index:
+		MOUSE_BUTTON_LEFT:
+			build_mode.try_place()
+		MOUSE_BUTTON_RIGHT:
+			var t := build_mode.try_remove()
+			if t != "":
+				hud.show_pickup(["Took down " + Building.PIECES[t].name.to_lower()])
+		MOUSE_BUTTON_WHEEL_UP:
+			build_mode.cycle(-1)
+		MOUSE_BUTTON_WHEEL_DOWN:
+			build_mode.cycle(1)
+		_:
+			return false
+	return true
 
 
 ## E on a container or a dropped bag: put what fits in the inventory.
@@ -360,6 +408,7 @@ func collect_save_data() -> Dictionary:
 		"inventory": inventory.save_data(),
 		"survival": survival.save_data(),
 		"map": {"discovered": discovered.keys()},
+		"buildings": building.save_data(),
 	}
 
 
@@ -368,6 +417,7 @@ func apply_save_data(data: Dictionary) -> void:
 	day_night.restore(int(w.get("day", 1)), float(w.get("hour", 9.0)))
 	loot.load_data(data.get("loot", {}))
 	survival.load_data(data.get("survival", {}))
+	building.load_data(data.get("buildings", []))
 	discovered = {}
 	for key in data.get("map", {}).get("discovered", []):
 		discovered[str(key)] = true

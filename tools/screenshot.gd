@@ -20,6 +20,7 @@ var shots := [
 	{"name": "10_inventory", "pos": Vector3(0, 0, 9), "yaw": 0.6, "pitch": -0.05, "hour": 10.0, "inventory": true},
 	{"name": "11_death", "pos": Vector3(0, 0, 9), "yaw": 0.6, "pitch": -0.05, "hour": 13.0, "death": true},
 	{"name": "12_map", "pos": Vector3(20, 0, 40), "yaw": 0.9, "pitch": 0.0, "hour": 9.0, "map": true},
+	{"name": "13_build", "pos": Vector3(9, 0, 19), "yaw": 0.35, "pitch": -0.35, "hour": 15.5, "build": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -77,6 +78,10 @@ func _process(_d: float) -> bool:
 				main.map_ui.toggle()
 		elif main.map_ui.is_open():
 			main.map_ui.toggle()
+		if s.get("build", false):
+			_build_sample()
+		elif main.build_mode.active:
+			main.build_mode.toggle()
 		if s.get("menu", false):
 			main.pause_menu.open()
 		else:
@@ -108,3 +113,19 @@ func _look_at_target(p: Node3D, kind: String) -> void:
 	var d := t - from
 	p.rotation.y = atan2(-d.x, -d.z)
 	p.head.rotation.x = -0.15
+
+
+## A small hut of foundations and walls near the base, and build mode on.
+func _build_sample() -> void:
+	var b = main.building
+	for cx in [2, 3]:
+		for cz in [5, 6]:
+			var slot := {"kind": "cell", "cx": cx, "cz": cz, "dir": 0}
+			b.place("foundation", slot, b.evaluate("foundation", slot).y)
+	for e in [[2, 5, 0], [3, 5, 0], [2, 5, 1], [2, 6, 1], [4, 5, 1]]:
+		var slot := {"kind": "edge", "cx": e[0], "cz": e[1], "dir": e[2]}
+		b.place("wall", slot, b.evaluate("wall", slot).y)
+	main.inventory.add_all({"wood": 20, "nails": 20})
+	main.build_mode.active = true
+	main.build_mode.select(1)
+	main.build_mode.dir = 0

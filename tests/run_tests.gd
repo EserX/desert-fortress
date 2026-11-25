@@ -206,6 +206,60 @@ func _test_map_and_refill() -> void:
 	main.map_ui.toggle()
 	check(main.map_ui.is_open(), "map opens")
 	main.inventory.load_data({})
+	_test_building()
+
+
+## Build mode: preview, cost, foundation and wall, overlap, refund, saving.
+func _test_building() -> void:
+	var bm = main.build_mode
+	var b = main.building
+	var inv = main.inventory
+	var player = main.player
+	var terrain = main.terrain
+	player.position = Vector3(7, terrain.surface_height(7, 15), 15)
+	player.rotation.y = 0.0
+	player.head.rotation.x = -0.6
+	player.head.position.y = player.EYE_HEIGHT
+	inv.load_data({})
+	bm.toggle()
+	check(bm.active, "B turns build mode on")
+	bm.select(0)
+	bm.update_preview()
+	check(bm.slot.get("kind", "") == "cell" and bm.slot.cz == 6, "preview snaps to the grid cell in front (%s)" % str(bm.slot))
+	check(not bm.can_build and bm.reason == "Not enough materials", "no materials, no building")
+	inv.add_all({"wood": 20, "nails": 20})
+	bm.update_preview()
+	check(bm.can_build, "foundation can be built on flat sand (%s)" % bm.reason)
+	check(bm.try_place() and inv.count_of("wood") == 16 and inv.count_of("nails") == 16, "building a foundation costs 4 wood and 4 nails")
+	var fkey: String = b.slot_key(bm.slot)
+	bm.update_preview()
+	check(not bm.can_build, "can't build twice in one spot")
+	# Wall on the foundation edge.
+	bm.select(1)
+	bm.update_preview()
+	check(bm.slot.kind == "edge", "walls snap to cell edges")
+	var wall_slot := {"kind": "edge", "cx": 3, "cz": 6, "dir": 0}
+	var ev: Dictionary = b.evaluate("wall", wall_slot)
+	check(absf(ev.y - b.pieces[fkey].y) < 0.001, "a wall stands on the foundation")
+	b.place("wall", wall_slot, ev.y)
+	bm.rotate_piece()
+	check(bm.dir == 1, "R turns the wall")
+	# The player's own cell is blocked by the player.
+	var mine := {"kind": "cell", "cx": 3, "cz": 7, "dir": 0}
+	check(b.blocks_person("foundation", mine, b.evaluate("foundation", mine).y, player.position), "can't build on top of yourself")
+	check(not b.blocks_person("foundation", {"kind": "cell", "cx": 3, "cz": 5, "dir": 0}, 0.0, player.position), "a cell further away is fine")
+	# Save, wipe, load.
+	var data: Dictionary = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	b.load_data([])
+	check(b.pieces.is_empty(), "pieces cleared")
+	main.apply_save_data(data)
+	check(b.pieces.size() == 2 and b.pieces.has(fkey), "buildings are saved and loaded")
+	# Take down the foundation: full refund.
+	bm.looking_at_piece = fkey
+	check(bm.try_remove() == "foundation" and inv.count_of("wood") == 20, "taking a piece down refunds it")
+	b.load_data([])
+	bm.toggle()
+	inv.load_data({})
 
 
 func _process(_delta: float) -> bool:
@@ -214,6 +268,10 @@ func _process(_delta: float) -> bool:
 	var terrain = main.terrain
 	match frame:
 		2:
+			check(main.has_method("collect_save_data") and player != null, "game scripts compiled and the world was built")
+			if player == null:
+				quit(1)
+				return true
 			check(terrain.get_child_count() >= 2, "terrain has mesh and collision")
 			var mesh: Mesh = terrain.get_node("TerrainMesh").mesh
 			var arrays := mesh.surface_get_arrays(0)

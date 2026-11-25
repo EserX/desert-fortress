@@ -14,6 +14,7 @@ const ACTIONS := {
 	"crouch": [KEY_CTRL, KEY_C],
 	"quick_save": [KEY_F5],
 	"quick_load": [KEY_F9],
+	"interact": [KEY_E],
 }
 
 

@@ -20,6 +20,7 @@ const CROUCH_EYE_HEIGHT := 1.0
 const CROUCH_SPEED := 2.6
 const STAND_HEIGHT := 1.8
 const CROUCH_HEIGHT := 1.15
+const INTERACT_RANGE := 2.6
 
 var stamina := STAMINA_MAX
 var exhausted := false
@@ -163,6 +164,19 @@ func _update_head_bob(delta: float, walking: bool, speed: float, sprinting: bool
 
 
 ## Compass heading in degrees: 0 = north (-Z), 90 = east (+X).
+## Id of the searchable thing under the crosshair (within reach), or "".
+## Walls block the ray, so you can't loot through them.
+func interact_target() -> String:
+	var from := camera.global_position
+	var to := from - camera.global_transform.basis.z * INTERACT_RANGE
+	var q := PhysicsRayQueryParameters3D.create(from, to, 0b11, [get_rid()])
+	q.collide_with_areas = true
+	var hit := get_world_3d().direct_space_state.intersect_ray(q)
+	if hit and hit.collider.has_meta("interact_id"):
+		return hit.collider.get_meta("interact_id")
+	return ""
+
+
 func heading_degrees() -> float:
 	var fwd := -global_transform.basis.z
 	return fposmod(rad_to_deg(atan2(fwd.x, -fwd.z)), 360.0)

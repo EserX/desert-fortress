@@ -12,6 +12,8 @@ var help: Label
 var clock: Label
 var banner: Label
 var day_night  # DayNight
+var prompt: Label
+var pickups: VBoxContainer
 var _banner_time := 0.0
 var _help_time := 12.0
 
@@ -61,7 +63,7 @@ func _ready() -> void:
 	stamina_bar.add_theme_stylebox_override("fill", fill)
 	root.add_child(stamina_bar)
 
-	help = _label("WASD move   Shift sprint   Space jump   Mouse look   Ctrl crouch   F5 quicksave   Esc menu", 16)
+	help = _label("WASD move   Shift sprint   Space jump   Mouse look   Ctrl crouch   E search   F5 quicksave   Esc menu", 16)
 	help.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	help.position = Vector2(20, -36)
 	root.add_child(help)
@@ -72,6 +74,21 @@ func _ready() -> void:
 	clock.size = Vector2(320, 60)
 	clock.position = Vector2(-340, 14)
 	root.add_child(clock)
+
+	prompt = _label("", 20)
+	prompt.set_anchors_preset(Control.PRESET_CENTER)
+	prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	prompt.size = Vector2(400, 30)
+	prompt.position = Vector2(-200, 34)
+	root.add_child(prompt)
+
+	pickups = VBoxContainer.new()
+	pickups.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
+	pickups.alignment = BoxContainer.ALIGNMENT_END
+	pickups.size = Vector2(300, 260)
+	pickups.position = Vector2(-320, -40)
+	pickups.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(pickups)
 
 	banner = _label("", 34)
 	banner.set_anchors_preset(Control.PRESET_CENTER_TOP)
@@ -134,6 +151,27 @@ func _process(delta: float) -> void:
 func show_banner(text: String) -> void:
 	banner.text = text
 	_banner_time = 5.0
+
+
+func set_prompt(text: String) -> void:
+	prompt.text = text
+
+
+## Shows "+3 Scrap metal" lines that fade out after a few seconds.
+func show_pickup(lines: Array) -> void:
+	for text in lines:
+		var l := _label(text, 20)
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		l.add_theme_color_override("font_color", Color(0.85, 1.0, 0.7))
+		pickups.add_child(l)
+		var tw := l.create_tween()
+		tw.tween_interval(3.0)
+		tw.tween_property(l, "modulate:a", 0.0, 1.0)
+		tw.tween_callback(l.queue_free)
+	while pickups.get_child_count() > 8:
+		var old := pickups.get_child(0)
+		pickups.remove_child(old)
+		old.queue_free()
 
 
 func _on_stamina_changed(value: float, max_value: float) -> void:

@@ -16,6 +16,7 @@ var shots := [
 	{"name": "05_night", "pos": Vector3(0, 0, 9), "yaw": 0.5, "pitch": 0.15, "hour": 23.0},
 	{"name": "06_wreck", "target": "wreck", "hour": 11.0},
 	{"name": "07_ruin", "target": "ruin", "hour": 16.0},
+	{"name": "09_crate", "target": "crate", "hour": 10.5},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -67,6 +68,14 @@ func _process(_d: float) -> bool:
 
 ## Stand 9 m from the first wreck/ruin and look at it.
 func _look_at_target(p: Node3D, kind: String) -> void:
+	if kind == "crate":
+		var c: Dictionary = main.props.containers.filter(func(x): return x.kind == "crate")[0]
+		var cp: Vector3 = c.lid.global_position
+		p.position = cp + Vector3(1.4, -p.EYE_HEIGHT + 0.5, 0.6)
+		var dc := cp - p.position - Vector3(0, p.EYE_HEIGHT, 0)
+		p.rotation.y = atan2(-dc.x, -dc.z)
+		p.head.rotation.x = atan2(dc.y, Vector2(dc.x, dc.z).length())
+		return
 	var list: Array = main.props.wreck_positions if kind == "wreck" else main.props.ruin_positions
 	var t: Vector3 = list[0]
 	var from := t + Vector3(7, 0, 6)

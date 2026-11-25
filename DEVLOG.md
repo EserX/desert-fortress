@@ -2,6 +2,18 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v0.4.0 (2026-11-25): Scavenging
+- **Interact key (E):** look at something searchable within reach and a prompt appears under the crosshair ("[E] Search trunk"). Walls block it, so no looting through concrete.
+- **Wrecks** have a **glovebox** (reach in through the doors) and a **trunk** (at the back). **Ruins** now hide 1–2 wooden **supply crates** in the corner of the wall; searching knocks the lid off.
+- **Loot:** scrap metal, wood, cloth, nails, canned food and water bottles. Gloveboxes hold small things, trunks hold scrap and nails, crates hold wood and supplies. Each container's loot is fixed for a given world, so reloading doesn't reroll it.
+- **Pickup pop-ups** on the right ("+3 Scrap metal") that fade out.
+- **Saved:** which containers are searched and everything you picked up. Older saves still load (nothing searched, empty pockets).
+- Crates use their own random stream, so the rest of an existing world stays where it was.
+- **Tests:** loot checks (crosshair finds a crate, search gives loot, empty after, saved and restored, repeatable rolls). New screenshot view `09_crate`.
+
+**Try:** walk to a wreck, aim at the doors and press E, then the trunk. Ruins have crates tucked in the corner.
+**Next:** v0.5, the inventory screen (Tab) and the hotbar, so you can see what you've collected.
+
 ## v0.3.0 (2026-11-25): Title screen, saving and loading
 - **Title screen:** the desert at sunset with a slowly circling camera behind the menu. Buttons: **Continue** (loads your most recent save), **New game**, **Load game**, **Settings** and **Quit to desktop**.
 - **New game:** each new game generates a different desert. The world seed is stored in the save.

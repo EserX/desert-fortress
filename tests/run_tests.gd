@@ -27,6 +27,45 @@ func check(cond: bool, msg: String) -> void:
 		failures.append(msg)
 
 
+## Looting: aim at a crate, search it, loot is saved and restored.
+func _test_loot() -> void:
+	var loot = main.loot
+	var kinds := {}
+	for c in main.props.containers:
+		kinds[c.kind] = true
+	check(kinds.has("glovebox") and kinds.has("trunk") and kinds.has("crate"), "wrecks and ruins have containers (%d)" % loot.containers.size())
+	# Stand in front of a crate and look at it.
+	var crate: Dictionary = main.props.containers.filter(func(c): return c.kind == "crate")[0]
+	var target: Vector3 = crate.lid.global_position
+	var player = main.player
+	var away := Vector3(1.6, 0, 0)
+	player.position = target + away - Vector3(0, player.EYE_HEIGHT, 0)
+	player.rotation.y = atan2(away.x, away.z)
+	player.head.rotation.x = 0.0
+	player.head.position.y = player.EYE_HEIGHT
+	var seen: String = player.interact_target()
+	check(seen == crate.id, "crosshair finds the crate (%s)" % seen)
+	check(loot.prompt(crate.id).begins_with("[E] Search"), "prompt: " + loot.prompt(crate.id))
+	var got: Dictionary = loot.open(crate.id)
+	check(not got.is_empty(), "searching gives loot %s" % str(got))
+	check(loot.open(crate.id).is_empty(), "a searched crate is empty")
+	check(loot.prompt(crate.id).ends_with("(empty)"), "prompt shows empty")
+	var data: Dictionary = main.collect_save_data()
+	var before: Dictionary = loot.inventory.duplicate()
+	loot.containers[crate.id].opened = false
+	loot.inventory = {}
+	main.apply_save_data(JSON.parse_string(JSON.stringify(data)))
+	check(loot.is_opened(crate.id), "opened containers are saved")
+	check(loot.inventory == before, "picked-up items are saved")
+	# Same seed and id always roll the same loot.
+	var Items = load("res://scripts/items.gd")
+	var r1 := RandomNumberGenerator.new()
+	r1.seed = 9
+	var r2 := RandomNumberGenerator.new()
+	r2.seed = 9
+	check(Items.roll("trunk", r1) == Items.roll("trunk", r2), "loot rolls are repeatable")
+
+
 func _process(_delta: float) -> bool:
 	frame += 1
 	var player = main.player
@@ -125,6 +164,7 @@ func _process(_delta: float) -> bool:
 			check(main.day_night.is_night(), "restored time is night")
 			game.delete_slot("test")
 			check(game.read_slot("test").is_empty(), "slot deleted")
+			_test_loot()
 			check(game.read_slot("does_not_exist").is_empty(), "missing slot reads as empty")
 			# Title screen builds without errors.
 			title = load("res://scenes/title.tscn").instantiate()

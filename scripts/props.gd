@@ -18,15 +18,24 @@ var rust_mats: Array[StandardMaterial3D] = []
 var concrete_mat: StandardMaterial3D
 var wood_mat: StandardMaterial3D
 var cloth_mat: StandardMaterial3D
+var crate_lid_mat: StandardMaterial3D
 
 ## Spots other systems may want later (loot, mutant spawns...).
 var wreck_positions: Array[Vector3] = []
 var ruin_positions: Array[Vector3] = []
+## Searchable containers: {"id", "kind", "lid"}. Ids are stable for a seed.
+var containers: Array = []
+## Separate random stream for loot crates so adding them didn't move the rest of the world.
+var crate_rng := RandomNumberGenerator.new()
+
+## Physics layer used by interaction areas (not collided with, only ray-cast).
+const INTERACT_LAYER := 2
 
 
 func populate(terrain_node: Terrain, seed_value: int) -> void:
 	terrain = terrain_node
 	rng.seed = seed_value * 7 + 3
+	crate_rng.seed = seed_value * 13 + 5
 	_build_shared()
 	_place_base_marker()
 	for i in 260:
@@ -67,6 +76,7 @@ func _build_shared() -> void:
 	concrete_mat = LowPoly.material(Color(0.60, 0.56, 0.50))
 	wood_mat = LowPoly.material(Color(0.45, 0.31, 0.19))
 	cloth_mat = LowPoly.material(Color(0.75, 0.18, 0.12))
+	crate_lid_mat = LowPoly.material(Color(0.36, 0.25, 0.15))
 
 
 ## Random point on the dunes, outside the base clearing and inside the mountains.
@@ -215,6 +225,10 @@ func _place_wreck() -> void:
 		_mesh(body, wheel_mesh, dark, w, Vector3.ONE, Vector3(PI / 2, 0, 0))
 	_box_collider(body, Vector3(4.4, 1.0, 1.9), Vector3(0, 0.6, 0))
 	_box_collider(body, Vector3(2.1, 0.7, 1.75), Vector3(-0.35, 1.42, 0))
+	# Searchable spots: the glovebox (through the doors) and the trunk at the back.
+	var w := wreck_positions.size() - 1
+	_interact_area(body, "w%d_glovebox" % w, "glovebox", Vector3(1.3, 0.9, 2.3), Vector3(0.1, 1.35, 0))
+	_interact_area(body, "w%d_trunk" % w, "trunk", Vector3(0.9, 0.7, 2.1), Vector3(-1.85, 0.95, 0))
 
 
 func _place_ruin() -> void:
@@ -244,6 +258,36 @@ func _place_ruin() -> void:
 		var world := body.transform * local
 		local.y = terrain.surface_height(world.x, world.z) - p.y + s * 0.15
 		_mesh(body, box, concrete_mat, local, Vector3(s, s * 0.6, s), Vector3(rng.randf(), rng.randf(), rng.randf()))
+	# Supply crates sheltered in the corner of the wall.
+	var r := ruin_positions.size() - 1
+	for i in crate_rng.randi_range(1, 2):
+		var local := Vector3(crate_rng.randf_range(1.0, 3.2), 0, crate_rng.randf_range(0.9, 1.6) + i * 1.3)
+		var world := body.transform * local
+		_place_crate("r%d_crate%d" % [r, i], world, body.rotation.y + crate_rng.randf_range(-0.4, 0.4))
+
+
+## A wooden crate with a lid that can be searched.
+func _place_crate(id: String, pos: Vector3, yaw: float) -> void:
+	var cb := _body_at(Vector3(pos.x, terrain.ground_under(pos.x, pos.z, 0.5) + 0.3, pos.z), yaw)
+	var box := BoxMesh.new()
+	_mesh(cb, box, wood_mat, Vector3.ZERO, Vector3(0.8, 0.6, 0.6))
+	var lid := _mesh(cb, box, crate_lid_mat, Vector3(0, 0.33, 0), Vector3(0.86, 0.07, 0.66))
+	_box_collider(cb, Vector3(0.8, 0.6, 0.6))
+	_interact_area(cb, id, "crate", Vector3(0.95, 0.8, 0.75), Vector3(0, 0.05, 0), lid)
+
+
+## An invisible box the interaction ray can hit.
+func _interact_area(parent: Node3D, id: String, kind: String, size: Vector3, pos: Vector3, lid: Node3D = null) -> void:
+	var area := Area3D.new()
+	area.collision_layer = 1 << (INTERACT_LAYER - 1)
+	area.collision_mask = 0
+	area.monitoring = false
+	area.monitorable = false
+	area.position = pos
+	area.set_meta("interact_id", id)
+	_box_collider(area, size)
+	parent.add_child(area)
+	containers.append({"id": id, "kind": kind, "lid": lid})
 
 
 ## A flag pole and a few crates marking where the fortress will be built.

@@ -7,6 +7,7 @@ var main: Node
 var frame := 0
 var failures: Array[String] = []
 var start_pos: Vector3
+var events: Array[String] = []
 
 
 func _initialize() -> void:
@@ -46,6 +47,23 @@ func _process(_delta: float) -> bool:
 			check(absf(player.position.y - ground) < 1.0, "player at ground height (y=%.2f ground=%.2f)" % [player.position.y, ground])
 			player.rotation.y = PI  # face away from the flag pole
 			start_pos = player.position
+			# The exact height sampler must match the collision surface.
+			var space: PhysicsDirectSpaceState3D = main.get_world_3d().direct_space_state
+			var worst := 0.0
+			var hits := 0
+			var rng := RandomNumberGenerator.new()
+			rng.seed = 5
+			for i in 200:
+				var x := rng.randf_range(-200, 200)
+				var z := rng.randf_range(-200, 200)
+				var q := PhysicsRayQueryParameters3D.create(Vector3(x, 200, z), Vector3(x, -50, z))
+				q.collision_mask = 1
+				q.exclude = [main.player.get_rid()]
+				var hit := space.intersect_ray(q)
+				if hit and hit.collider == terrain:
+					hits += 1
+					worst = maxf(worst, absf(hit.position.y - terrain.surface_height(x, z)))
+			check(hits > 150 and worst < 0.05, "surface_height matches terrain collision (%d hits, worst %.3f m)" % [hits, worst])
 			Input.action_press("move_forward")
 		300:
 			Input.action_release("move_forward")
@@ -63,7 +81,30 @@ func _process(_delta: float) -> bool:
 			var r := Vector2(player.position.x, player.position.z).length()
 			check(r <= terrain.PLAY_RADIUS + 0.5, "player kept inside play area (r=%.1f)" % r)
 			check(player.stamina < player.STAMINA_MAX, "sprinting uses stamina")
-		500:
+			# Crouch.
+			player.position = Vector3(0, terrain.surface_height(0, 12) + 0.5, 12)
+			player.velocity = Vector3.ZERO
+			Input.action_press("crouch")
+		540:
+			check(player.crouching and player.head.position.y < 1.2, "crouch lowers the view")
+			Input.action_release("crouch")
+		570:
+			check(not player.crouching, "stands up again after crouch")
+			# Day/night: fast-forward and count the events.
+			main.day_night.dusk_started.connect(func(_d): events.append("dusk"))
+			main.day_night.night_started.connect(func(_d): events.append("night"))
+			main.day_night.day_started.connect(func(_d): events.append("day"))
+			main.day_night.time_scale = 400.0
+		700:
+			main.day_night.time_scale = 1.0
+			check(events == ["dusk", "night", "day"], "day/night cycle fires dusk, night, day (%s)" % str(events))
+			check(main.day_night.day == 2, "day counter advanced to 2")
+			# Pause menu.
+			main.pause_menu.open()
+			check(paused, "pause menu pauses the game")
+			main.pause_menu.resume()
+			check(not paused, "resume unpauses")
+		720:
 			if failures.is_empty():
 				print("== ALL TESTS PASSED ==")
 				quit(0)

@@ -16,6 +16,43 @@ const ROCK_HIGH := Color(0.68, 0.50, 0.36)
 var dunes := FastNoiseLite.new()
 var ripples := FastNoiseLite.new()
 var crags := FastNoiseLite.new()
+var heights := PackedFloat32Array()  # grid heights, (CELLS + 1)^2, row-major by z
+
+
+## Exact height of the rendered/collision surface at world (x, z), matching the
+## triangles of the mesh. Use this to stand things on the ground.
+func surface_height(x: float, z: float) -> float:
+	var step := SIZE / CELLS
+	var gx := (x + SIZE * 0.5) / step
+	var gz := (z + SIZE * 0.5) / step
+	if heights.is_empty() or gx < 0.0 or gz < 0.0 or gx >= CELLS or gz >= CELLS:
+		return height_at(x, z)
+	var ix := int(gx)
+	var iz := int(gz)
+	var fx := gx - ix
+	var fz := gz - iz
+	var n := CELLS + 1
+	var h00 := heights[iz * n + ix]
+	var h10 := heights[iz * n + ix + 1]
+	var h01 := heights[(iz + 1) * n + ix]
+	var h11 := heights[(iz + 1) * n + ix + 1]
+	if (ix + iz) % 2 == 0:
+		# Diagonal p00 -> p11.
+		if fx >= fz:
+			return h00 + fx * (h10 - h00) + fz * (h11 - h10)
+		return h00 + fz * (h01 - h00) + fx * (h11 - h01)
+	# Diagonal p10 -> p01.
+	if fx + fz <= 1.0:
+		return h00 + fx * (h10 - h00) + fz * (h01 - h00)
+	return h11 + (1.0 - fx) * (h01 - h11) + (1.0 - fz) * (h10 - h11)
+
+
+## Lowest surface point under a footprint of the given radius (for big props).
+func ground_under(x: float, z: float, radius: float) -> float:
+	var h := surface_height(x, z)
+	for o in [Vector2(radius, 0), Vector2(-radius, 0), Vector2(0, radius), Vector2(0, -radius)]:
+		h = minf(h, surface_height(x + o.x, z + o.y))
+	return h
 
 
 func setup_noise(seed_value: int) -> void:
@@ -52,7 +89,6 @@ func generate(seed_value: int) -> void:
 	var step := SIZE / CELLS
 	var half := SIZE * 0.5
 	var n := CELLS + 1
-	var heights := PackedFloat32Array()
 	heights.resize(n * n)
 	for iz in n:
 		for ix in n:

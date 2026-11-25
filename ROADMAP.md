@@ -7,15 +7,18 @@
 ## Milestones
 Each `[ ]` is roughly one development run. Do them in order unless player feedback says otherwise.
 
-### M1: Desert world (v0.1–0.3)
+### M1: Desert world (v0.1–0.2, done apart from polish)
 - [x] Procedural low-poly desert with dunes, mountain ring and a flat base clearing
 - [x] First-person movement: walk, sprint with stamina, jump, mouse look
 - [x] Props: rocks, cacti, shrubs, car wrecks, ruined walls, base flag
 - [x] HUD: compass, distance to base, stamina bar
-- [ ] Day/night cycle (about 10 min day, 4 min night) with a moving sun and a dark blue night
-- [ ] Ambient audio: wind loop and footsteps on sand (generated in code or CC0 assets)
-- [ ] Settings menu: mouse sensitivity, FOV, volume, fullscreen. Pause menu with quit
-- [ ] Polish: drifting dust particles, heat haze at a distance, better cactus and rock variety
+- [x] Day/night cycle (about 10 min day, 4 min night) with a moving sun and a dark blue night
+- [x] Ambient audio: wind loop and footsteps on sand (generated in code or CC0 assets)
+- [x] Settings menu: mouse sensitivity, FOV, volume, fullscreen. Pause menu with quit
+- [x] Crouch
+- [x] Props grounded exactly on the terrain. Better car wrecks
+- [x] Drifting dust particles
+- [ ] Polish: heat haze at a distance, better cactus and rock variety, a moon disc in the sky
 
 ### M2: Scavenging and inventory (v0.4–0.6)
 - [ ] Interact key (E) with an on-screen prompt

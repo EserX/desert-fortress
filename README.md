@@ -2,7 +2,7 @@
 
 A 3D low-poly survival game for Linux, made with Godot 4.5. Build a fortress in the desert, scavenge wrecks and ruins for items, and survive waves of mutants with traps and weapons. Each wave pays money you spend in an in-game online shop to upgrade your base.
 
-**Current version: v0.1, walking around the desert.** See [ROADMAP.md](ROADMAP.md) for what's coming and [DEVLOG.md](DEVLOG.md) for what changed in each update.
+**Current version: v0.2, the desert with a day/night cycle, sound and a pause menu.** See [ROADMAP.md](ROADMAP.md) for what's coming and [DEVLOG.md](DEVLOG.md) for what changed in each update.
 
 ## Play (Linux Mint)
 
@@ -31,8 +31,9 @@ If the game won't start or looks broken, try the OpenGL renderer with `./play.sh
 | W A S D / arrows | Move |
 | Shift | Sprint (uses stamina) |
 | Space | Jump |
+| Ctrl / C | Crouch |
 | Mouse | Look |
-| Esc | Release the mouse (click to return to the game) |
+| Esc | Pause menu (settings, quit) |
 | F11 | Fullscreen |
 
 ## Giving feedback

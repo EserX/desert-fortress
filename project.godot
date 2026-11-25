@@ -7,12 +7,13 @@ config_version=5
 
 config/name="Desert Fortress"
 config/description="Build a fortress in the desert, scavenge, and survive mutant waves."
-config/version="0.1.0"
+config/version="0.2.0"
 run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.5", "Forward Plus")
 
 [autoload]
 
+Settings="*res://scripts/settings.gd"
 InputSetup="*res://scripts/input_setup.gd"
 
 [display]

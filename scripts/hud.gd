@@ -9,7 +9,10 @@ var compass: Label
 var base_label: Label
 var stamina_bar: ProgressBar
 var help: Label
-var pause_label: Label
+var clock: Label
+var banner: Label
+var day_night  # DayNight
+var _banner_time := 0.0
 var _help_time := 12.0
 
 
@@ -27,7 +30,7 @@ func _ready() -> void:
 	cross.position = -cross.size / 2
 	root.add_child(cross)
 
-	var title := _label("DESERT FORTRESS  v0.1", 18)
+	var title := _label("DESERT FORTRESS  v0.2", 18)
 	title.position = Vector2(20, 16)
 	root.add_child(title)
 
@@ -58,18 +61,30 @@ func _ready() -> void:
 	stamina_bar.add_theme_stylebox_override("fill", fill)
 	root.add_child(stamina_bar)
 
-	help = _label("WASD move   Shift sprint   Space jump   Mouse look   Esc release mouse   F11 fullscreen", 16)
+	help = _label("WASD move   Shift sprint   Space jump   Mouse look   Ctrl crouch   Esc menu", 16)
 	help.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	help.position = Vector2(20, -36)
 	root.add_child(help)
 
-	pause_label = _label("Paused - click to continue", 30)
-	pause_label.set_anchors_preset(Control.PRESET_CENTER)
-	pause_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	pause_label.size = Vector2(600, 50)
-	pause_label.position = Vector2(-300, 40)
-	pause_label.visible = false
-	root.add_child(pause_label)
+	clock = _label("Day 1  09:00", 20)
+	clock.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	clock.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	clock.size = Vector2(320, 60)
+	clock.position = Vector2(-340, 14)
+	root.add_child(clock)
+
+	banner = _label("", 34)
+	banner.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	banner.size = Vector2(800, 50)
+	banner.position = Vector2(-400, 150)
+	banner.modulate.a = 0.0
+	root.add_child(banner)
+
+	if day_night:
+		day_night.dusk_started.connect(func(_d): show_banner("The sun is setting. Night is coming."))
+		day_night.night_started.connect(func(d): show_banner("Night %d" % d))
+		day_night.day_started.connect(func(d): show_banner("Day %d" % d))
 
 	if player and player.has_signal("stamina_changed"):
 		player.stamina_changed.connect(_on_stamina_changed)
@@ -100,10 +115,25 @@ func _process(delta: float) -> void:
 	else:
 		var bdeg := fposmod(rad_to_deg(atan2(to_base.x, -to_base.z)), 360.0)
 		base_label.text = "Base: %d m  %s" % [int(dist), DIRS[int(round(bdeg / 45.0)) % 8]]
-	pause_label.visible = Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and DisplayServer.get_name() != "headless"
+	if day_night:
+		var text: String = "Day %d  %s" % [day_night.day, day_night.clock_text()]
+		var left: float = day_night.seconds_until_night()
+		if day_night.is_night():
+			text += "\nNight"
+		elif left < 120.0:
+			text += "\nNight in %d:%02d" % [int(left) / 60, int(left) % 60]
+		clock.text = text
+	if _banner_time > 0.0:
+		_banner_time -= delta
+		banner.modulate.a = clampf(minf(_banner_time, 5.0 - _banner_time) * 1.5, 0.0, 1.0)
 	if _help_time > 0.0:
 		_help_time -= delta
 		help.modulate.a = clampf(_help_time / 2.0, 0.0, 1.0)
+
+
+func show_banner(text: String) -> void:
+	banner.text = text
+	_banner_time = 5.0
 
 
 func _on_stamina_changed(value: float, max_value: float) -> void:

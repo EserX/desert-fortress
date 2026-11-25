@@ -3,9 +3,10 @@ extends Node3D
 ## ruined concrete walls. Wrecks and ruins are the future scavenging spots.
 
 const LowPoly = preload("res://scripts/lowpoly.gd")
+const Terrain = preload("res://scripts/terrain.gd")
 
 var rng := RandomNumberGenerator.new()
-var terrain: Node
+var terrain: Terrain
 
 # Shared meshes/materials (built once).
 var rock_mesh: Mesh
@@ -23,7 +24,7 @@ var wreck_positions: Array[Vector3] = []
 var ruin_positions: Array[Vector3] = []
 
 
-func populate(terrain_node: Node, seed_value: int) -> void:
+func populate(terrain_node: Terrain, seed_value: int) -> void:
 	terrain = terrain_node
 	rng.seed = seed_value * 7 + 3
 	_build_shared()
@@ -63,7 +64,7 @@ func _build_shared() -> void:
 	cactus_mat = LowPoly.material(Color(0.36, 0.52, 0.27))
 	for c in [Color(0.48, 0.24, 0.12), Color(0.38, 0.22, 0.14), Color(0.55, 0.33, 0.18)]:
 		rust_mats.append(LowPoly.material(c, 0.8))
-	concrete_mat = LowPoly.material(Color(0.72, 0.68, 0.62))
+	concrete_mat = LowPoly.material(Color(0.60, 0.56, 0.50))
 	wood_mat = LowPoly.material(Color(0.45, 0.31, 0.19))
 	cloth_mat = LowPoly.material(Color(0.75, 0.18, 0.12))
 
@@ -74,7 +75,7 @@ func _random_spot(min_r := 40.0, max_r := 210.0) -> Vector3:
 	var r := sqrt(rng.randf_range(min_r * min_r, max_r * max_r))  # even spread
 	var x := cos(ang) * r
 	var z := sin(ang) * r
-	return Vector3(x, terrain.height_at(x, z), z)
+	return Vector3(x, terrain.surface_height(x, z), z)
 
 
 func _body_at(pos: Vector3, yaw: float) -> StaticBody3D:
@@ -125,7 +126,7 @@ func _place_rock() -> void:
 func _place_cactus() -> void:
 	var p := _random_spot(35.0, 205.0)
 	var s := rng.randf_range(0.7, 1.4)
-	var body := _body_at(p - Vector3(0, 0.2, 0), rng.randf() * TAU)
+	var body := _body_at(p - Vector3(0, 0.1, 0), rng.randf() * TAU)
 	body.scale = Vector3.ONE * s
 	_mesh(body, trunk_mesh, cactus_mat, Vector3(0, 1.5, 0))
 	var arms := rng.randi_range(0, 2)
@@ -174,56 +175,80 @@ func _place_shrubs(count: int) -> void:
 func _place_wreck() -> void:
 	var p := _random_spot(55.0, 200.0)
 	wreck_positions.append(p)
-	var body := _body_at(p - Vector3(0, 0.35, 0), rng.randf() * TAU)
-	# Half-sunk and tilted, like it has been there for decades.
-	body.rotation.x = rng.randf_range(-0.12, 0.12)
-	body.rotation.z = rng.randf_range(-0.15, 0.15)
+	var yaw := rng.randf() * TAU
+	# Follow the slope of the dune: sample ground at the bumpers and the sides.
+	var fwd := Vector3(cos(yaw), 0, -sin(yaw))  # local +X after yaw
+	var side := Vector3(sin(yaw), 0, cos(yaw))  # local +Z after yaw
+	var hf := terrain.surface_height(p.x + fwd.x * 2.0, p.z + fwd.z * 2.0)
+	var hb := terrain.surface_height(p.x - fwd.x * 2.0, p.z - fwd.z * 2.0)
+	var hl := terrain.surface_height(p.x + side.x, p.z + side.z)
+	var hr := terrain.surface_height(p.x - side.x, p.z - side.z)
+	var body := _body_at(Vector3(p.x, (hf + hb + hl + hr) * 0.25 - 0.12, p.z), yaw)
+	body.rotation.z = atan2(hf - hb, 4.0) + rng.randf_range(-0.04, 0.04)
+	body.rotation.x = -atan2(hl - hr, 2.0) + rng.randf_range(-0.04, 0.04)
+
 	var box := BoxMesh.new()
-	var mat := rust_mats[rng.randi() % rust_mats.size()]
-	_mesh(body, box, mat, Vector3(0, 0.6, 0), Vector3(4.2, 0.9, 2.0))
-	_mesh(body, box, mat, Vector3(-0.3, 1.4, 0), Vector3(2.0, 0.75, 1.8))
-	# Wheels (one missing).
+	var paint := rust_mats[rng.randi() % rust_mats.size()]
+	var dark := LowPoly.material(Color(0.10, 0.09, 0.09), 0.6)
+	var rust := LowPoly.material(Color(0.35, 0.17, 0.08))
+	# Body, cabin with a dark window band, bumpers.
+	_mesh(body, box, paint, Vector3(0, 0.78, 0), Vector3(4.4, 0.62, 1.9))
+	_mesh(body, box, paint, Vector3(-0.35, 1.42, 0), Vector3(2.1, 0.7, 1.75))
+	_mesh(body, box, dark, Vector3(-0.35, 1.45, 0), Vector3(2.16, 0.42, 1.8))
+	_mesh(body, box, dark, Vector3(2.22, 0.62, 0), Vector3(0.12, 0.22, 1.95))
+	_mesh(body, box, dark, Vector3(-2.22, 0.62, 0), Vector3(0.12, 0.22, 1.95))
+	# Rust patches.
+	for i in rng.randi_range(2, 4):
+		var sz := Vector3(rng.randf_range(0.4, 1.0), 0.05, rng.randf_range(0.3, 0.8))
+		_mesh(body, box, rust, Vector3(rng.randf_range(-1.8, 1.8), 1.1, rng.randf_range(-0.6, 0.6)), sz)
+	# Wheels, one missing.
 	var wheel := CylinderMesh.new()
-	wheel.top_radius = 0.45
-	wheel.bottom_radius = 0.45
-	wheel.height = 0.3
+	wheel.top_radius = 0.42
+	wheel.bottom_radius = 0.42
+	wheel.height = 0.32
 	wheel.radial_segments = 8
+	wheel.rings = 1
 	var wheel_mesh := LowPoly.flat(wheel)
-	var tyre := LowPoly.material(Color(0.12, 0.11, 0.10))
-	var spots := [Vector3(1.4, 0.3, 1.0), Vector3(-1.4, 0.3, 1.0), Vector3(1.4, 0.3, -1.0), Vector3(-1.4, 0.3, -1.0)]
+	var spots := [Vector3(1.4, 0.42, 0.92), Vector3(-1.4, 0.42, 0.92), Vector3(1.4, 0.42, -0.92), Vector3(-1.4, 0.42, -0.92)]
 	spots.remove_at(rng.randi() % spots.size())
 	for w in spots:
-		_mesh(body, wheel_mesh, tyre, w, Vector3.ONE, Vector3(PI / 2, 0, 0))
-	_box_collider(body, Vector3(4.2, 0.9, 2.0), Vector3(0, 0.6, 0))
-	_box_collider(body, Vector3(2.0, 0.75, 1.8), Vector3(-0.3, 1.4, 0))
+		_mesh(body, wheel_mesh, dark, w, Vector3.ONE, Vector3(PI / 2, 0, 0))
+	_box_collider(body, Vector3(4.4, 1.0, 1.9), Vector3(0, 0.6, 0))
+	_box_collider(body, Vector3(2.1, 0.7, 1.75), Vector3(-0.35, 1.42, 0))
 
 
 func _place_ruin() -> void:
 	var p := _random_spot(60.0, 195.0)
 	ruin_positions.append(p)
-	var body := _body_at(p - Vector3(0, 0.5, 0), rng.randf() * TAU)
+	var body := _body_at(p, rng.randf() * TAU)
 	var box := BoxMesh.new()
-	# An L-shaped broken wall made of uneven blocks.
+	# An L-shaped broken wall made of uneven blocks. Each block is planted on
+	# the ground under it (and extends 0.6 m into the sand) so none float.
 	var segments := rng.randi_range(4, 7)
 	for i in segments:
 		var h := rng.randf_range(0.8, 3.6)
 		var along_x := i < segments / 2 + 1
 		var offset := i if along_x else i - segments / 2
-		var pos := Vector3(offset * 2.0, h * 0.5, 0) if along_x else Vector3(0, h * 0.5, offset * 2.0)
-		var size := Vector3(2.0, h, 0.45) if along_x else Vector3(0.45, h, 2.0)
-		var tilt := Vector3(rng.randf_range(-0.05, 0.05), 0, rng.randf_range(-0.05, 0.05))
+		var local := Vector3(offset * 2.0, 0, 0) if along_x else Vector3(0, 0, offset * 2.0)
+		var size := Vector3(2.0, h + 0.6, 0.45) if along_x else Vector3(0.45, h + 0.6, 2.0)
+		var world := body.transform * local
+		var ground := terrain.ground_under(world.x, world.z, 1.0) - p.y
+		var pos := Vector3(local.x, ground + h * 0.5 - 0.3, local.z)
+		var tilt := Vector3(rng.randf_range(-0.04, 0.04), 0, rng.randf_range(-0.04, 0.04))
 		_mesh(body, box, concrete_mat, pos, size, tilt)
 		_box_collider(body, size, pos, tilt)
 	# Some rubble.
 	for i in rng.randi_range(3, 6):
 		var s := rng.randf_range(0.3, 0.7)
-		_mesh(body, box, concrete_mat, Vector3(rng.randf_range(-1, 5), s * 0.3, rng.randf_range(-1, 5)),
-			Vector3(s, s * 0.6, s), Vector3(rng.randf(), rng.randf(), rng.randf()))
+		var local := Vector3(rng.randf_range(-1, 5), 0, rng.randf_range(-1, 5))
+		var world := body.transform * local
+		local.y = terrain.surface_height(world.x, world.z) - p.y + s * 0.15
+		_mesh(body, box, concrete_mat, local, Vector3(s, s * 0.6, s), Vector3(rng.randf(), rng.randf(), rng.randf()))
 
 
 ## A flag pole and a few crates marking where the fortress will be built.
 func _place_base_marker() -> void:
-	var y: float = terrain.BASE_HEIGHT
+	var y: float = terrain.surface_height(0, 0)
 	var body := _body_at(Vector3(0, y, 0), 0.0)
 	var pole := CylinderMesh.new()
 	pole.top_radius = 0.06

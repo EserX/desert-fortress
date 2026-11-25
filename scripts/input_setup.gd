@@ -11,6 +11,7 @@ const ACTIONS := {
 	"sprint": [KEY_SHIFT],
 	"pause": [KEY_ESCAPE],
 	"toggle_fullscreen": [KEY_F11],
+	"crouch": [KEY_CTRL, KEY_C],
 }
 
 
@@ -26,8 +27,4 @@ func _ready() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("toggle_fullscreen"):
-		var mode := DisplayServer.window_get_mode()
-		if mode == DisplayServer.WINDOW_MODE_FULLSCREEN:
-			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
-		else:
-			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+		Settings.set_value("fullscreen", not Settings.fullscreen)

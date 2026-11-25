@@ -82,6 +82,15 @@ func _build_stars() -> void:
 	add_child(stars)
 
 
+## Jump to a saved time without firing dusk/night/day events.
+func restore(saved_day: int, saved_hour: float) -> void:
+	day = saved_day
+	hour = fposmod(saved_hour, 24.0)
+	_dusk_fired = hour >= DUSK_WARNING and hour < SUNSET
+	_last_hour = int(hour)
+	_apply()
+
+
 func is_night() -> bool:
 	return hour >= SUNSET or hour < SUNRISE
 

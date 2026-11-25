@@ -12,6 +12,8 @@ const ACTIONS := {
 	"pause": [KEY_ESCAPE],
 	"toggle_fullscreen": [KEY_F11],
 	"crouch": [KEY_CTRL, KEY_C],
+	"quick_save": [KEY_F5],
+	"quick_load": [KEY_F9],
 }
 
 

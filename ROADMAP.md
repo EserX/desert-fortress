@@ -25,7 +25,7 @@ Each `[ ]` is roughly one development run. Do them in order unless player feedba
 - [ ] Loot containers in wrecks and ruins: scrap metal, wood, cloth, nails, food, water
 - [ ] Inventory with a hotbar (1–9 keys) and a grid inventory (Tab)
 - [ ] Loot respawns each day at random spots
-- [ ] Save and load (world seed, inventory, player position)
+- [x] Save and load: slots, quicksave, autosave, title screen (v0.3). Extend the save data with every new system
 
 ### M3: Building the fortress (v0.7–1.0)
 - [ ] Build mode (B): grid-snapped placement preview, rotate, valid/invalid colouring

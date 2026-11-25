@@ -8,10 +8,13 @@ var frame := 0
 var failures: Array[String] = []
 var start_pos: Vector3
 var events: Array[String] = []
+var title: Node
+var game: Node
 
 
 func _initialize() -> void:
 	print("== Desert Fortress tests ==")
+	game = root.get_node("Game")
 	main = load("res://scenes/main.tscn").instantiate()
 	root.add_child(main)
 
@@ -104,6 +107,32 @@ func _process(_delta: float) -> bool:
 			check(paused, "pause menu pauses the game")
 			main.pause_menu.resume()
 			check(not paused, "resume unpauses")
+			# Save -> change state -> load restores it.
+			player.position = Vector3(30, terrain.surface_height(30, -40) + 0.01, -40)
+			player.rotation.y = 1.25
+			main.day_night.restore(4, 21.5)
+			check(game.save_game("test"), "save_game writes a slot")
+			var data: Dictionary = game.read_slot("test")
+			check(not data.is_empty() and int(data.world.day) == 4, "saved slot reads back (day 4)")
+			check(game.describe_slot("test").contains("Day 4 21:30"), "slot description: " + game.describe_slot("test"))
+			player.position = Vector3(0, 50, 0)
+			player.rotation.y = 0.0
+			main.day_night.restore(1, 8.0)
+			main.apply_save_data(data)
+			check(player.position.distance_to(Vector3(30, terrain.surface_height(30, -40), -40)) < 0.1, "load restores player position")
+			check(absf(player.rotation.y - 1.25) < 0.001, "load restores facing")
+			check(main.day_night.day == 4 and absf(main.day_night.hour - 21.5) < 0.01, "load restores day and time")
+			check(main.day_night.is_night(), "restored time is night")
+			game.delete_slot("test")
+			check(game.read_slot("test").is_empty(), "slot deleted")
+			check(game.read_slot("does_not_exist").is_empty(), "missing slot reads as empty")
+			# Title screen builds without errors.
+			title = load("res://scenes/title.tscn").instantiate()
+			root.add_child(title)
+		710:
+			check(title.world.menu_mode and title.world.player == null, "title screen shows the world without a player")
+			check(title._col.get_child_count() >= 5, "title menu has its buttons")
+			title.queue_free()
 		720:
 			if failures.is_empty():
 				print("== ALL TESTS PASSED ==")

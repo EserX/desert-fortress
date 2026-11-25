@@ -7,11 +7,13 @@ This is **Desert Fortress**, a 3D low-poly survival and fortress-defence game in
    `mkdir -p /tmp/godot && cd /tmp/godot && curl -sSL -o g.zip https://github.com/godotengine/godot/releases/download/4.5.1-stable/Godot_v4.5.1-stable_linux.x86_64.zip && unzip -o -q g.zip && mv Godot_v4.5.1-stable_linux.x86_64 godot && chmod +x godot`
 2. **Read** ROADMAP.md (the *Player feedback* section first), the top of DEVLOG.md, and the code you will touch.
 3. **Pick the work:** player feedback items first, otherwise the next `[ ]` roadmap item. Do **one** item well. A small, solid step beats a big broken one.
-4. **Implement** it. Keep the existing style: the world is built in code, scripts are preloaded (no `class_name`), and there are typed GDScript, tabs and short doc comments.
+4. **Implement** it. Keep the existing style: the world is built in code, scripts are preloaded (no `class_name`), autoloads are Settings, Game and InputSetup (in test scripts reach them with `root.get_node("Game")`), and there are typed GDScript, tabs and short doc comments.
 5. **Test:**
    - `godot --headless --path . --import`
    - `godot --headless --path . -s tests/run_tests.gd --fixed-fps 60`. All tests must pass. Add tests for new logic where practical.
    - `xvfb-run -a -s "-screen 0 1600x900x24" godot --path . -s tools/screenshot.gd --rendering-method gl_compatibility --resolution 1280x720`. Look at the PNGs in `screenshots/` (ignored by git) to check that it looks right. Add viewpoints to the tool if your feature needs them.
+   - If you touched menus, saving or scene flow, run `xvfb-run -a -s "-screen 0 1600x900x24" godot --path . -s tools/flow_test.gd --rendering-method gl_compatibility --resolution 1280x720`.
+   - New game state (inventory, buildings...) must be added to `collect_save_data` / `apply_save_data` in main.gd, with a test. Bump `SAVE_VERSION` in game.gd only if old saves can't load, and keep loading older saves where you can.
    - Read the Godot output for `SCRIPT ERROR` / `ERROR` lines, even when tests pass.
 6. **Record:** tick the item in ROADMAP.md, clear feedback items you handled, and add a DEVLOG.md entry at the top (version bump, what changed, anything the player should try, what's next). Bump `config/version` in project.godot and the HUD title.
 7. **Commit and push** to `main` with a clear message. If you can't finish the item, push only working code. Leave a note in DEVLOG.md and keep the item unticked.

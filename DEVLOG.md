@@ -2,6 +2,18 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v0.3.0 (2026-11-25): Title screen, saving and loading
+- **Title screen:** the desert at sunset with a slowly circling camera behind the menu. Buttons: **Continue** (loads your most recent save), **New game**, **Load game**, **Settings** and **Quit to desktop**.
+- **New game:** each new game generates a different desert. The world seed is stored in the save.
+- **Saving:** three manual save slots, plus a **quicksave** (F5, load with F9) and an **autosave**. Each slot shows a screenshot thumbnail, the day and time, how long you've played, and when it was saved. Saving over a used slot asks you to confirm.
+- **Autosave:** every morning at 06:00, when you go to the main menu, when you quit, and when you close the window.
+- **Pause menu:** Resume, Save game, Load game, Settings, Main menu and Quit to desktop. Esc goes back a page.
+- **What a save keeps:** world seed, day and time, player position, facing and stamina. Inventory, buildings and waves will be added as those features arrive. The save format is versioned.
+- Save files go in `~/.local/share/godot/app_userdata/Desert Fortress/saves/`.
+- **Tests:** 29 headless checks (new: save, load, restore, slot descriptions, title screen). The new `tools/flow_test.gd` runs title, new game, save, main menu and continue with a real display.
+
+**Next:** M2, scavenging.
+
 ## v0.2.0 (2026-11-25): Day and night, menu, sound
 - **Day/night cycle:** 10-minute days and 4-minute nights. The sun moves across the sky, sunsets are orange, nights are dark blue with stars and soft moonlight. The HUD shows the day and the time, and counts down "Night in m:ss" for the last 2 minutes. Banners announce dusk, night and the new day. The cycle sends dusk, night and day events for the wave system later.
 - **Pause menu (Esc):** resume, mouse sensitivity, field of view, volume, fullscreen and quit. Settings are saved between sessions.

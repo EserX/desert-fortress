@@ -30,7 +30,7 @@ func _ready() -> void:
 	cross.position = -cross.size / 2
 	root.add_child(cross)
 
-	var title := _label("DESERT FORTRESS  v0.2", 18)
+	var title := _label("DESERT FORTRESS  v%s" % ProjectSettings.get_setting("application/config/version", ""), 18)
 	title.position = Vector2(20, 16)
 	root.add_child(title)
 
@@ -61,7 +61,7 @@ func _ready() -> void:
 	stamina_bar.add_theme_stylebox_override("fill", fill)
 	root.add_child(stamina_bar)
 
-	help = _label("WASD move   Shift sprint   Space jump   Mouse look   Ctrl crouch   Esc menu", 16)
+	help = _label("WASD move   Shift sprint   Space jump   Mouse look   Ctrl crouch   F5 quicksave   Esc menu", 16)
 	help.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	help.position = Vector2(20, -36)
 	root.add_child(help)

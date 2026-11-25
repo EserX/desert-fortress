@@ -257,15 +257,79 @@ func _test_building() -> void:
 	# Take down the foundation: full refund.
 	bm.looking_at_piece = fkey
 	check(bm.try_remove() == "foundation" and inv.count_of("wood") == 20, "taking a piece down refunds it")
+	_test_more_pieces()
 	b.load_data([])
 	bm.toggle()
 	inv.load_data({})
+
+
+## v0.9 pieces: doorway gate, window, upper levels and support, stairs.
+func _test_more_pieces() -> void:
+	var b = main.building
+	b.load_data([])
+	var f := {"kind": "cell", "cx": 3, "cz": 4, "dir": 0, "level": 0}
+	var fy: float = b.evaluate("foundation", f).y
+	b.place("foundation", f, fy)
+	var edges: Array = b.cell_edges(3, 4, 0)
+	var floor_slot := {"kind": "cell", "cx": 3, "cz": 4, "dir": 0, "level": 1}
+	check(not b.evaluate("floor", floor_slot).ok, "a floor upstairs needs support")
+	b.place("doorway", edges[0], b.evaluate("doorway", edges[0]).y)
+	b.place("window", edges[1], b.evaluate("window", edges[1]).y)
+	b.place("wall", edges[2], b.evaluate("wall", edges[2]).y)
+	var ev: Dictionary = b.evaluate("floor", floor_slot)
+	check(ev.ok and absf(ev.y - (fy + b.WALL_H)) < 0.001, "walls hold up a floor one level up")
+	b.place("floor", floor_slot, ev.y)
+	var up: Dictionary = edges[2].duplicate()
+	up.level = 1
+	check(b.evaluate("wall", up).ok, "walls stack on walls")
+	var roof_next := {"kind": "cell", "cx": 4, "cz": 4, "dir": 0, "level": 1}
+	check(b.evaluate("roof", roof_next).ok, "a roof can hang off a floor next to it")
+	check(b.level_for("wall", up, fy + 2.3) == 1, "aiming at the floor above picks level 1")
+	check(b.pieces[b.slot_key(edges[1])].node.get_children().filter(func(n): return n is CollisionShape3D).size() == 4, "a window wall has a hole in it")
+	# Gate.
+	var gate_id: String = "gate:" + b.slot_key(edges[0])
+	check(main._prompt_for(gate_id) == "[E] Open gate", "gate prompt")
+	main.interact(gate_id)
+	check(b.pieces[b.slot_key(edges[0])].open, "E opens the gate")
+	var data: Array = JSON.parse_string(JSON.stringify(b.save_data()))
+	b.load_data(data)
+	check(b.pieces[b.slot_key(edges[0])].open and b.pieces.size() == 5, "gate state and upper floors are saved")
+	main.interact(gate_id)
+	check(not b.pieces[b.slot_key(edges[0])].open, "E closes it again")
+	# Stairs take two squares; removing frees both.
+	var st := {"kind": "cell", "cx": 6, "cz": 4, "dir": 0, "level": 0}
+	var sk: String = b.place("stairs", st, b.evaluate("stairs", st).y)
+	check(b.occupied.has(b.cell_key(6, 3, 0)), "stairs take up the square they climb into")
+	check(not b.evaluate("floor", {"kind": "cell", "cx": 6, "cz": 3, "dir": 0, "level": 0}).ok, "can't build on top of the stairs")
+	b.remove(b.cell_key(6, 3, 0))
+	check(not b.occupied.has(b.cell_key(6, 4, 0)) and not b.pieces.has(sk), "taking down stairs frees both squares")
+	b.load_data([])
+
+
+## Ramp: walk up it for real.
+var ramp_top := 0.0
+var ramp_base := 0.0
+func _start_ramp_walk() -> void:
+	var b = main.building
+	var player = main.player
+	var slot := {"kind": "cell", "cx": 3, "cz": 4, "dir": 0, "level": 0}
+	var ev: Dictionary = b.evaluate("ramp", slot)
+	check(ev.ok, "ramp fits on the sand (%s)" % ev.reason)
+	b.place("ramp", slot, ev.y)
+	ramp_base = ev.y
+	ramp_top = -INF
+	player.position = Vector3(7, main.terrain.surface_height(7, 11.5) + 0.05, 11.5)
+	player.velocity = Vector3.ZERO
+	player.rotation.y = 0.0
+	Input.action_press("move_forward")
 
 
 func _process(_delta: float) -> bool:
 	frame += 1
 	var player = main.player
 	var terrain = main.terrain
+	if frame > 720 and frame < 811:
+		ramp_top = maxf(ramp_top, player.position.y - ramp_base)
 	match frame:
 		2:
 			check(main.has_method("collect_save_data") and player != null, "game scripts compiled and the world was built")
@@ -377,6 +441,12 @@ func _process(_delta: float) -> bool:
 			check(title._col.get_child_count() >= 5, "title menu has its buttons")
 			title.queue_free()
 		720:
+			_start_ramp_walk()
+		811:
+			Input.action_release("move_forward")
+			check(ramp_top > 1.8, "the player can walk up a ramp (climbed %.2f m)" % ramp_top)
+			main.building.load_data([])
+		820:
 			if failures.is_empty():
 				print("== ALL TESTS PASSED ==")
 				quit(0)

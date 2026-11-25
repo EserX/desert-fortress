@@ -20,7 +20,7 @@ var shots := [
 	{"name": "10_inventory", "pos": Vector3(0, 0, 9), "yaw": 0.6, "pitch": -0.05, "hour": 10.0, "inventory": true},
 	{"name": "11_death", "pos": Vector3(0, 0, 9), "yaw": 0.6, "pitch": -0.05, "hour": 13.0, "death": true},
 	{"name": "12_map", "pos": Vector3(20, 0, 40), "yaw": 0.9, "pitch": 0.0, "hour": 9.0, "map": true},
-	{"name": "13_build", "pos": Vector3(9, 0, 19), "yaw": 0.35, "pitch": -0.35, "hour": 15.5, "build": true},
+	{"name": "13_build", "pos": Vector3(13, 0, 20), "yaw": 0.55, "pitch": -0.2, "hour": 15.5, "build": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -115,16 +115,27 @@ func _look_at_target(p: Node3D, kind: String) -> void:
 	p.head.rotation.x = -0.15
 
 
-## A small hut of foundations and walls near the base, and build mode on.
+## A small hut using every piece near the base, and build mode on.
 func _build_sample() -> void:
 	var b = main.building
+	if not b.pieces.is_empty():
+		return
 	for cx in [2, 3]:
 		for cz in [5, 6]:
-			var slot := {"kind": "cell", "cx": cx, "cz": cz, "dir": 0}
+			var slot := {"kind": "cell", "cx": cx, "cz": cz, "dir": 0, "level": 0}
 			b.place("foundation", slot, b.evaluate("foundation", slot).y)
-	for e in [[2, 5, 0], [3, 5, 0], [2, 5, 1], [2, 6, 1], [4, 5, 1]]:
-		var slot := {"kind": "edge", "cx": e[0], "cz": e[1], "dir": e[2]}
-		b.place("wall", slot, b.evaluate("wall", slot).y)
+	var walls := [["wall", 2, 5, 0], ["window", 3, 5, 0], ["wall", 2, 5, 1], ["window", 2, 6, 1],
+		["window", 4, 5, 1], ["wall", 4, 6, 1], ["doorway", 2, 7, 0], ["wall", 3, 7, 0]]
+	for w in walls:
+		var slot := {"kind": "edge", "cx": w[1], "cz": w[2], "dir": w[3], "level": 0}
+		b.place(w[0], slot, b.evaluate(w[0], slot).y)
+	b.set_gate(b.slot_key({"kind": "edge", "cx": 2, "cz": 7, "dir": 0, "level": 0}), true)
+	for cx in [2, 3]:
+		for cz in [5, 6]:
+			var slot := {"kind": "cell", "cx": cx, "cz": cz, "dir": 0, "level": 1}
+			b.place("roof", slot, b.evaluate("roof", slot).y)
+	var st := {"kind": "cell", "cx": 4, "cz": 6, "dir": 0, "level": 0}
+	b.place("stairs", st, b.evaluate("stairs", st).y)
 	main.inventory.add_all({"wood": 20, "nails": 20})
 	main.build_mode.active = true
 	main.build_mode.select(1)

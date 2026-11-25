@@ -2,6 +2,22 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v0.9.0 (2026-11-25): More building pieces
+- **New pieces** (mouse wheel or 1–8 in build mode):
+  - **Doorway with gate** (4 wood, 4 nails): a plank gate on a hinge. Look at it and press **E** to open or close it.
+  - **Wall with window** (3 wood, 3 nails): a hole at chest height to look (and later shoot) through.
+  - **Wooden floor** (3 wood, 3 nails) for an upper storey.
+  - **Wooden stairs** (5 wood, 4 nails) and **scrap ramp** (3 scrap, 2 wood, 3 nails): two squares long, climbing one storey. R turns them to face any of the 4 directions.
+  - **Scrap roof** (3 scrap, 2 nails): a corrugated metal sheet that keeps the sun off.
+- **Storeys:** pieces stack 2.4 m apart, up to 3 storeys above the ground. Aim at the top of a wall or at an upper floor to build on that level. Anything upstairs must be held up by a wall below it, or by a floor or roof right next to it (so you can build a small overhang). The line above the hotbar says "Needs a wall or floor to hold it up" when it isn't.
+- Stairs and ramps are walkable slopes (about 31°). Stairs show steps but walk like a ramp, which is smoother.
+- **Saved:** storey and gate open/closed for every piece. v0.8 saves load as before (everything on the ground floor).
+- Internals: building.gd was rewritten around a piece table (shapes, colliders, costs) and an "occupied squares" map so pieces can be more than one square big. This replaces the v0.8 version, which only knew foundations and walls.
+- **Tests:** upstairs needs support, walls hold up a floor, walls stack, roof overhang, aiming picks the level, window has a hole, gate prompt/open/close/saved, stairs take two squares and free both when taken down, and the player really walks up a ramp. The `13_build` screenshot now shows a hut with every piece.
+
+**Try:** build a 2×2 hut with a doorway, a window and a roof, then stairs up to the roof to look out over the dunes.
+**Next:** v0.10, material tiers (wood, scrap metal, concrete) with hit points, and the hammer to upgrade, repair and demolish.
+
 ## v0.8.0 (2026-11-25): Build mode
 - **Build mode (B):** a see-through preview of the selected piece snaps to a 2 m grid where you look (up to 9 m away). **Green** means you can build it, **red** means you can't, and the line above the hotbar says why: not enough materials, ground too steep, something in the way, or already built.
 - **Pieces:** **wooden foundation** (4 wood, 4 nails) fills a grid square and levels out the sand. **Wooden wall** (3 wood, 3 nails) stands on the edge between squares; on a foundation it sits on top of it, otherwise it's planted in the sand.

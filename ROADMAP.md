@@ -5,58 +5,52 @@
 <!-- Example: - Sprint feels too slow. - Fell through the ground near a big rock. -->
 
 ## Milestones
-Each `[ ]` is roughly one development run. Do them in order unless player feedback says otherwise.
+One version per development run, in this order. The full plan with reasons is in the "Desert Fortress: Version Plan" doc. Player feedback above always comes first.
 
-### M1: Desert world (v0.1–0.2, done apart from polish)
-- [x] Procedural low-poly desert with dunes, mountain ring and a flat base clearing
-- [x] First-person movement: walk, sprint with stamina, jump, mouse look
-- [x] Props: rocks, cacti, shrubs, car wrecks, ruined walls, base flag
-- [x] HUD: compass, distance to base, stamina bar
-- [x] Day/night cycle (about 10 min day, 4 min night) with a moving sun and a dark blue night
-- [x] Ambient audio: wind loop and footsteps on sand (generated in code or CC0 assets)
-- [x] Settings menu: mouse sensitivity, FOV, volume, fullscreen. Pause menu with quit
-- [x] Crouch
-- [x] Props grounded exactly on the terrain. Better car wrecks
-- [x] Drifting dust particles
-- [ ] Polish: heat haze at a distance, better cactus and rock variety, a moon disc in the sky
+### Done
+- [x] v0.1: procedural desert, first-person movement, props, compass HUD
+- [x] v0.2: day/night cycle, pause menu and settings, generated audio, crouch, dust
+- [x] v0.3: title screen, New game, Continue, save slots, quicksave and autosave, quit to desktop
 
-### M2: Scavenging and inventory (v0.4–0.6)
-- [ ] Interact key (E) with an on-screen prompt
-- [ ] Loot containers in wrecks and ruins: scrap metal, wood, cloth, nails, food, water
-- [ ] Inventory with a hotbar (1–9 keys) and a grid inventory (Tab)
-- [ ] Loot respawns each day at random spots
-- [x] Save and load: slots, quicksave, autosave, title screen (v0.3). Extend the save data with every new system
+### M2: Scavenging and survival
+- [ ] v0.4: Interact key (E) with an on-screen prompt. Search wrecks (glovebox, trunk) and ruins (crates). Pickup pop-ups. Loot: scrap metal, wood, cloth, nails, canned food, water bottles. Opened containers are saved
+- [ ] v0.5: Inventory (Tab) with a grid, stacking and a weight limit (too heavy means no sprint). Hotbar 1–9, drop items. Saved with the game
+- [ ] v0.6: Health, hunger and thirst. Midday heat drains water faster, and shade helps. Eat and drink from the hotbar. Death screen, then respawn at the base flag, keeping your items
+- [ ] v0.7: Map (M) showing discovered places. Loot refills each morning at random spots. Rare supply crates with better loot
 
-### M3: Building the fortress (v0.7–1.0)
-- [ ] Build mode (B): grid-snapped placement preview, rotate, valid/invalid colouring
-- [ ] Pieces: foundation, wall, wall with window, doorway and gate, floor, stairs, ramp
-- [ ] Material tiers: wood, then scrap metal, then concrete. Each piece has HP
-- [ ] Repair and demolish (refunds part of the cost)
-- [ ] Building is allowed only inside the base zone (it grows with upgrades later)
+### M3: Building the fortress
+- [ ] v0.8: Build mode (B): see-through preview that snaps to a grid and turns green or red, with rotate (R). Wooden foundations and walls that cost wood and nails. Saved
+- [ ] v0.9: More pieces: doorway with a gate (E opens it), wall with window, floor, stairs, ramp, roof
+- [ ] v0.10: Material tiers (wood, then scrap metal, then concrete) with hit points. Hammer to upgrade, repair and demolish (part refund). Cracks when damaged
+- [ ] v0.11: Base build zone shown on the ground, storage chest, workbench crafting (hammer, bandage, spike barricade)
 
-### M4: Mutants and waves (v1.1–1.4)
-- [ ] Wave director: dusk warning siren, then a wave at night. Each wave is bigger
-- [ ] Basic mutant: walks toward the base on a navmesh and attacks walls blocking its path
-- [ ] Mutant types: runner (fast, weak), brute (slow, tanky, wrecks walls), spitter (ranged)
-- [ ] Player health, damage, death, and respawn at the base
-- [ ] End-of-wave summary: kills, damage taken, cash earned
+### M4: Combat and mutant waves
+- [ ] v0.12: First-person hands, melee weapon (rusty pipe, then machete), swing and hit feedback, stamina cost, training dummy
+- [ ] v0.13: First mutant, the Walker: wanders, spots you, chases and attacks. Health, death and a fall
+- [ ] v0.14: Wave system: siren at dusk, mutants come from the map edge at night, wave counter, night ends at dawn or when all are dead, end-of-wave summary
+- [ ] v0.15: Mutants head for the base, attack walls in their way and break in. Walls collapse
+- [ ] v0.16: Runner (fast, weak), Brute (slow, tanky, wrecks walls) and Spitter (ranged acid). Waves mix types and scale up each night
 
-### M5: Defence (v1.5–1.8)
-- [ ] Melee weapon (pipe, then machete), with hit feedback
-- [ ] Guns: pistol, then shotgun, then rifle. Ammo as an item. Recoil and muzzle flash
-- [ ] Traps: spike strip, barbed wire (slows), landmine, fire pit, electric fence
-- [ ] Turrets: auto-turret that uses ammo from a connected box
-- [ ] Power: generator with fuel for electric fences and lights
+### M5: Defence
+- [ ] v0.17: Pistol: aim down sights, recoil, muzzle flash, reload, ammo as an item, sound
+- [ ] v0.18: Shotgun and rifle, weapon switching, ammo types, headshot bonus
+- [ ] v0.19: Traps: spike strip, barbed wire (slows), landmine
+- [ ] v0.20: Fire pit, electric fence with a fuel generator, floodlights
+- [ ] v0.21: Auto-turret fed from an ammo box, range circle shown while placing
 
-### M6: Economy and the online shop (v1.9–2.0)
-- [ ] Cash from waves
-- [ ] Shop terminal at the base: buy materials, weapons, ammo and trap blueprints
-- [ ] Drone delivery: the order drops at a landing pad a few seconds later
-- [ ] Base upgrades: bigger build zone, storage, workbench tiers
+### M6: Economy and v1.0
+- [ ] v0.22: Cash per wave (kills, waves survived, base condition). Shop terminal at the base: materials, weapons, ammo, traps
+- [ ] v0.23: Drone delivery to a landing pad. Blueprints unlock new builds
+- [ ] v0.24: Base upgrades: bigger build zone, storage, workbench tiers, a radio warning which mutant types are coming
+- [ ] v1.0: Balance and polish: difficulty settings, first-time hints, performance pass, standalone Linux export, README as a short manual
 
-### Later ideas
-- Sandstorm events (low visibility, mutants hide in them)
-- Boss mutant every 10 waves
-- Crafting at the workbench
-- Vehicles (buggy) for faster scavenging
-- Exported standalone build (.x86_64) so the game runs without the launcher
+### After 1.0 (not scheduled, the owner picks)
+Sandstorms, a boss mutant every 10 nights, a bigger crafting tree, a buggy, outposts, animated low-poly characters, a generated soundtrack, Windows and Steam Deck builds.
+
+### Defaults until the owner says otherwise
+- Death: respawn at the base and keep your items
+- Hunger and thirst: gentle
+- Night: 4 minutes
+- Camera: first person only
+- Weapons: realistic guns
+- Order: building before combat

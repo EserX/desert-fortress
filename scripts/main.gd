@@ -15,6 +15,11 @@ const Inventory = preload("res://scripts/inventory.gd")
 const InventoryUI = preload("res://scripts/inventory_ui.gd")
 const Survival = preload("res://scripts/survival.gd")
 const DeathScreen = preload("res://scripts/death_screen.gd")
+const MapUI = preload("res://scripts/map_ui.gd")
+
+const DISCOVER_RANGE := 45.0
+const REFILLS_PER_MORNING := 4
+const SUPPLY_CHANCE := 0.5
 
 ## When true the world is only a backdrop for the title screen:
 ## no player, HUD or pause menu, just a slowly orbiting camera.
@@ -37,6 +42,11 @@ var survival: Survival
 var death_screen: DeathScreen
 var in_shade := false
 var _shade_timer := 0.0
+var map_ui: MapUI
+## Wrecks and ruins: {"key": "w3", "kind": "wreck", "pos": Vector3}.
+var places: Array = []
+## Keys of places you have been near.
+var discovered := {}
 var sun: DirectionalLight3D
 var moon: DirectionalLight3D
 var env: Environment
@@ -57,6 +67,11 @@ func _ready() -> void:
 	props.name = "Props"
 	add_child(props)
 	props.populate(terrain, world_seed)
+
+	for i in props.wreck_positions.size():
+		places.append({"key": "w%d" % i, "kind": "wreck", "pos": props.wreck_positions[i]})
+	for i in props.ruin_positions.size():
+		places.append({"key": "r%d" % i, "kind": "ruin", "pos": props.ruin_positions[i]})
 
 	loot = Loot.new()
 	loot.name = "Loot"
@@ -121,10 +136,16 @@ func _ready() -> void:
 	death_screen.name = "DeathScreen"
 	death_screen.respawn_pressed.connect(respawn)
 	add_child(death_screen)
+	map_ui = MapUI.new()
+	map_ui.name = "MapUI"
+	map_ui.main = self
+	add_child(map_ui)
+
 	survival.died.connect(_on_died)
 	survival.warning.connect(hud.show_banner)
 
-	# Autosave every morning.
+	day_night.day_started.connect(_on_morning)
+	# Autosave every morning (after the morning loot is in place).
 	day_night.day_started.connect(func(_d): Game.save_game("auto", _screenshot()))
 	Game.saved.connect(func(slot): hud.show_banner("Game saved (%s)" % Game.slot_label(slot)))
 	Game.world_ready(self)
@@ -157,6 +178,7 @@ func _process(delta: float) -> void:
 		if _shade_timer <= 0.0:
 			_shade_timer = 0.5
 			in_shade = _check_shade()
+			_discover_nearby()
 		survival.tick(delta, day_night.hour, player.sprinting, in_shade)
 	if hud and not get_tree().paused:
 		hud.set_prompt("" if inventory_ui.is_open() else loot.prompt(player.interact_target()))
@@ -252,6 +274,41 @@ func _check_shade() -> bool:
 	return not get_world_3d().direct_space_state.intersect_ray(q).is_empty()
 
 
+func _discover_nearby() -> void:
+	for place in places:
+		if not discovered.has(place.key) and Vector2(place.pos.x - player.position.x, place.pos.z - player.position.z).length() < DISCOVER_RANGE:
+			discovered[place.key] = true
+
+
+## True if a place still has an unsearched container.
+func place_has_loot(place: Dictionary) -> bool:
+	var prefix: String = place.key + "_"
+	for id in loot.containers:
+		if id.begins_with(prefix) and not loot.containers[id].opened:
+			return true
+	return false
+
+
+## New day: clear out empty supply crates, refill a few searched spots and
+## maybe drop a new supply crate.
+func _on_morning(d: int) -> void:
+	loot.remove_empty_supplies()
+	var n := loot.refill(d, REFILLS_PER_MORNING)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash("supply:%d:%d" % [world_seed, d])
+	var text := "Some searched spots have new loot." if n > 0 else ""
+	if rng.randf() < SUPPLY_CHANCE:
+		var ang := rng.randf() * TAU
+		var r := rng.randf_range(60.0, 200.0)
+		var x := cos(ang) * r
+		var z := sin(ang) * r
+		loot.spawn_supply("supply_%d" % d, Vector3(x, terrain.surface_height(x, z), z))
+		text = (text + " " if text != "" else "") + "A supply crate was dropped. Check your map (M)."
+	if text != "":
+		# After the "Day N" banner has had its moment.
+		get_tree().create_timer(5.5).timeout.connect(func(): hud.show_banner(text))
+
+
 func _on_died() -> void:
 	var cause := "You fell too far."
 	if survival.water <= 0.0:
@@ -302,6 +359,7 @@ func collect_save_data() -> Dictionary:
 		"loot": loot.save_data(),
 		"inventory": inventory.save_data(),
 		"survival": survival.save_data(),
+		"map": {"discovered": discovered.keys()},
 	}
 
 
@@ -310,6 +368,9 @@ func apply_save_data(data: Dictionary) -> void:
 	day_night.restore(int(w.get("day", 1)), float(w.get("hour", 9.0)))
 	loot.load_data(data.get("loot", {}))
 	survival.load_data(data.get("survival", {}))
+	discovered = {}
+	for key in data.get("map", {}).get("discovered", []):
+		discovered[str(key)] = true
 	if data.has("inventory"):
 		inventory.load_data(data.inventory)
 	else:

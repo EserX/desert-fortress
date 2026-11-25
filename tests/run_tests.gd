@@ -165,6 +165,47 @@ func _test_survival() -> void:
 	main.apply_save_data(saved)
 	check(absf(main.survival.water - 42.0) < 0.01, "needs are saved")
 	inv.load_data({})
+	_test_map_and_refill()
+
+
+## Discovery, morning refill, supply crates and the map screen.
+func _test_map_and_refill() -> void:
+	var loot = main.loot
+	var place: Dictionary = main.places[0]
+	main.player.position = place.pos + Vector3(5, 1, 0)
+	main._discover_nearby()
+	check(main.discovered.has(place.key), "walking near a wreck discovers it")
+	check(main.place_has_loot(place), "an unsearched wreck has loot")
+	for id in loot.containers.keys():
+		if id.begins_with(place.key + "_"):
+			main.interact(id)
+	check(not main.place_has_loot(place), "searched wreck is empty")
+	var searched := 0
+	for id in loot.containers:
+		if loot.containers[id].opened:
+			searched += 1
+	check(loot.refill(2, 99) == searched and main.place_has_loot(place), "refill restocks searched spots")
+	var first_id: String = place.key + "_trunk"
+	loot.open(first_id)
+	loot.refill(3, 99)
+	check(not loot.open(first_id).is_empty(), "a refilled container can be searched again")
+	# Supply crate: spawn, search, save, removed next morning.
+	loot.spawn_supply("supply_test", Vector3(10, main.terrain.surface_height(10, 30), 30))
+	check(loot.containers.has("supply_test") and loot.prompt("supply_test") == "[E] Search supply crate", "supply crate spawned")
+	var data: Dictionary = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	main.interact("supply_test")
+	check(main.inventory.count_of("nails") >= 8, "supply crates have better loot")
+	main.discovered = {}
+	main.apply_save_data(data)
+	check(loot.supplies.has("supply_test") and not loot.is_opened("supply_test"), "supply crates are saved")
+	check(main.discovered.has(place.key), "discovered places are saved")
+	loot.open("supply_test")
+	loot.remove_empty_supplies()
+	check(not loot.supplies.has("supply_test") and not loot.containers.has("supply_test"), "empty supply crates go away in the morning")
+	main._on_morning(5)
+	main.map_ui.toggle()
+	check(main.map_ui.is_open(), "map opens")
+	main.inventory.load_data({})
 
 
 func _process(_delta: float) -> bool:
@@ -270,6 +311,9 @@ func _process(_delta: float) -> bool:
 			# Title screen builds without errors.
 			title = load("res://scenes/title.tscn").instantiate()
 			root.add_child(title)
+		705:
+			main.map_ui.toggle()
+			check(not main.map_ui.is_open(), "map closes")
 		710:
 			check(title.world.menu_mode and title.world.player == null, "title screen shows the world without a player")
 			check(title._col.get_child_count() >= 5, "title menu has its buttons")

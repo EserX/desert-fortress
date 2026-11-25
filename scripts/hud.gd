@@ -73,7 +73,7 @@ func _ready() -> void:
 	stamina_bar.add_theme_stylebox_override("fill", fill)
 	root.add_child(stamina_bar)
 
-	help = _label("WASD move   Shift sprint   Space jump   Mouse look   Ctrl crouch   E search   Tab inventory   1-9 hotbar   Q drop   F eat/drink   F5 quicksave   Esc menu", 16)
+	help = _label("WASD move   Shift sprint   Space jump   Mouse look   Ctrl crouch   E search   Tab inventory   1-9 hotbar   Q drop   F eat/drink   M map   F5 quicksave   Esc menu", 16)
 	help.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	help.position = Vector2(20, -36)
 	root.add_child(help)
@@ -106,8 +106,9 @@ func _ready() -> void:
 	banner = _label("", 34)
 	banner.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	banner.size = Vector2(800, 50)
-	banner.position = Vector2(-400, 150)
+	banner.size = Vector2(1000, 50)
+	banner.position = Vector2(-500, 150)
+	banner.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	banner.modulate.a = 0.0
 	root.add_child(banner)
 

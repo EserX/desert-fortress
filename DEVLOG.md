@@ -2,6 +2,17 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v0.7.0 (2026-11-25): Map, morning loot and supply crates
+- **Map (M):** a top-down view of the desert inside the mountain ring. Shows the base, every wreck and ruin you have been within 45 m of, supply crates, and a blue arrow for where you are and which way you face. A green dot marks places that still have something to search. M or Esc closes it. The game keeps running while it's open.
+- **Loot refills each morning:** at 06:00 up to 4 searched gloveboxes, trunks or crates get new loot (different from last time), picked at random.
+- **Supply crates:** most mornings (50%) an olive-green supply crate is dropped somewhere in the desert, with much better loot (lots of nails and wood, food and water). A banner tells you to check the map. Searched supply crates are gone the next morning.
+- **Saved:** discovered places, refills, and supply crates. Older saves load with nothing discovered yet.
+- This finishes **M2: Scavenging and survival**.
+- **Tests:** discovery, place loot dot, refill, re-searching a refilled spot, supply crate spawn/loot/save/cleanup, morning event, map open and close. New screenshot view `12_map`.
+
+**Try:** walk around a bit, then press M. Sleep through a night (or wait for 06:00) and look for the green supply square.
+**Next:** M3, building. v0.8 is build mode (B) with wooden foundations and walls.
+
 ## v0.6.0 (2026-11-25): Health, hunger and thirst
 - **Three needs**, shown as bars in the bottom-left: **health**, **food** and **water**. Gentle by default: food lasts about 40 minutes and water about 25. Sprinting makes both go faster; night is cooler and slower.
 - **Midday heat (11:00–16:00):** out in the sun, water drains 1.8× faster and the HUD says "Hot sun: find shade". Standing where a wall, wreck, rock or dune blocks the sun counts as shade.

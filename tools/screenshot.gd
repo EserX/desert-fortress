@@ -19,6 +19,7 @@ var shots := [
 	{"name": "09_crate", "target": "crate", "hour": 10.5},
 	{"name": "10_inventory", "pos": Vector3(0, 0, 9), "yaw": 0.6, "pitch": -0.05, "hour": 10.0, "inventory": true},
 	{"name": "11_death", "pos": Vector3(0, 0, 9), "yaw": 0.6, "pitch": -0.05, "hour": 13.0, "death": true},
+	{"name": "12_map", "pos": Vector3(20, 0, 40), "yaw": 0.9, "pitch": 0.0, "hour": 9.0, "map": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -66,6 +67,16 @@ func _process(_d: float) -> bool:
 			main.survival.damage(999.0)
 		elif main.death_screen.is_open():
 			main.respawn()
+		if s.get("map", false):
+			for place in main.places.slice(0, 15):
+				main.discovered[place.key] = true
+			main.interact(main.places[0].key + "_trunk")
+			main.interact(main.places[0].key + "_glovebox")
+			main._on_morning(2)
+			if not main.map_ui.is_open():
+				main.map_ui.toggle()
+		elif main.map_ui.is_open():
+			main.map_ui.toggle()
 		if s.get("menu", false):
 			main.pause_menu.open()
 		else:

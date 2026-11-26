@@ -69,7 +69,7 @@ func _physics_process(delta: float) -> void:
 ## One check of every trap against every mutant.
 func tick(dt: float) -> void:
 	var traps: Array = []
-	for key in building.pieces:
+	for key in building.keys_of(["spike_strip", "barbed_wire", "landmine", "electric_fence", "fire_pit"]):
 		var rec: Dictionary = building.pieces[key]
 		if building.PIECES[rec.type].get("trap", false) or rec.get("powered", false) or rec.get("burn", 0.0) > 0.0:
 			traps.append(key)

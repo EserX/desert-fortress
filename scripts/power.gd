@@ -25,9 +25,9 @@ func power_wanted() -> bool:
 
 func _process(delta: float) -> void:
 	_flicker += delta
-	for key in building.pieces:
+	for key in building.keys_of(["fire_pit"]):
 		var rec: Dictionary = building.pieces[key]
-		if rec.type == "fire_pit" and rec.flame.visible:
+		if rec.flame.visible:
 			# Flicker the flames and their light.
 			var f := 1.0 + sin(_flicker * 13.0 + rec.node.position.x) * 0.08 + sin(_flicker * 7.3) * 0.06
 			rec.flame.scale = Vector3(1.0, f, 1.0)
@@ -43,7 +43,7 @@ func _process(delta: float) -> void:
 func tick(dt: float) -> void:
 	var running: Array = []
 	var want := power_wanted()
-	for key in building.pieces.keys():
+	for key in building.keys_of(["generator", "fire_pit"]):
 		var rec: Dictionary = building.pieces.get(key, {})
 		if rec.is_empty():
 			continue
@@ -65,7 +65,7 @@ func tick(dt: float) -> void:
 				var lit: bool = rec.burn > 0.0
 				if rec.flame.visible != lit:
 					rec.flame.visible = lit
-	for key in building.pieces:
+	for key in building.keys_of(["floodlight", "electric_fence"]):
 		var rec: Dictionary = building.pieces[key]
 		if rec.has("powered"):
 			var on := false

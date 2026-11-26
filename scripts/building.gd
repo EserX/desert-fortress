@@ -78,6 +78,9 @@ const WALLISH := ["wall", "doorway", "window"]
 const DECKS := ["floor", "roof"]
 
 var terrain  # Terrain
+## type -> {key: true}, kept up to date by place() and remove(), so systems
+## that only care about turrets or traps don't scan every piece.
+var _by_type := {}
 ## Grown by base upgrades from the shop.
 var zone_radius := ZONE_RADIUS
 var chest_slots := CHEST_SLOTS
@@ -593,6 +596,9 @@ func place(type: String, slot: Dictionary, y: float, gate_open := false, tier :=
 	_add_cracks(rec)
 	_apply_tier(rec)
 	pieces[key] = rec
+	if not _by_type.has(type):
+		_by_type[type] = {}
+	_by_type[type][key] = true
 	for k in slot_keys(type, slot):
 		occupied[k] = key
 	if type == "doorway":
@@ -797,6 +803,8 @@ func remove(key: String, spill := true) -> String:
 	for k in slot_keys(rec.type, rec.slot):
 		occupied.erase(k)
 	pieces.erase(key)
+	if _by_type.has(rec.type):
+		_by_type[rec.type].erase(key)
 	return rec.type
 
 
@@ -919,6 +927,15 @@ func damage(key: String, amount: float) -> bool:
 		return true
 	_update_cracks(rec)
 	return false
+
+
+## Keys of all built pieces of these types.
+func keys_of(types: Array) -> Array:
+	var out: Array = []
+	for t in types:
+		if _by_type.has(t):
+			out.append_array(_by_type[t].keys())
+	return out
 
 
 ## Key of the built piece a collider belongs to (walls, gates...), or "".

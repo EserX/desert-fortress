@@ -22,10 +22,8 @@ var _shot: AudioStreamWAV
 
 
 func _physics_process(delta: float) -> void:
-	for key in building.pieces:
-		var rec: Dictionary = building.pieces[key]
-		if rec.type == "turret":
-			update_turret(key, rec, delta)
+	for key in building.keys_of(["turret"]):
+		update_turret(key, building.pieces[key], delta)
 	for k in _state.keys():
 		if not building.pieces.has(k):
 			_state.erase(k)

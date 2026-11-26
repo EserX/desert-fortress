@@ -45,6 +45,9 @@ var shots := [
 	{"name": "35_upgrades", "pos": Vector3(-0.6, 0, 4.2), "yaw": 0.5, "pitch": -0.2, "hour": 10.0, "upgrades": true},
 	{"name": "36_chest", "pos": Vector3(-0.6, 0, 4.2), "yaw": 0.5, "pitch": -0.2, "hour": 10.0, "bigchest": true},
 	{"name": "37_hint", "pos": Vector3(0, 0, 9), "yaw": 0.3, "pitch": -0.05, "hour": 9.0, "hint": true},
+	{"name": "38_controls", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true, "page": "controls"},
+	{"name": "39_settings", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true, "page": "settings"},
+	{"name": "40_wave_map", "pos": Vector3(20, 0, 40), "yaw": 0.9, "pitch": 0.0, "hour": 21.5, "wave_map": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -199,8 +202,22 @@ func _process(_d: float) -> bool:
 			main.build_mode.select(10)
 		elif main.build_mode.active and not s.get("turret", false):
 			main.build_mode.toggle()
+		if s.get("wave_map", false):
+			main.building.load_data([])
+			main.mutants.clear()
+			main.waves.wave = 3
+			main.waves.start_wave()
+			for i in 30:
+				main.waves._process(1.0)
+			for m in main.mutants.alive():
+				m.global_position = m.global_position * randf_range(0.3, 0.8)
+				m.set_physics_process(false)
+			if not main.map_ui.is_open():
+				main.map_ui.toggle()
 		if s.get("menu", false):
 			main.pause_menu.open()
+			if s.has("page"):
+				main.pause_menu.show_page(s.page)
 		else:
 			main.pause_menu.resume()
 	elif frame % 20 == 15:

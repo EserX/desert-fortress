@@ -2,6 +2,11 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v1.0.2 (2026-11-26): Controls page and the wave on the map
+- **Pause menu → Controls:** every key on one page (the help line at the bottom of the screen fades after a few seconds). The pause menu also shows the game's difficulty.
+- **Map during a wave:** red dots show tonight's mutants on their way (brutes as bigger dots), and a thin red ring shows your build zone (it grows with the zone upgrade).
+- **Tests:** the controls page. New screenshot views `38_controls`, `39_settings` and `40_wave_map`.
+
 ## v1.0.1 (2026-11-26): Turrets on masts, and a soak test
 - **Fix: turrets behind walls never fired.** Their gun sat at 1 m and walls are 2.4 m tall, so a turret inside your walls couldn't see anything outside them. Turrets now stand on a **3.4 m braced mast** and fire over walls at anything a few metres out (a mutant hugging the wall is still hidden from them; that is what wire, spikes and your own guns are for). They aim at the upper chest.
 - **New `tools/soak_test.gd`:** builds a fortress (a ring of walls with a gate, wire, sandbags, mines, two loaded turrets, a generator, a floodlight, an electric fence and a fire pit), starts a big wave (night 8 by default) and plays the whole night. It prints the lineup, progress every 10 seconds, what is left at the end, and the time per frame. Run it with `godot --headless --path . -s tools/soak_test.gd --fixed-fps 60 -- frames=11000`.

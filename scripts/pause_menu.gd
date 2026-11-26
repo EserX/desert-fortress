@@ -9,6 +9,14 @@ var _col: VBoxContainer
 var _page := "main"
 var _shot: Image  # the game frame from just before the menu opened
 
+const CONTROLS := [
+	["W A S D", "Move"], ["Shift", "Sprint"], ["Space", "Jump"], ["Ctrl / C", "Crouch (quieter)"],
+	["Left click", "Swing, shoot, build, hammer"], ["Right click", "Aim; hammer: demolish; build: undo"],
+	["R", "Reload; build mode: turn piece"], ["E", "Search, open, use"], ["Tab / I", "Inventory"],
+	["1-9, wheel", "Hotbar (build mode: piece)"], ["F", "Eat, drink, bandage, medkit"], ["Q", "Drop stack"],
+	["B", "Build mode"], ["M", "Map"], ["F5 / F9", "Quicksave / quickload"], ["F11", "Fullscreen"],
+]
+
 
 func _ready() -> void:
 	layer = 10
@@ -66,9 +74,10 @@ func show_page(page: String) -> void:
 			UI.button(_col, "Save game", func(): show_page("save"))
 			UI.button(_col, "Load game", func(): show_page("load"), Game.has_any_save())
 			UI.button(_col, "Settings", func(): show_page("settings"))
+			UI.button(_col, "Controls", func(): show_page("controls"))
 			UI.button(_col, "Main menu", Game.go_to_title)
 			UI.button(_col, "Quit to desktop", Game.quit_to_desktop)
-			UI.note(_col, "Main menu and Quit autosave your game.\nF5 quicksave   F9 quickload")
+			UI.note(_col, "Main menu and Quit autosave your game.\nF5 quicksave   F9 quickload\nDifficulty: %s" % Game.DIFFICULTIES[Game.difficulty].name)
 		"save":
 			UI.title(_col, "SAVE GAME", 28)
 			UI.slot_list(_col, "save", func(slot: String):
@@ -83,6 +92,22 @@ func show_page(page: String) -> void:
 			UI.title(_col, "LOAD GAME", 28)
 			UI.note(_col, "Unsaved progress will be lost.")
 			UI.slot_list(_col, "load", func(slot: String): Game.load_game(slot))
+			UI.button(_col, "Back", func(): show_page("main"))
+		"controls":
+			UI.title(_col, "CONTROLS", 28)
+			var grid := GridContainer.new()
+			grid.columns = 2
+			grid.add_theme_constant_override("h_separation", 24)
+			grid.add_theme_constant_override("v_separation", 3)
+			_col.add_child(grid)
+			for row in CONTROLS:
+				for i in 2:
+					var l := Label.new()
+					l.text = row[i]
+					l.add_theme_font_size_override("font_size", 15)
+					if i == 0:
+						l.add_theme_color_override("font_color", UI.ACCENT)
+					grid.add_child(l)
 			UI.button(_col, "Back", func(): show_page("main"))
 		"settings":
 			UI.title(_col, "SETTINGS", 28)

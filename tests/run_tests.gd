@@ -1288,6 +1288,11 @@ func _test_difficulty_and_hints() -> void:
 	s.hints = was
 	s.hints_seen = []
 	s.save_settings()
+	# Controls page in the pause menu.
+	main.pause_menu.open()
+	main.pause_menu.show_page("controls")
+	check(main.pause_menu._col.get_child(1) is GridContainer and main.pause_menu._col.get_child(1).get_child_count() == main.pause_menu.CONTROLS.size() * 2, "the pause menu lists the controls")
+	main.pause_menu.resume()
 	# Graphics quality.
 	var q: int = s.quality
 	s.set_value("quality", 0)

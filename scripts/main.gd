@@ -99,6 +99,8 @@ var places: Array = []
 ## Keys of places you have been near.
 var discovered := {}
 var _shovel_ready_at := 0
+## Cable in hand: the piece a cable is being run from ("" when none).
+var cable_from := ""
 ## Rocks broken with the pickaxe (id -> true) and hits left on started ones.
 var broken_rocks := {}
 var rock_hits := {}
@@ -240,6 +242,7 @@ func _ready() -> void:
 	power.name = "Power"
 	power.building = building
 	power.day_night = day_night
+	power.player = player
 	add_child(power)
 
 	waves = Waves.new()
@@ -422,6 +425,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 	elif dig_tool() != "" and _shovel_input(event):
 		get_viewport().set_input_as_handled()
+	elif holding("cable") and _cable_input(event):
+		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("rotate") and lock_door(player.interact_target()):
+		get_viewport().set_input_as_handled()
 	elif guns.item != "" and _gun_input(event):
 		get_viewport().set_input_as_handled()
 	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT \
@@ -461,6 +468,8 @@ func _process(delta: float) -> void:
 				text = shovel_prompt()
 			elif text == "" and holding("metal_detector"):
 				text = detector_text()
+			elif text == "" and holding("cable"):
+				text = cable_prompt(piece_under_crosshair())
 		hud.set_prompt(text)
 		_update_dig_marker()
 		for i in Inventory.HOTBAR:
@@ -913,7 +922,7 @@ func _prompt_for(id: String) -> String:
 		return "[E] Use the shop terminal   ($%d)" % shop.cash
 	if id == "testbox":
 		return "[E] Open the TEST box (every item, cash to $%d)" % TEST_CASH
-	for prefix in ["gate:", "hatch:", "chest:", "bench:", "gen:", "fire:", "turret:", "well:"]:
+	for prefix in ["gate:", "hatch:", "chest:", "bench:", "gen:", "fire:", "turret:", "well:", "switch:"]:
 		if id.begins_with(prefix):
 			return building.prompt(id)
 	return loot.prompt(id)
@@ -971,7 +980,14 @@ func interact(id: String) -> void:
 		open_test_box()
 		return
 	if id.begins_with("gate:") or id.begins_with("hatch:"):
-		building.toggle_gate(id.substr(id.find(":") + 1))
+		var gk := id.substr(id.find(":") + 1)
+		if building.pieces.get(gk, {}).get("locked", false):
+			hud.show_banner("The door is locked (R unlocks it)")
+		building.toggle_gate(gk)
+		return
+	if id.begins_with("switch:"):
+		building.toggle_switch(id.trim_prefix("switch:"))
+		power.tick(0.0)
 		return
 	if id.begins_with("chest:"):
 		var storage = building.storage_of(id.trim_prefix("chest:"))
@@ -1044,6 +1060,82 @@ func apply_upgrades() -> void:
 	building.set_chest_slots(shop.upgrade_value("storage", Building.CHEST_SLOTS))
 	inventory_ui.bench_tier = shop.upgrade_value("bench", 1)
 	inventory_ui.refresh()
+
+
+## R on a metal door: lock or unlock it. Returns true if the key was used.
+func lock_door(id: String) -> bool:
+	if not id.begins_with("gate:"):
+		return false
+	var key := id.trim_prefix("gate:")
+	var rec: Dictionary = building.pieces.get(key, {})
+	if rec.is_empty() or rec.type != "metal_door":
+		return false
+	if building.toggle_lock(key):
+		hud.show_pickup(["Locked the metal door" if rec.locked else "Unlocked the metal door"])
+	else:
+		hud.show_banner("Close the door first")
+	return true
+
+
+## What the cable does on the piece under the crosshair.
+func cable_prompt(key: String) -> String:
+	var rec: Dictionary = building.pieces.get(key, {})
+	if rec.is_empty() or not rec.type in Building.WIRED:
+		return "Cable: look at a generator, switch, floodlight, fence or turret" if cable_from != "" else ""
+	var name: String = Building.PIECES[rec.type].name
+	var n := building.cables_of(key).size()
+	var take := ("   [RMB] Take up its %d cable%s" % [n, "" if n == 1 else "s"]) if n > 0 else ""
+	if cable_from == "" or not building.pieces.has(cable_from):
+		return "%s
+[LMB] Start a cable here (%d cable)%s" % [name, inventory.count_of("cable"), take]
+	if cable_from == key:
+		return "%s
+[LMB] Cancel this cable" % name
+	var why := building.cable_problem(cable_from, key)
+	if why != "":
+		return "%s
+%s" % [name, why]
+	return "%s
+[LMB] Connect (%d cable of your %d)%s" % [name, building.cable_cost(cable_from, key), inventory.count_of("cable"), take]
+
+
+## Cable in hand: left click a piece to start a cable, then another to connect
+## (paid in cable); right click takes up a piece's cables. Returns "" or why not.
+func cable_click(key: String, take_up := false) -> String:
+	if not building.pieces.has(key) or not building.pieces[key].type in Building.WIRED:
+		return "Cables join generators, switches, floodlights, electric fences and turrets"
+	if take_up:
+		var back := building.disconnect_all(key)
+		inventory.add("cable", back)
+		return ""
+	if cable_from == "" or not building.pieces.has(cable_from) or cable_from == key:
+		cable_from = "" if cable_from == key else key
+		return ""
+	var why := building.cable_problem(cable_from, key)
+	if why != "":
+		return why
+	var cost := building.cable_cost(cable_from, key)
+	if inventory.count_of("cable") < cost:
+		return "Not enough cable: this needs %d" % cost
+	inventory.remove("cable", cost)
+	building.connect_cable(cable_from, key)
+	cable_from = ""
+	power.tick(0.0)
+	return ""
+
+
+func _cable_input(event: InputEvent) -> bool:
+	if not (event is InputEventMouseButton and event.pressed) or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+		return false
+	if event.button_index != MOUSE_BUTTON_LEFT and event.button_index != MOUSE_BUTTON_RIGHT:
+		return false
+	var key := piece_under_crosshair()
+	if key == "":
+		return false
+	var why := cable_click(key, event.button_index == MOUSE_BUTTON_RIGHT)
+	if why != "":
+		hud.show_banner(why)
+	return true
 
 
 ## Storage of every chest within reach (hammer work can be paid from them).
@@ -1392,6 +1484,7 @@ func collect_save_data() -> Dictionary:
 		"caches": caches.save_data(),
 		"mining": {"broken": broken_rocks.keys(), "hits": rock_hits.keys().map(func(k): return [k, rock_hits[k]])},
 		"tiers": Building.TIER_NAMES.size(),
+		"cables": building.cables.duplicate(true),
 	}
 
 
@@ -1420,6 +1513,14 @@ func apply_save_data(data: Dictionary) -> void:
 	survival.load_data(data.get("survival", {}))
 	# Saves from before the stone tier (3 tiers): concrete was tier 2, now 3.
 	building.load_data(data.get("buildings", []), int(data.get("tiers", 3)) < 4)
+	building.cables = []
+	if data.has("cables"):
+		for c in data.cables:
+			if c is Array and c.size() == 2 and building.pieces.has(str(c[0])) and building.pieces.has(str(c[1])):
+				building.cables.append([str(c[0]), str(c[1])])
+		building._rebuild_cables()
+	else:
+		building.auto_wire(power.POWER_RANGE)  # older saves: power reached 18 m without cables
 	waves.load_data(data.get("waves", {"wave": maxi(day_night.day - 1, 0)}))
 	guns.load_data(data.get("guns", {}))
 	# Older saves: a little starting cash plus pay for the nights already survived.

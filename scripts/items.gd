@@ -32,6 +32,7 @@ const ITEMS := {
 	"stone": {"name": "Stone", "weight": 1.5, "stack": 20},
 	"clay": {"name": "Clay", "weight": 1.2, "stack": 20},
 	"metal_detector": {"name": "Metal detector", "weight": 1.5, "stack": 1},
+	"cable": {"name": "Cable", "weight": 0.1, "stack": 50},
 }
 
 ## What each kind of container can hold: item -> [min, max]. A negative min
@@ -51,6 +52,7 @@ const RECIPES := {
 	"bandage": {"count": 1, "cost": {"cloth": 2}, "info": "heals 30, use with F"},
 	"shovel": {"count": 1, "cost": {"scrap": 3, "wood": 2}, "info": "LMB digs (gives sand), RMB fills"},
 	"pickaxe": {"count": 1, "cost": {"scrap": 4, "wood": 2}, "info": "breaks rocks for stone, digs through stone"},
+	"cable": {"count": 6, "cost": {"scrap": 1, "cloth": 1}, "info": "hold it: click a generator, then a light, fence, switch or turret"},
 	"metal_detector": {"count": 1, "cost": {"scrap": 6, "nails": 4, "cloth": 2}, "info": "finds caches buried near the base"},
 	"spike_barricade": {"count": 1, "cost": {"wood": 4, "nails": 4}, "info": "build it in build mode"},
 	"pistol": {"count": 1, "cost": {"scrap": 10, "wood": 2, "nails": 6}, "info": "12 rounds. RMB aims, R reloads"},

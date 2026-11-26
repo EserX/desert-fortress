@@ -61,7 +61,7 @@ If `git pull` complains about untracked `.uid` files, they are safe to delete.
 
 **Weapons.** Melee costs stamina. Guns are loud and bring mutants running. Hold **right click** to aim (the rifle has a scope), **R** reloads. Headshots do double damage.
 
-**Defences.** Spike barricades, spike strips, barbed wire (slows them) and landmines. An electric fence and floodlights need a fuel generator within 18 m (fuel cans come from car trunks). A fire pit burns mutants that walk through it. Auto-turrets stand on tall masts and shoot anything they can see within 22 m, over your walls, using the 9mm rounds you load into them with **E**.
+**Defences.** Spike barricades, spike strips, barbed wire (slows them) and landmines. An electric fence and floodlights need power from a fuel generator (fuel cans come from car trunks): within 4 m they plug straight in, further away they need a **cable**. Make cable at the workbench (1 scrap, 1 cloth for 6), hold it, left click the generator and then the light, fence, **power switch** or turret (a cable costs one per 2 m, 24 m at most; right click takes a piece's cables back up). Power passes through switches only when they are on (E). A turret on power turns and fires 40% faster. At night an open gate closes by itself 8 seconds after you leave it, and **R** locks a shut metal door (locked, it takes half damage). A fire pit burns mutants that walk through it. Auto-turrets stand on tall masts and shoot anything they can see within 22 m, over your walls, using the 9mm rounds you load into them with **E**.
 
 **Cash and the shop.** Every night pays for kills, for surviving, and for how much of the base still stands (more if you kill the whole wave). The **shop terminal** next to the flag has three pages:
 - **Counter:** materials, food, weapons, ammo and trap parts, straight into your pockets.
@@ -81,9 +81,9 @@ If `git pull` complains about untracked `.uid` files, they are safe to delete.
 | Mouse | Look |
 | Left click | Swing, shoot, build (hold and drag for a line), use the hammer, or dig with the shovel |
 | Right click | Aim a gun; hammer: demolish; shovel: fill; build mode: undo |
-| R | Reload; build mode: turn the piece; hammer: repair everything nearby |
+| R | Reload; build mode: turn the piece; hammer: repair everything nearby; lock or unlock a metal door |
 | G | Build mode: pick a piece up and move it; hammer: upgrade everything like it nearby |
-| E | Search, open, use (gates, chests, workbench, generator, fire pit, turret, shop) |
+| E | Search, open, use (gates, chests, workbench, generator, fire pit, turret, switch, well, shop) |
 | Tab / I | Inventory |
 | 1–9, mouse wheel | Hotbar slot (build mode: piece) |
 | F | Eat, drink, use a bandage or medkit |

@@ -29,6 +29,15 @@ const REFUND := 0.5          # share of what a piece cost you get back when demo
 const UNDO_SECONDS := 60.0   # build-mode right click gives everything back this soon after building
 const ZONE_RADIUS := 26.0    # base build zone around the flag at the origin (before upgrades)
 const CHEST_SLOTS := 20      # before upgrades
+## Power: cables (laid with cable from a reel) join wired pieces; power flows from
+## running generators along them, through switches that are on. Pieces within
+## PLUG_RANGE of a running generator are plugged straight into it.
+const WIRED := ["generator", "switch", "floodlight", "electric_fence", "turret"]
+const PLUG_RANGE := 4.0
+const CABLE_MAX := 24.0      # longest single cable
+const CABLE_PER := 2.0       # metres of cable one cable item covers
+## Gates (not trapdoors) left open at night close by themselves after this long.
+const AUTO_CLOSE := 8.0
 ## Structural support, counted from the ground: pieces at ground level have 100%.
 ## Resting on what is below costs LOSS_UP, hanging off a floor next to it
 ## LOSS_SIDE, times the piece's tier weight (heavier tiers need more support).
@@ -88,10 +97,11 @@ const PIECES := {
 	"tri_foundation": {"name": "Wooden triangle foundation", "slot": "cell", "cost": {"wood": 2, "nails": 2}, "dirs": 4},
 	"tri_roof": {"name": "Scrap triangle roof", "slot": "cell", "cost": {"scrap": 2, "nails": 1}, "dirs": 4},
 	"metal_door": {"name": "Metal door", "slot": "edge", "cost": {"scrap": 8, "nails": 4}, "dirs": 2, "fixed": true, "hp": 1400.0, "gate": true},
+	"switch": {"name": "Power switch", "slot": "obj", "cost": {"scrap": 2, "nails": 2}, "dirs": 4, "fixed": true},
 	"well": {"name": "Water well", "slot": "obj", "cost": {"stone": 8, "wood": 4, "scrap": 2}, "dirs": 4, "fixed": true, "steep_ok": true, "pit": WELL_DEPTH, "over_pit": true},
 	"spiked_pit": {"name": "Spiked pit", "slot": "obj", "cost": {"wood": 4, "nails": 6}, "dirs": 1, "fixed": true, "trap": true, "steep_ok": true, "pit": PIT_DEPTH},
 }
-const ORDER := ["foundation", "wall", "doorway", "window", "floor", "stairs", "ramp", "roof", "chest", "workbench", "spikes", "spike_strip", "barbed_wire", "landmine", "fire_pit", "generator", "electric_fence", "floodlight", "turret", "landing_pad", "sandbags", "ladder", "spiked_pit", "well", "half_wall", "low_wall", "slit_wall", "pillar", "trapdoor", "tri_foundation", "tri_roof", "metal_door"]
+const ORDER := ["foundation", "wall", "doorway", "window", "floor", "stairs", "ramp", "roof", "chest", "workbench", "spikes", "spike_strip", "barbed_wire", "landmine", "fire_pit", "generator", "electric_fence", "floodlight", "turret", "landing_pad", "sandbags", "ladder", "spiked_pit", "well", "half_wall", "low_wall", "slit_wall", "pillar", "trapdoor", "tri_foundation", "tri_roof", "metal_door", "switch"]
 ## Pieces marked "blueprint" must be unlocked first (blueprints come by drone).
 const TURRET_RANGE := 22.0
 const TURRET_AMMO := 240     # 9mm rounds its ammo box holds
@@ -136,10 +146,16 @@ var occupied := {}
 ## main slot key -> support in % (see MIN_SUPPORT), kept up to date
 var support := {}
 var _bulk := false  # loading: work out support once at the end
+## Cables: [key, key] pairs.
+var cables: Array = []
+var _cable_root: Node3D
 var _mats := {}
 
 
 func _ready() -> void:
+	_cable_root = Node3D.new()
+	_cable_root.name = "Cables"
+	add_child(_cable_root)
 	_mats.wood = LowPoly.material(Color(0.52, 0.36, 0.22))
 	_mats.wood_dark = LowPoly.material(Color(0.36, 0.24, 0.14))
 	_mats.plank = LowPoly.material(Color(0.60, 0.43, 0.27))
@@ -154,6 +170,7 @@ func _ready() -> void:
 	_mats.cloth = LowPoly.material(Color(0.7, 0.6, 0.42))
 	_mats.cloth_dark = LowPoly.material(Color(0.6, 0.51, 0.36))
 	_mats.water = LowPoly.material(Color(0.18, 0.32, 0.38), 0.1)
+	_mats.cable = LowPoly.material(Color(0.12, 0.12, 0.13))
 	_mats.live = StandardMaterial3D.new()  # electric fence wire with the power on
 	_mats.live.albedo_color = Color(0.6, 0.9, 1.0)
 	_mats.live.emission_enabled = true
@@ -599,6 +616,10 @@ static func piece_boxes(type: String) -> Array:
 			for i in int(LADDER_H / 0.35):
 				var h := 0.3 + i * 0.35
 				out.append([Vector3(0.56, 0.05, 0.05), Vector3(0, h, -0.8 + (h - LADDER_H * 0.5) * -tan(lean)), "wood"])
+		"switch":
+			out.append([Vector3(0.1, 1.2, 0.1), Vector3(0, 0.6, 0.1), "wood_dark"])
+			out.append([Vector3(0.28, 0.36, 0.14), Vector3(0, 1.1, 0), "metal"])
+			out.append([Vector3(0.06, 0.06, 0.01), Vector3(0.09, 1.22, -0.075), "lamp"])
 		"well":
 			# A ring of stone covering the shaft (first four boxes: also its colliders),
 			# two posts, a crank bar and a bucket.
@@ -695,6 +716,8 @@ static func piece_colliders(type: String) -> Array:
 			return [[Vector3(0.7, LADDER_H, 0.3), Vector3(0, LADDER_H * 0.5, -0.8), 0.0]]
 		"spiked_pit":
 			return [[Vector3(1.8, 0.6, 1.8), Vector3(0, 0.3, 0), 0.0]]
+		"switch":
+			return [[Vector3(0.3, 1.3, 0.3), Vector3(0, 0.65, 0.05), 0.0]]
 		"well":
 			var out: Array = []
 			for b in piece_boxes("well").slice(0, 4):
@@ -801,6 +824,19 @@ func place(type: String, slot: Dictionary, y: float, gate_open := false, tier :=
 		spot.visible = false
 		body.add_child(spot)
 		rec.light = spot
+	elif type == "switch":
+		rec.open = gate_open  # "open" holds whether the switch is on
+		body.set_meta("interact_id", "switch:" + key)
+		var lever := Node3D.new()
+		lever.position = Vector3(0, 1.1, -0.08)
+		body.add_child(lever)
+		var handle := MeshInstance3D.new()
+		handle.mesh = _box_mesh(Vector3(0.05, 0.22, 0.05))
+		handle.position = Vector3(0, 0.11, 0)
+		handle.material_override = _mats.rust
+		lever.add_child(handle)
+		rec.lever = lever
+		_set_lever(rec)
 	elif type == "well":
 		rec.water = 0.0
 		body.set_meta("interact_id", "well:" + key)
@@ -1011,16 +1047,150 @@ func set_gate(key: String, open: bool) -> void:
 	if rec.is_empty() or not rec.has("hinge"):
 		return
 	rec.open = open
+	rec.open_t = 0.0
 	if rec.type == "trapdoor":
 		rec.hinge.rotation.x = PI * 0.5 if open else 0.0
 	else:
 		rec.hinge.rotation.y = -PI * 0.5 if open else 0.0
 
 
-## E on a gate: open it if closed, close it if open.
+## E on a gate: open it if closed, close it if open (not while it is locked).
 func toggle_gate(key: String) -> void:
-	if pieces.has(key):
+	if pieces.has(key) and not pieces[key].get("locked", false):
 		set_gate(key, not pieces[key].open)
+
+
+## R on a metal door: lock or unlock it (only when shut). A locked door takes
+## half damage and can't be opened. Returns true if it changed.
+func toggle_lock(key: String) -> bool:
+	var rec: Dictionary = pieces.get(key, {})
+	if rec.is_empty() or rec.type != "metal_door" or rec.open:
+		return false
+	rec.locked = not rec.get("locked", false)
+	return true
+
+
+## E on a switch: on or off.
+func toggle_switch(key: String) -> void:
+	var rec: Dictionary = pieces.get(key, {})
+	if rec.is_empty() or rec.type != "switch":
+		return
+	rec.open = not rec.open
+	_set_lever(rec)
+
+
+func _set_lever(rec: Dictionary) -> void:
+	if rec.has("lever"):
+		rec.lever.rotation.x = -0.6 if rec.open else 0.6
+
+
+# --- Cables ---------------------------------------------------------------------
+
+func cables_of(key: String) -> Array:
+	return cables.filter(func(c): return key in c)
+
+
+## Where a cable meets a piece.
+func cable_anchor(key: String) -> Vector3:
+	var rec: Dictionary = pieces[key]
+	var h := {"floodlight": 2.6, "turret": 0.9, "electric_fence": 1.2, "switch": 1.1}.get(rec.type, 0.8) as float
+	return rec.node.global_position + Vector3(0, h, 0)
+
+
+## Cable items a cable between two pieces takes.
+func cable_cost(a: String, b: String) -> int:
+	return maxi(1, ceili(cable_anchor(a).distance_to(cable_anchor(b)) / CABLE_PER))
+
+
+## Why two pieces can't be joined by a cable ("" if they can).
+func cable_problem(a: String, b: String) -> String:
+	if not pieces.has(a) or not pieces.has(b) or a == b:
+		return "Pick two different pieces"
+	if not pieces[a].type in WIRED or not pieces[b].type in WIRED:
+		return "Cables join generators, switches, floodlights, electric fences and turrets"
+	for c in cables:
+		if a in c and b in c:
+			return "They are already joined"
+	if cable_anchor(a).distance_to(cable_anchor(b)) > CABLE_MAX:
+		return "Too far for one cable (%d m at most): put a switch in between" % int(CABLE_MAX)
+	return ""
+
+
+## Joins two pieces with a cable (no cost check: see cable_cost). Returns true if laid.
+func connect_cable(a: String, b: String) -> bool:
+	if cable_problem(a, b) != "":
+		return false
+	cables.append([a, b])
+	_rebuild_cables()
+	return true
+
+
+## Takes up every cable on a piece. Returns how many cable items come back.
+func disconnect_all(key: String) -> int:
+	var back := 0
+	for c in cables_of(key):
+		back += cable_cost(c[0], c[1])
+	cables = cables.filter(func(c): return not key in c)
+	_rebuild_cables()
+	return back
+
+
+## Older saves: cable every floodlight and fence to each generator in the old 18 m reach.
+func auto_wire(reach: float) -> void:
+	for g in keys_of(["generator"]):
+		for k in keys_of(["floodlight", "electric_fence"]):
+			if pieces[k].node.global_position.distance_to(pieces[g].node.global_position) <= reach:
+				cables.append([g, k])
+	_rebuild_cables()
+
+
+## Every piece power reaches from these running generators: along cables, and
+## on through switches only when they are on.
+func power_network(running: Array) -> Dictionary:
+	var reached := {}
+	var todo: Array = running.duplicate()
+	for k in running:
+		reached[k] = true
+	var links := {}
+	for c in cables:
+		for i in 2:
+			if not links.has(c[i]):
+				links[c[i]] = []
+			links[c[i]].append(c[1 - i])
+	while not todo.is_empty():
+		var k: String = todo.pop_back()
+		if pieces.has(k) and pieces[k].type == "switch" and not pieces[k].open:
+			continue  # an open switch stops the power here
+		for n in links.get(k, []):
+			if not reached.has(n):
+				reached[n] = true
+				todo.append(n)
+	return reached
+
+
+## The cables as thin dark bars, sagging a little in the middle.
+func _rebuild_cables() -> void:
+	if _cable_root == null:
+		return
+	for c in _cable_root.get_children():
+		c.queue_free()
+	for c in cables:
+		if not pieces.has(c[0]) or not pieces.has(c[1]):
+			continue
+		var a := cable_anchor(c[0])
+		var b := cable_anchor(c[1])
+		var mid := (a + b) * 0.5 - Vector3(0, minf(a.distance_to(b) * 0.06, 0.8), 0)
+		for seg in [[a, mid], [mid, b]]:
+			var p0: Vector3 = seg[0]
+			var p1: Vector3 = seg[1]
+			var mi := MeshInstance3D.new()
+			mi.mesh = _box_mesh(Vector3(0.04, 0.04, maxf(p0.distance_to(p1), 0.01)))
+			mi.material_override = _mats.cable
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			_cable_root.add_child(mi)
+			mi.global_position = (p0 + p1) * 0.5
+			if p0.distance_to(p1) > 0.01:
+				mi.look_at(p1, Vector3.UP if absf((p1 - p0).normalized().y) < 0.99 else Vector3.RIGHT)
 
 
 ## Prompt text for a gate, chest or workbench interact id ("gate:<key>"...), or "".
@@ -1030,7 +1200,10 @@ func prompt(id: String) -> String:
 		return ""
 	if id.begins_with("gate:"):
 		var what := "door" if pieces[key].type == "metal_door" else "gate"
-		return "[E] Close %s" % what if pieces[key].open else "[E] Open %s" % what
+		if pieces[key].get("locked", false):
+			return "Metal door, locked   [R] Unlock"
+		var text := "[E] Close %s" % what if pieces[key].open else "[E] Open %s" % what
+		return text + ("   [R] Lock" if pieces[key].type == "metal_door" and not pieces[key].open else "")
 	if id.begins_with("hatch:"):
 		return "[E] Close trapdoor" if pieces[key].open else "[E] Open trapdoor"
 	if id.begins_with("chest:"):
@@ -1043,6 +1216,8 @@ func prompt(id: String) -> String:
 		return "[E] Add a fuel can   Generator %d/%d cans, %s" % [ceili(rec.fuel), int(GEN_TANK), state]
 	if id.begins_with("turret:"):
 		return "[E] Load 9mm rounds   Auto-turret %d/%d rounds%s" % [rec.ammo, TURRET_AMMO, "" if rec.ammo > 0 else ", EMPTY"]
+	if id.begins_with("switch:"):
+		return "[E] Turn %s   Power switch: %s" % ["off" if rec.open else "on", "on" if rec.open else "off"]
 	if id.begins_with("well:"):
 		var next := int(ceil((1.0 - fmod(rec.water, 1.0)) * WELL_SECONDS))
 		if rec.water >= WELL_MAX:
@@ -1075,6 +1250,9 @@ func remove(key: String, spill := true) -> String:
 		occupied.erase(k)
 	pieces.erase(key)
 	support.erase(key)
+	if not cables_of(key).is_empty():
+		cables = cables.filter(func(c): return not key in c)
+		_rebuild_cables()
 	if _by_type.has(rec.type):
 		_by_type[rec.type].erase(key)
 	return rec.type
@@ -1193,6 +1371,8 @@ func damage(key: String, amount: float) -> bool:
 	var rec: Dictionary = pieces.get(key, {})
 	if rec.is_empty():
 		return false
+	if rec.get("locked", false):
+		amount *= 0.5  # a locked metal door is barred from inside
 	rec.hp = maxf(rec.hp - amount, 0.0)
 	if rec.hp <= 0.0:
 		var type: String = rec.type
@@ -1454,6 +1634,19 @@ func _reseat(rec: Dictionary) -> void:
 		rec.node.position.y = y
 
 
+var _debris_check := 0.0
+
+func _physics_process(delta: float) -> void:
+	_debris_check -= delta
+	if _debris_check > 0.0 or terrain == null:
+		return
+	_debris_check = 0.5
+	# Safety net: a chunk that somehow got under the sand is removed, not left falling.
+	for c in get_tree().get_nodes_in_group("debris"):
+		if not c.is_queued_for_deletion() and c.global_position.y < terrain.surface_height(c.global_position.x, c.global_position.z) - 1.0:
+			c.queue_free()
+
+
 ## Broken boards and chunks tumble to the ground in a puff of dust, with a crash.
 func _debris(rec: Dictionary) -> void:
 	if not is_inside_tree():
@@ -1636,7 +1829,7 @@ func piece_data(key: String) -> Dictionary:
 	var d := {"type": p.type, "kind": p.slot.kind, "cx": p.slot.cx, "cz": p.slot.cz, "dir": p.slot.dir, "level": p.slot.level, "y": p.y, "open": p.open, "tier": p.tier, "hp": p.hp}
 	if p.has("storage"):
 		d.items = p.storage.save_data()
-	for k in ["fuel", "burn", "ammo", "water"]:
+	for k in ["fuel", "burn", "ammo", "water", "locked"]:
 		if p.has(k):
 			d[k] = p[k]
 	return d
@@ -1666,6 +1859,8 @@ func restore_piece(p: Dictionary, slot := {}, y := NAN, old_tiers := false) -> S
 		rec.water = clampf(float(p.get("water", 0.0)), 0.0, WELL_MAX)
 	if rec.has("burn"):
 		rec.burn = clampf(float(p.get("burn", 0.0)), 0.0, FIRE_MAX)
+	if p.get("locked", false) and rec.type == "metal_door":
+		rec.locked = true
 	return key
 
 

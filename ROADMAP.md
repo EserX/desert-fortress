@@ -57,7 +57,7 @@ Keep the visuals simple (low-poly primitives, no art or animation work) and put 
 - [x] v1.5: **Structural stability.** Each piece gets a support value counted from the ground (foundation 100%, less with every piece out or up from it). Long overhangs and tall towers lose stability, heavier tiers need more support, and the hammer shows the %. Pieces below a minimum collapse, with simple physics debris (rigid-body chunks that settle, then vanish)
 - [x] v1.6: **More pieces:** half wall and low wall (to shoot over), gun slit wall, corner pillar, ladder, trapdoor in floors, triangle foundation and roof for round-ish towers, metal door. Simple shapes only
 - [x] v1.7: **Faster building:** drag to lay a line of walls or foundations, upgrade or repair everything in an area at once (paid from your pockets or a chest in reach), pick up a piece and put it down elsewhere
-- [ ] v1.8: **Doors, switches and wiring:** gates that close by themselves at night, a lockable metal gate, and power carried by cables you lay from the generator to switches, lights, fences and turrets (instead of the fixed 18 m range)
+- [x] v1.8: **Doors, switches and wiring:** gates that close by themselves at night, a lockable metal gate, and power carried by cables you lay from the generator to switches, lights, fences and turrets (instead of the fixed 18 m range)
 
 ### M9: Game logic, AI and physics
 - [ ] v1.9: **Mutant navigation:** a navigation mesh, rebuilt when the base or the ground changes, so mutants path round walls to an open gate or the weakest wall instead of walking straight in. Brutes go straight through, pits and wire are taken into account, and groups pick the same weak point

@@ -81,7 +81,8 @@ func _fortress() -> void:
 	place.call("fire_pit", "obj", 0, 0)
 	for i in range(-2, 2):
 		place.call("electric_fence", "edge", i, -4)
-	print("fortress: %d pieces" % b.pieces.size())
+	b.auto_wire(18.0)  # cables from the generator, as in the old 18 m reach
+	print("fortress: %d pieces, %d cables" % [b.pieces.size(), b.cables.size()])
 
 
 func _process(delta: float) -> bool:

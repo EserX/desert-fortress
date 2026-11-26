@@ -999,10 +999,12 @@ func _test_power() -> void:
 	main.day_night.restore(main.day_night.day, 12.0)
 	pw.tick(0.25)
 	check(not b.pieces[gk].running and not b.pieces[near].powered, "by day the generator stays off")
+	# Power goes by cable (v1.8).
+	check(b.connect_cable(gk, near) and b.connect_cable(gk, fk), "cables from the generator to a floodlight and the fence")
 	main.day_night.restore(main.day_night.day, 22.0)
 	pw.tick(0.25)
-	check(b.pieces[gk].running and b.pieces[near].powered and b.pieces[near].light.visible, "at night it runs and a floodlight nearby lights up")
-	check(not b.pieces[far].powered, "a floodlight %d m away is out of range" % int(b.pieces[far].node.global_position.distance_to(b.pieces[gk].node.global_position)))
+	check(b.pieces[gk].running and b.pieces[near].powered and b.pieces[near].light.visible, "at night it runs and a floodlight cabled to it lights up")
+	check(not b.pieces[far].powered, "a floodlight %d m away without a cable stays dark" % int(b.pieces[far].node.global_position.distance_to(b.pieces[gk].node.global_position)))
 	check(b.pieces[fk].powered, "the electric fence is live")
 	var before: float = b.pieces[gk].fuel
 	pw.tick(pw.FUEL_SECONDS)
@@ -1965,7 +1967,7 @@ func _test_more_pieces_2() -> void:
 	var dk: String = b.place("metal_door", ds, b.evaluate("metal_door", ds).y)
 	var drec: Dictionary = b.pieces[dk]
 	check(drec.hp == 1400.0 and b.describe(drec) == "Metal door" and b.upgrade_cost(drec).is_empty(), "a metal door: 1400 hp, no tiers")
-	check(main._prompt_for("gate:" + dk) == "[E] Open door", "door prompt")
+	check(main._prompt_for("gate:" + dk).begins_with("[E] Open door"), "door prompt: " + main._prompt_for("gate:" + dk))
 	main.interact("gate:" + dk)
 	check(drec.open, "E opens it")
 	check(b.evaluate("floor", {"kind": "cell", "cx": -6, "cz": 8, "dir": 0, "level": 1}).ok, "it holds up a floor like a wall")
@@ -2048,6 +2050,96 @@ func _test_fast_building() -> void:
 
 func Building_index(t: String) -> int:
 	return main.building.ORDER.find(t)
+
+
+## v1.8: cables and switches, powered turrets, gates closing at night, the lock.
+func _test_wiring() -> void:
+	var b = main.building
+	var pw = main.power
+	var inv = main.inventory
+	var player = main.player
+	main.terrain.load_data({})
+	b.load_data([])
+	inv.load_data({})
+	var put := func(t: String, slot: Dictionary) -> String:
+		return b.place(t, slot, b.evaluate(t, slot).y)
+	var gk: String = put.call("generator", {"kind": "obj", "cx": -9, "cz": 2, "dir": 0})
+	var sk: String = put.call("switch", {"kind": "obj", "cx": -9, "cz": 5, "dir": 0})
+	var lk: String = put.call("floodlight", {"kind": "obj", "cx": -9, "cz": 8, "dir": 0})
+	var plug: String = put.call("floodlight", {"kind": "obj", "cx": -8, "cz": 2, "dir": 0})
+	var tk: String = put.call("turret", {"kind": "obj", "cx": -5, "cz": 5, "dir": 0})
+	var ck: String = put.call("chest", {"kind": "obj", "cx": -7, "cz": 5, "dir": 0})
+	b.pieces[gk].fuel = 5.0
+	main.day_night.restore(main.day_night.day, 22.0)
+	pw.tick(0.25)
+	check(b.pieces[plug].powered, "a floodlight right next to a generator is plugged in")
+	check(not b.pieces[lk].powered, "one further away needs a cable")
+	# Laying cable by hand.
+	inv.add("cable", 40)
+	inv.selected = 0
+	check(main.holding("cable"), "holding the cable")
+	check(main.cable_click(ck) != "", "chests can't be cabled")
+	check(main.cable_click(gk) == "" and main.cable_from == gk, "click the generator to start a cable")
+	var cost: int = b.cable_cost(gk, sk)
+	check(main.cable_click(sk) == "" and b.cables.size() == 1 and inv.count_of("cable") == 40 - cost, "then the switch to connect it (%d cable)" % cost)
+	main.cable_click(sk)
+	main.cable_click(lk)
+	main.cable_click(sk)
+	main.cable_click(tk)
+	check(b.cables.size() == 3, "switch to floodlight and switch to turret (%d cables)" % b.cables.size())
+	check(main.cable_prompt(lk).begins_with("Floodlight"), "cable prompt: " + main.cable_prompt(lk).replace("\n", " / "))
+	pw.tick(0.25)
+	check(not b.pieces[lk].powered and not b.pieces[tk].powered, "with the switch off, no power gets past it")
+	check(main._prompt_for("switch:" + sk).begins_with("[E] Turn on"), "switch prompt: " + main._prompt_for("switch:" + sk))
+	main.interact("switch:" + sk)
+	check(b.pieces[sk].open and b.pieces[lk].powered and b.pieces[lk].light.visible and b.pieces[tk].powered, "switched on, the floodlight lights and the turret has power")
+	var far := {"kind": "obj", "cx": -9, "cz": 22, "dir": 0}
+	var fk2: String = put.call("floodlight", far)
+	check(b.cable_problem(lk, fk2).begins_with("Too far"), "a cable can only be so long: " + b.cable_problem(lk, fk2))
+	# Saved, and older saves get cables in the old reach.
+	var data: Dictionary = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	check(data.cables.size() == 3, "cables are saved")
+	main.apply_save_data(data)
+	check(b.cables.size() == 3 and b.pieces[sk].open, "and loaded, switch still on")
+	data.erase("cables")
+	main.apply_save_data(data)
+	check(b.cables.size() == 2 and b.cables.all(func(c): return gk in c), "older saves: the generator is cabled to both lights within 18 m (%d)" % b.cables.size())
+	# Taking cables up gives the cable back.
+	var had: int = inv.count_of("cable")
+	check(main.cable_click(gk, true) == "" and b.cables_of(gk).is_empty() and inv.count_of("cable") > had, "right click takes up a piece's cables and gives them back")
+	b.load_data([])
+	# Gates close by themselves at night; the metal door locks.
+	var gate := {"kind": "edge", "cx": -9, "cz": 4, "dir": 0}
+	var dk: String = put.call("doorway", gate)
+	b.set_gate(dk, true)
+	player.position = Vector3(-30, main.terrain.surface_height(-30, 30), 30)
+	main.day_night.restore(main.day_night.day, 12.0)
+	pw.tick(b.AUTO_CLOSE + 1.0)
+	check(b.pieces[dk].open, "by day an open gate stays open")
+	main.day_night.restore(main.day_night.day, 22.0)
+	player.global_position = b.pieces[dk].node.global_position
+	pw.tick(1.0)
+	check(b.pieces[dk].open, "at night it waits while you stand in it")
+	player.position = Vector3(-30, main.terrain.surface_height(-30, 30), 30)
+	pw.tick(1.0)
+	check(not b.pieces[dk].open, "and closes by itself once you have gone")
+	var md := {"kind": "edge", "cx": -7, "cz": 4, "dir": 0}
+	var mk: String = put.call("metal_door", md)
+	check(main.lock_door("gate:" + mk) and b.pieces[mk].locked, "R locks a shut metal door")
+	main.interact("gate:" + mk)
+	check(not b.pieces[mk].open and main._prompt_for("gate:" + mk).contains("locked"), "a locked door won't open")
+	b.damage(mk, 200.0)
+	check(is_equal_approx(b.pieces[mk].hp, 1300.0), "and takes half damage (%.0f)" % b.pieces[mk].hp)
+	var bsave: Array = JSON.parse_string(JSON.stringify(b.save_data()))
+	b.load_data(bsave)
+	check(b.pieces[mk].get("locked", false), "the lock is saved")
+	main.lock_door("gate:" + mk)
+	main.interact("gate:" + mk)
+	check(not b.pieces[mk].locked and b.pieces[mk].open, "unlocked, it opens")
+	check(not main.lock_door("gate:" + mk) or b.pieces[mk].get("locked", false) == false, "an open door can't be locked")
+	b.load_data([])
+	inv.load_data({})
+	main.day_night.restore(main.day_night.day, 12.0)
 
 
 func _process(_delta: float) -> bool:
@@ -2268,6 +2360,7 @@ func _process(_delta: float) -> bool:
 			_test_stability()
 			_test_more_pieces_2()
 			_test_fast_building()
+			_test_wiring()
 			_start_ladder()
 		3300:
 			_check_debris()

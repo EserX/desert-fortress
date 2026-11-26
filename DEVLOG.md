@@ -2,6 +2,20 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v1.8.0 (2026-11-26): Doors, switches and wiring (M8 done)
+- **Cables instead of the 18 m reach:** floodlights and electric fences now get power along **cables** from a running generator. Anything within **4 m** of a generator plugs straight in. Make **cable** at the workbench (1 scrap + 1 cloth = 6). Hold it and left click a generator, then the floodlight, fence, switch or turret to join them; it costs one cable per 2 m (24 m at most for one cable, so put a switch in between for longer runs). The prompt shows the cost before you click. Right click takes up all of a piece's cables and gives the cable back. Cables hang as thin dark lines with a little sag, and power runs on from piece to piece.
+- **Power switch** (2 scrap, 2 nails, last in the build list): power only passes through it when it is on; **E** flips it. Put one between the generator and the floodlights to keep them dark until you want them.
+- **Powered turrets:** a turret cabled to a running generator turns and fires **40% faster**. Without power it works as before.
+- **Gates close by themselves at night:** a gate or metal door left open closes 8 seconds after nightfall, or 8 seconds after you open it at night, but never while you stand in it. By day they stay as you leave them.
+- **Lockable metal door:** **R** on a shut metal door locks it ("Metal door, locked   [R] Unlock"). Locked, it won't open and takes **half damage**. The lock is saved.
+- **Older saves keep their power:** each generator gets free cables to every floodlight and fence that was within its old 18 m reach. The soak test lays its cables the same way.
+- Fix: debris could still now and then fall through the ground, when the ground's collision was rebuilt under it (loading a save rebuilt every ground chunk). Loading now only rebuilds chunks that changed, and as a safety net a chunk found more than 1 m under the sand is removed. In 5 test runs in a row the debris settled every time; once, the safety net took one stray chunk away, so the cause isn't fully gone, just harmless.
+- That finishes **M8, building capabilities**.
+- **Tests (27 new, 2 changed):** plugging in next to a generator, needing a cable further away, chests refusing cables, starting and finishing a cable (and paying for it), a switch blocking power when off and passing it when on (the floodlight lights, the turret gets power), the switch prompt, the length limit, cables saved and loaded, older saves getting cables in the old reach, taking cables up, gates staying open by day, waiting while you stand in them and closing once you leave at night, and the metal door (locking, staying shut, half damage, the lock saved, unlocking, no locking while open). The v0.20 power test now lays its cables; the door prompt test allows the new "[R] Lock". The `29_power` screenshot shows cables and a switch.
+
+**Try:** run a cable from your generator to a switch by the gate, and from there to the floodlights and the turrets.
+**Next:** M9, v1.9 mutant navigation: a navigation mesh rebuilt when the base or the ground changes, so mutants go round to an open gate or the weakest wall.
+
 ## v1.7.0 (2026-11-26): Faster building
 - **Lines:** in build mode, hold left click and let go somewhere else to build a straight **line** (up to 12) of the piece: squares (foundations, floors, roofs) along the longer direction, walls and fences along their own edge, and pillars from corner to corner. Each piece is checked and paid on its own (and costs its stamina), so the line simply stops when the materials or your breath run out, skipping spots that are blocked. A plain click still builds one piece. While dragging, the build line shows "Line: 5 pieces (let go to build)".
 - **Area hammer:** with the hammer, **R** repairs every damaged piece within 8 m, nearest first, and **G** upgrades every piece within 8 m that has the same tier as the one you look at (except damaged ones and upgrades that would bring something down). Both are paid from your pockets **and any chest within reach**, and cost 5 stamina a piece.

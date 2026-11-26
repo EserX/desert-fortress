@@ -480,6 +480,11 @@ func _power_sample() -> void:
 		if o[0] == "fire_pit":
 			b.pieces[k].burn = 200.0
 	b.pieces[g].fuel = 6.0
+	# Cables from the generator through a switch (v1.8).
+	var sw: String = b.place("switch", {"kind": "obj", "cx": 1, "cz": 1, "dir": 0, "level": 0}, b.evaluate("switch", {"kind": "obj", "cx": 1, "cz": 1, "dir": 0, "level": 0}).y, true)
+	b.connect_cable(g, sw)
+	for k in b.keys_of(["floodlight", "electric_fence"]):
+		b.connect_cable(sw, k)
 	main.day_night.restore(1, 22.0)
 	main.power.tick(0.25)
 	for i in 2:

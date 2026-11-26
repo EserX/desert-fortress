@@ -1,15 +1,17 @@
 extends Node3D
 ## Generators, power and fire pits. A generator with fuel runs at night (and
-## during a wave), burning a fuel can every FUEL_SECONDS. Floodlights and
-## electric fences within POWER_RANGE of a running generator have power.
+## during a wave), burning a fuel can every FUEL_SECONDS. Floodlights, electric
+## fences and turrets get power by cable from a running generator (through
+## switches that are on), or when within PLUG_RANGE of one.
 ## Fire pits burn down the wood put in them. Wells fill up with water.
 
 const TICK := 0.25
-const POWER_RANGE := 18.0
+const POWER_RANGE := 18.0    # the old wireless reach (older saves get cables for it)
 const FUEL_SECONDS := 90.0   # one can runs a generator this long
 const MIX_RATE := 22050.0
 
 var building  # Building
+var player: Node3D  # gates don't close on you
 var day_night  # DayNight
 var waves  # Waves
 var _t := 0.0
@@ -39,9 +41,10 @@ func _process(delta: float) -> void:
 	tick(TICK)
 
 
-## One update: burn fuel and wood, work out what has power.
+## One update: burn fuel and wood, work out what has power, close gates at night.
 func tick(dt: float) -> void:
 	var running: Array = []
+	var running_keys: Array = []
 	var want := power_wanted()
 	for key in building.keys_of(["well"]):
 		var w: Dictionary = building.pieces[key]
@@ -58,6 +61,7 @@ func tick(dt: float) -> void:
 					run = rec.fuel > 0.0
 				if run:
 					running.append(rec.node.global_position)
+					running_keys.append(key)
 				if run != rec.running:
 					rec.running = run
 					building.set_powered(rec, run)
@@ -68,19 +72,39 @@ func tick(dt: float) -> void:
 				var lit: bool = rec.burn > 0.0
 				if rec.flame.visible != lit:
 					rec.flame.visible = lit
-	for key in building.keys_of(["floodlight", "electric_fence"]):
+	var net: Dictionary = building.power_network(running_keys)
+	for key in building.keys_of(["floodlight", "electric_fence", "turret", "switch"]):
 		var rec: Dictionary = building.pieces[key]
-		if rec.has("powered"):
-			var on := false
+		var on := net.has(key)
+		if not on:
 			for g in running:
-				if (g as Vector3).distance_to(rec.node.global_position) <= POWER_RANGE:
+				if (g as Vector3).distance_to(rec.node.global_position) <= building.PLUG_RANGE:
 					on = true
 					break
+		if rec.type in ["turret", "switch"]:
+			rec.powered = on and (rec.type != "switch" or rec.open)
+		else:
 			building.set_powered(rec, on)
+	_auto_close(dt)
 	for k in _hums.keys():
 		if not building.pieces.has(k):
 			_hums[k].queue_free()
 			_hums.erase(k)
+
+
+## At night a gate left open closes by itself after AUTO_CLOSE seconds, once
+## nobody is standing in it.
+func _auto_close(dt: float) -> void:
+	var night: bool = day_night != null and day_night.is_night()
+	for key in building.keys_of(["doorway", "metal_door"]):
+		var rec: Dictionary = building.pieces[key]
+		if not rec.open:
+			continue
+		rec.open_t = float(rec.get("open_t", 0.0)) + dt
+		if night and rec.open_t >= building.AUTO_CLOSE:
+			if player and player.global_position.distance_to(rec.node.global_position) < 2.5:
+				continue
+			building.set_gate(key, false)
 
 
 ## E on a generator: pour in a fuel can from the inventory. Returns true if one went in.

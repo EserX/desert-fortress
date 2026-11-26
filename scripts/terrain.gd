@@ -469,6 +469,7 @@ func save_data() -> Dictionary:
 ## Restores dug ground. Anything missing (older saves) is untouched, flat ground.
 ## Doesn't emit ground_changed: what stands on it is loaded as saved.
 func load_data(data: Dictionary) -> void:
+	var old := delta.duplicate()
 	delta.fill(0.0)
 	var d: Array = data.get("deltas", [])
 	var n := DIG_CELLS + 1
@@ -477,7 +478,17 @@ func load_data(data: Dictionary) -> void:
 		var iz := int(d[j + 1])
 		if ix >= 0 and iz >= 0 and ix < n and iz < n:
 			delta[iz * n + ix] = clampf(float(d[j + 2]), -BEDROCK, MAX_RAISE)
-	for k in _chunks:
+	# Only the chunks whose corners changed (rebuilding a shape under things resting on it is not free).
+	var dirty := {}
+	for i in delta.size():
+		if absf(delta[i] - old[i]) > 0.0001:
+			var ix := i % n
+			var iz := i / n
+			for o in [Vector2i(0, 0), Vector2i(-1, 0), Vector2i(0, -1), Vector2i(-1, -1)]:
+				var cx := clampi((ix + o.x) / CHUNK, 0, DIG_CELLS / CHUNK - 1)
+				var cz := clampi((iz + o.y) / CHUNK, 0, DIG_CELLS / CHUNK - 1)
+				dirty[Vector2i(cx, cz)] = true
+	for k in dirty:
 		_rebuild_chunk(k)
 
 

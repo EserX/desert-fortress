@@ -202,7 +202,7 @@ func _process(delta: float) -> void:
 			_discover_nearby()
 		survival.tick(delta, day_night.hour, player.sprinting, in_shade)
 	if hud and not get_tree().paused:
-		hud.set_prompt("" if inventory_ui.is_open() else loot.prompt(player.interact_target()))
+		hud.set_prompt("" if inventory_ui.is_open() else _prompt_for(player.interact_target()))
 		for i in Inventory.HOTBAR:
 			if Input.is_action_just_pressed("hotbar_%d" % (i + 1)) and not inventory_ui.is_open():
 				if build_mode.active:
@@ -244,6 +244,12 @@ func thumbnail_image() -> Image:
 	return _screenshot()
 
 
+func _prompt_for(id: String) -> String:
+	if id.begins_with("gate:"):
+		return building.prompt(id)
+	return loot.prompt(id)
+
+
 ## Mouse and R while building. Returns true if the event was used.
 func _build_input(event: InputEvent) -> bool:
 	if event.is_action_pressed("rotate"):
@@ -270,6 +276,9 @@ func _build_input(event: InputEvent) -> bool:
 ## E on a container or a dropped bag: put what fits in the inventory.
 func interact(id: String) -> void:
 	if id == "":
+		return
+	if id.begins_with("gate:"):
+		building.toggle_gate(id.trim_prefix("gate:"))
 		return
 	var items: Dictionary
 	if loot.drops.has(id):

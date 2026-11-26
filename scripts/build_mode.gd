@@ -2,7 +2,8 @@ extends Node3D
 ## Build mode (B): a see-through preview of the selected piece snaps to the
 ## grid where you look. Green means it can be built, red means it can't.
 ## Left click builds (costs materials), right click takes a piece down
-## (full refund for now), R turns walls, the wheel or 1–9 picks a piece.
+## (full refund for now), R turns the piece, the wheel or 1–8 picks a piece.
+## Aiming higher up a wall or at an upper floor builds on the next level.
 
 const Building = preload("res://scripts/building.gd")
 const Items = preload("res://scripts/items.gd")
@@ -62,7 +63,7 @@ func cycle(step: int) -> void:
 
 
 func rotate_piece() -> void:
-	dir = 1 - dir
+	dir = (dir + 1) % 4
 
 
 func _process(_d: float) -> void:
@@ -93,6 +94,7 @@ func update_preview() -> void:
 	# Nudge the point back towards the camera so aiming at a wall face picks this side.
 	var p: Vector3 = hit.position + hit.normal * 0.05
 	slot = Building.slot_for(type, p, dir)
+	slot.level = building.level_for(type, slot, p.y)
 	var ev := building.evaluate(type, slot)
 	base_y = ev.y
 	reason = ev.reason
@@ -103,7 +105,7 @@ func update_preview() -> void:
 	if can_build and not has_materials(type):
 		can_build = false
 		reason = "Not enough materials"
-	_ghost.transform = Building.piece_transform(slot, base_y)
+	_ghost.transform = Building.piece_transform(type, slot, base_y)
 	_ghost.visible = true
 	for mi in _ghost.get_children():
 		mi.material_override = _ok_mat if can_build else _bad_mat
@@ -119,6 +121,10 @@ func _rebuild_ghost(type: String) -> void:
 		mesh.size = b[0] + Vector3(0.02, 0.02, 0.02)
 		mi.mesh = mesh
 		mi.position = b[1]
+		if b.size() > 3:
+			mi.rotation.x = b[3]
+		if b.size() > 4:
+			mi.position += Basis(Vector3.RIGHT, b[3]) * b[4]
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		_ghost.add_child(mi)
 

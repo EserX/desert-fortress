@@ -23,6 +23,9 @@ var crate_lid_mat: StandardMaterial3D
 ## Spots other systems may want later (loot, mutant spawns...).
 var wreck_positions: Array[Vector3] = []
 var ruin_positions: Array[Vector3] = []
+## Rocks a pickaxe can break: {"node": StaticBody3D, "hits": pickaxe hits it takes}.
+## The index is the rock's id (stable for a seed).
+var rocks: Array = []
 ## Searchable containers: {"id", "kind", "lid"}. Ids are stable for a seed.
 var containers: Array = []
 ## Separate random stream for loot crates so adding them didn't move the rest of the world.
@@ -131,6 +134,17 @@ func _place_rock() -> void:
 	shape.radius = min(scl.x, scl.y, scl.z) * 0.5
 	col.shape = shape
 	body.add_child(col)
+	body.set_meta("rock_id", rocks.size())
+	rocks.append({"node": body, "hits": clampi(int(ceil(s * 1.5)), 1, 12)})
+
+
+## Hides a broken rock (or brings it back): no mesh, no collision.
+func set_rock_broken(id: int, broken: bool) -> void:
+	if id < 0 or id >= rocks.size():
+		return
+	var body: StaticBody3D = rocks[id].node
+	body.visible = not broken
+	body.collision_layer = 0 if broken else 1
 
 
 func _place_cactus() -> void:

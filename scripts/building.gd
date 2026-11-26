@@ -22,9 +22,9 @@ const DOOR_W := 1.1
 const DOOR_H := 2.05
 
 ## Material tiers: hit points, the item used to upgrade to and repair each.
-const TIER_NAMES := ["wood", "scrap metal", "concrete"]
-const TIER_HP := [250.0, 600.0, 1500.0]
-const TIER_ITEM := ["wood", "scrap", "cement"]
+const TIER_NAMES := ["wood", "scrap metal", "stone", "concrete"]
+const TIER_HP := [250.0, 600.0, 1000.0, 1500.0]
+const TIER_ITEM := ["wood", "scrap", "stone", "cement"]
 const REFUND := 0.5          # share of what a piece cost you get back when demolished
 const UNDO_SECONDS := 60.0   # build-mode right click gives everything back this soon after building
 const ZONE_RADIUS := 26.0    # base build zone around the flag at the origin (before upgrades)
@@ -109,6 +109,8 @@ func _ready() -> void:
 	_mats.concrete_dark = LowPoly.material(Color(0.38, 0.37, 0.35))
 	_mats.crack = LowPoly.material(Color(0.08, 0.06, 0.05))
 	_mats.stone = LowPoly.material(Color(0.45, 0.41, 0.37))
+	_mats.stone_block = LowPoly.material(Color(0.47, 0.39, 0.31))
+	_mats.stone_dark = LowPoly.material(Color(0.33, 0.27, 0.22))
 	_mats.cloth = LowPoly.material(Color(0.7, 0.6, 0.42))
 	_mats.cloth_dark = LowPoly.material(Color(0.6, 0.51, 0.36))
 	_mats.live = StandardMaterial3D.new()  # electric fence wire with the power on
@@ -133,6 +135,8 @@ func _tier_mat(tier: int, key: String) -> Material:
 	if tier == 1:
 		return _mats[{"wood": "metal", "plank": "metal", "wood_dark": "rust"}.get(key, key)]
 	if tier == 2:
+		return _mats[{"wood": "stone_block", "plank": "stone_block", "metal": "stone_block", "wood_dark": "stone_dark", "rust": "stone_dark"}.get(key, key)]
+	if tier == 3:
 		return _mats[{"wood": "concrete", "plank": "concrete", "metal": "concrete", "wood_dark": "concrete_dark", "rust": "concrete_dark"}.get(key, key)]
 	return _mats[key]
 
@@ -890,12 +894,15 @@ static func _size(type: String) -> int:
 	return maxi(2, int(cost.get("wood", 0)) + int(cost.get("scrap", 0)))
 
 
-## What it costs to raise a piece one tier ({} at concrete).
+## What it costs to raise a piece one tier ({} at concrete): scrap metal and
+## nails, then stone with clay as mortar, then cement.
 func upgrade_cost(rec: Dictionary) -> Dictionary:
 	if rec.tier >= TIER_NAMES.size() - 1 or PIECES[rec.type].get("fixed", false):
 		return {}
 	if rec.tier == 0:
 		return {"scrap": _size(rec.type) + 1, "nails": 2}
+	if rec.tier == 1:
+		return {"stone": _size(rec.type) + 2, "clay": 1}
 	return {"cement": _size(rec.type), "scrap": 1}
 
 
@@ -1298,13 +1305,17 @@ func save_data() -> Array:
 	return out
 
 
-func load_data(data: Array) -> void:
+## old_tiers: the save is from before the stone tier, so its concrete (2) is now 3.
+func load_data(data: Array, old_tiers := false) -> void:
 	for key in pieces.keys():
 		remove(key, false)
 	for p in data:
 		if PIECES.has(p.get("type", "")):
 			var slot := {"kind": str(p.kind), "cx": int(p.cx), "cz": int(p.cz), "dir": int(p.dir), "level": int(p.get("level", 0))}
-			var key := place(p.type, slot, float(p.y), bool(p.get("open", false)), int(p.get("tier", -1)), float(p.get("hp", -1.0)))
+			var tier := int(p.get("tier", -1))
+			if old_tiers and tier >= 2:
+				tier += 1
+			var key := place(p.type, slot, float(p.y), bool(p.get("open", false)), tier, float(p.get("hp", -1.0)))
 			if pieces[key].has("storage") and p.has("items"):
 				pieces[key].storage.load_data(p.items)
 			if pieces[key].has("fuel"):

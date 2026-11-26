@@ -50,7 +50,7 @@ Keep the visuals simple (low-poly primitives, no art or animation work) and put 
 ### M7: Digging and terrain
 - [x] v1.1: **Deformable ground.** Replace the base area (first the build zone, later the whole map) with a finer height grid in chunks (1 m cells) that can be lowered and raised. Rebuild a chunk's mesh and collision when it changes, and save changes as height deltas (old saves load flat). **Shovel** (workbench and shop): left click digs a 1 m patch (gives **sand**), right click fills (uses sand). Bedrock about 4 m down, and pieces can't be undermined without falling. Tests for dig, fill, collision height, saving
 - [x] v1.2: **Trenches and pits.** Mutants can't climb steep pit walls: they fall in and climb out slowly (or not at all past 2 m), so a trench ring is a defence. Spiked pit trap (a pit with stakes), ramps and ladders out of pits for you. Sandbags made from sand + cloth. Foundations level the ground under them
-- [ ] v1.3: **Mining.** Pickaxe: rocks become breakable for **stone**, and digging deeper hits clay and stone layers. A stone building tier between scrap metal and concrete. Buried caches found with a craftable metal detector
+- [x] v1.3: **Mining.** Pickaxe: rocks become breakable for **stone**, and digging deeper hits clay and stone layers. A stone building tier between scrap metal and concrete. Buried caches found with a craftable metal detector
 - [ ] v1.4: **Water well.** Dig down at the base to strike water: a well piece gives a slow, endless water supply. Digging and building use stamina
 
 ### M8: Building capabilities

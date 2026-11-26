@@ -331,13 +331,16 @@ func _test_tiers() -> void:
 	check(main.holding_hammer(), "holding the hammer")
 	main.hammer_use(key)
 	check(rec.hp == 150.0, "no wood, no repair")
-	inv.add_all({"wood": 5, "scrap": 20, "nails": 10, "cement": 10})
+	inv.add_all({"wood": 5, "scrap": 20, "nails": 10, "cement": 10, "stone": 6, "clay": 2})
 	main.hammer_use(key)
 	check(rec.hp == 250.0 and inv.count_of("wood") == 3, "hammer repairs for 2 wood")
 	main.hammer_use(key)
 	check(rec.tier == 1 and rec.hp == 600.0 and inv.count_of("scrap") == 16, "hammer upgrades wood to scrap metal (4 scrap)")
 	main.hammer_use(key)
-	check(rec.tier == 2 and rec.hp == 1500.0 and inv.count_of("cement") == 7, "and scrap metal to concrete (3 cement)")
+	check(rec.tier == 2 and rec.hp == 1000.0 and inv.count_of("stone") == 1 and inv.count_of("clay") == 1, "then scrap metal to stone (5 stone, 1 clay)")
+	check(b.describe(rec) == "Stone wall", "a stone wall: " + b.describe(rec))
+	main.hammer_use(key)
+	check(rec.tier == 3 and rec.hp == 1500.0 and inv.count_of("cement") == 7, "and stone to concrete (3 cement)")
 	check(b.upgrade_cost(rec).is_empty(), "concrete is the top tier")
 	check(main.hammer_prompt(key).contains("Fully upgraded"), "prompt: " + main.hammer_prompt(key).replace("\n", " | "))
 	# Saved with tier and hit points.
@@ -345,7 +348,22 @@ func _test_tiers() -> void:
 	var data: Array = JSON.parse_string(JSON.stringify(b.save_data()))
 	b.load_data(data)
 	rec = b.pieces[key]
-	check(rec.tier == 2 and rec.hp == 1100.0, "tier and hit points are saved")
+	check(rec.tier == 3 and rec.hp == 1100.0, "tier and hit points are saved")
+	# Saves from before the stone tier: their concrete (tier 2) stays concrete.
+	var old: Array = data.duplicate(true)
+	old[0].tier = 2
+	b.load_data(old, true)
+	check(b.pieces[key].tier == 3, "an older save's concrete wall is still concrete")
+	var full: Dictionary = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	check(int(full.get("tiers", 0)) == 4, "saves say how many tiers there are")
+	full.erase("tiers")
+	full.buildings[0].tier = 1
+	main.apply_save_data(full)
+	check(b.pieces[key].tier == 1, "older saves keep scrap metal as scrap metal")
+	full.buildings[0].tier = 2
+	main.apply_save_data(full)
+	check(b.pieces[key].tier == 3, "and concrete as concrete")
+	rec = b.pieces[key]
 	# Too late to undo in build mode; the hammer demolishes for half back.
 	rec.built_at -= 61000
 	main.build_mode.active = true
@@ -353,7 +371,7 @@ func _test_tiers() -> void:
 	check(main.build_mode.try_remove() == "old", "build-mode undo only right after building")
 	main.build_mode.active = false
 	var refund: Dictionary = b.refund(rec)
-	check(refund == {"wood": 1, "nails": 2, "scrap": 2, "cement": 1}, "demolish refunds half %s" % str(refund))
+	check(refund == {"wood": 1, "nails": 2, "scrap": 2, "cement": 1, "stone": 2}, "demolish refunds half %s" % str(refund))
 	check(not main.hammer_demolish(key) and b.pieces.has(key), "first right click only arms demolish")
 	check(main.hammer_demolish(key) and not b.pieces.has(key), "second right click demolishes")
 	# Breaking a piece.
@@ -1411,12 +1429,12 @@ func _test_digging() -> void:
 	check(absf(t.surface_height(p.x, p.z) - (h0 - 0.75)) < 0.001, "and raises the cell back up")
 	inv.remove("sand", 3)
 	check(main.dig_at(p, true) != "", "no filling without sand")
-	# Bedrock.
+	# Bedrock (solid stone above it needs the pickaxe).
 	for i in 30:
-		main.dig_at(p)
+		main.dig_at(p, false, "pickaxe")
 	var sand_at_bottom: int = inv.count_of("sand")
 	check(t.at_bedrock(p.x, p.z) and absf(t.cell_depth(t.dig_cell(p.x, p.z)) - t.BEDROCK) < 0.001, "bedrock stops the shovel %.0f m down" % t.BEDROCK)
-	check(main.dig_at(p).begins_with("Bedrock") and inv.count_of("sand") == sand_at_bottom, "no sand from bedrock")
+	check(main.dig_at(p, false, "pickaxe").begins_with("Bedrock") and inv.count_of("sand") == sand_at_bottom, "no sand from bedrock")
 	# A row of single digs makes a level trench.
 	t.load_data({})
 	for x in [8.5, 9.5, 10.5]:
@@ -1639,6 +1657,111 @@ func _check_ladder() -> void:
 	p.position = p.spawn_point
 
 
+## v1.3: layers under the sand, the pickaxe and rocks, buried caches and the metal detector.
+func _test_mining() -> void:
+	var t = main.terrain
+	var inv = main.inventory
+	var Items = load("res://scripts/items.gd")
+	t.load_data({})
+	main.building.load_data([])
+	inv.load_data({})
+	check(Items.RECIPES.has("pickaxe") and Items.RECIPES.has("metal_detector"), "the workbench makes a pickaxe and a metal detector")
+	main.open_test_box()
+	check(main.test_storage.count_of("pickaxe") == 1 and main.test_storage.count_of("metal_detector") == 1 and main.test_storage.count_of("stone") == 20, "the test box has them, and stone and clay")
+	main.inventory_ui.close()
+	# Sand, then clay, then stone that only the pickaxe gets through.
+	var p := Vector3(-10.5, 0, -6.5)
+	check(t.next_layer(p.x, p.z) == "sand", "digging starts in sand")
+	for i in 6:
+		main.dig_at(p)
+	check(t.next_layer(p.x, p.z) == "clay" and inv.count_of("sand") == 6, "below 1.5 m comes clay")
+	for i in 5:
+		main.dig_at(p)
+	check(inv.count_of("clay") == 5 and t.next_layer(p.x, p.z) == "stone", "below 2.75 m, solid stone")
+	check(main.dig_at(p).begins_with("Solid stone") and inv.count_of("stone") == 0, "the shovel can't dig stone")
+	check(main.dig_at(p, false, "pickaxe") == "" and inv.count_of("stone") == 1, "the pickaxe can, and gives stone")
+	inv.add("shovel", 1)
+	for i in inv.slots.size():
+		if not inv.slots[i].is_empty() and inv.slots[i].item == "shovel" and i < 9:
+			inv.selected = i
+	var player = main.player
+	player.position = Vector3(-10.5, t.surface_height(-10.5, -4.0), -4.0)
+	player.rotation.y = 0.0
+	player.head.rotation.x = -1.2
+	player.head.position.y = player.EYE_HEIGHT
+	var prompt: String = main.ground_prompt(p, "shovel")
+	check("pickaxe" in prompt and prompt.begins_with("Stone"), "the shovel prompt says stone needs a pickaxe: " + prompt.replace("\n", " / "))
+	# Rocks.
+	var props = main.props
+	check(props.rocks.size() > 100, "rocks can be broken (%d)" % props.rocks.size())
+	var id := 0
+	var rock: Node3D = props.rocks[id].node
+	var r: float = rock.get_child(1).shape.radius
+	var cam_y: float = player.EYE_HEIGHT
+	var away := Vector3(1, 0, 0)
+	player.position = rock.global_position + away * (r + 1.3)
+	player.position.y = t.surface_height(player.position.x, player.position.z)
+	player.rotation.y = atan2(away.x, away.z)
+	var dy: float = rock.global_position.y - (player.position.y + cam_y)
+	player.head.rotation.x = atan2(dy, r + 1.3)
+	inv.load_data({})
+	inv.add("pickaxe", 1)
+	inv.selected = 0
+	check(main.dig_tool() == "pickaxe" and main.rock_under_crosshair() == id, "the pickaxe finds the rock under the crosshair (%d)" % main.rock_under_crosshair())
+	check(main.shovel_prompt().begins_with("Rock"), "rock prompt: " + main.shovel_prompt().replace("\n", " / "))
+	var hits: int = props.rocks[id].hits
+	main.mine_rock(id)
+	check(inv.count_of("stone") == 1 and main.rock_hits_left(id) == hits - 1 or hits == 1, "a hit gives a stone")
+	var data: Dictionary = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	for i in hits:
+		main.mine_rock(id)
+	check(inv.count_of("stone") == hits and main.broken_rocks.has(id) and not rock.visible and rock.collision_layer == 0, "the rock breaks after %d hits, a stone each" % hits)
+	check(main.mine_rock(id) == 0, "a broken rock gives nothing")
+	var data2: Dictionary = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	main.apply_save_data(data)
+	check(rock.visible and (hits == 1 or main.rock_hits_left(id) == hits - 1), "loading brings back the rock as it was, hits included")
+	main.apply_save_data(data2)
+	check(not rock.visible and main.broken_rocks.has(id), "broken rocks are saved")
+	data2.erase("mining")
+	main.apply_save_data(data2)
+	check(rock.visible, "older saves have every rock")
+	# Caches and the metal detector.
+	var c = main.caches
+	t.load_data({})
+	check(c.caches.size() >= 6, "caches are buried near the base (%d)" % c.caches.size())
+	var cache: Dictionary = {}
+	for e in c.caches:
+		if not e.found:
+			cache = e
+			break
+	inv.load_data({})
+	inv.add("metal_detector", 1)
+	inv.selected = 0
+	player.position = Vector3(cache.x, t.surface_height(cache.x, cache.z), cache.z)
+	var close_text: String = main.detector_text()
+	check(main.holding("metal_detector") and close_text.contains("steady tone"), "right over a cache: " + close_text)
+	player.position = Vector3(cache.x + 300.0, 0, cache.z)
+	check(main.detector_text().contains("no signal"), "far away: no signal")
+	var hidden: int = c.hidden_count()
+	var bags: int = main.loot.drops.size()
+	for i in 3:
+		main.dig_at(Vector3(cache.x, 0, cache.z))
+	check(not cache.found, "not found until 1 m down")
+	main.dig_at(Vector3(cache.x, 0, cache.z))
+	check(cache.found and c.hidden_count() == hidden - 1 and main.loot.drops.size() == bags + 1, "dug 1 m down, the cache comes up in a bag")
+	data = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	cache.found = false
+	main.apply_save_data(data)
+	check(c.hidden_count() == hidden - 1, "found caches are saved")
+	data.erase("caches")
+	main.apply_save_data(data)
+	check(c.caches.size() == 6 and c.hidden_count() == 6, "older saves get a fresh set of caches")
+	for id2 in main.loot.drops.keys():
+		main.loot.set_drop_items(id2, {})
+	t.load_data({})
+	inv.load_data({})
+
+
 func _process(_delta: float) -> bool:
 	frame += 1
 	var player = main.player
@@ -1852,6 +1975,7 @@ func _process(_delta: float) -> bool:
 			_check_pits()
 		3135:
 			_test_trench_pieces()
+			_test_mining()
 			_start_ladder()
 		3300:
 			_check_ladder()

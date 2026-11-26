@@ -50,6 +50,8 @@ var shots := [
 	{"name": "40_wave_map", "pos": Vector3(20, 0, 40), "yaw": 0.9, "pitch": 0.0, "hour": 21.5, "wave_map": true},
 	{"name": "41_digging", "pos": Vector3(12, 0, 13.4), "yaw": 0.0, "pitch": -0.9, "hour": 15.5, "digging": true},
 	{"name": "42_trench", "pos": Vector3(12, 12, 22), "yaw": 0.0, "pitch": -0.7, "hour": 15.5, "digging": true},
+	{"name": "43_layers", "pos": Vector3(-10, 0, -1.5), "yaw": 0.0, "pitch": -0.75, "hour": 14.0, "layers": true},
+	{"name": "44_detector", "pos": Vector3(0, 0, 9), "yaw": 0.4, "pitch": -0.3, "hour": 10.0, "detector": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -111,10 +113,10 @@ func _process(_d: float) -> bool:
 		if s.get("tiers", false):
 			var b = main.building
 			b.load_data([])
-			for i in 3:
-				var slot := {"kind": "edge", "cx": 2 + i, "cz": 6, "dir": 0, "level": 0}
+			for i in 4:
+				var slot := {"kind": "edge", "cx": 1 + i, "cz": 6, "dir": 0, "level": 0}
 				var k: String = b.place("wall", slot, b.evaluate("wall", slot).y, false, i)
-				b.damage(k, [60.0, 400.0, 1200.0][i])
+				b.damage(k, [60.0, 400.0, 300.0, 1200.0][i])
 			main.inventory.load_data({})
 			main.inventory.add_all({"hammer": 1, "scrap": 9})
 			main.inventory.selected = 0
@@ -136,6 +138,16 @@ func _process(_d: float) -> bool:
 			main.hud.show_hitmarker("target")
 		if s.get("digging", false):
 			_digging_sample()
+		if s.get("layers", false):
+			_layers_sample()
+		if s.get("detector", false):
+			main.terrain.load_data({})
+			main.building.load_data([])
+			main.inventory.load_data({})
+			main.inventory.add("metal_detector", 1)
+			main.inventory.selected = 0
+			var c: Dictionary = main.caches.caches[0]
+			p.position = Vector3(c.x + 4.0, main.terrain.surface_height(c.x + 4.0, c.z), c.z)
 		if s.get("walker", false):
 			_walker_sample(p)
 		if s.has("gun"):
@@ -518,3 +530,20 @@ func _digging_sample() -> void:
 	var b = main.building
 	var slot := {"kind": "edge", "cx": 5, "cz": 5, "dir": 0}
 	b.place("wall", slot, b.evaluate("wall", slot).y)
+
+
+## A stepped pit 3 m deep: sand, a band of clay, then grey stone; pickaxe in hand.
+func _layers_sample() -> void:
+	main.building.load_data([])
+	main.mutants.clear()
+	main.terrain.load_data({})
+	main.inventory.load_data({})
+	main.inventory.add("pickaxe", 1)
+	main.inventory.selected = 0
+	for x in range(-13, -7):
+		for z in range(-7, -3):
+			var depth := 12 if z < -5 else (8 if z < -4 else 4)
+			for i in depth:
+				main.dig_at(Vector3(x + 0.5, 0, z + 0.5), false, "pickaxe")
+	main.inventory.load_data({})
+	main.inventory.add("pickaxe", 1)

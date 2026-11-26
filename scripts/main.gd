@@ -32,6 +32,7 @@ const ShopUI = preload("res://scripts/shop_ui.gd")
 const Drone = preload("res://scripts/drone.gd")
 const Hints = preload("res://scripts/hints.gd")
 const LowPoly = preload("res://scripts/lowpoly.gd")
+const Caches = preload("res://scripts/caches.gd")
 
 ## Testing aid (temporary): a green box by the spawn point that holds a full
 ## stack of every item and tops your cash up to $2000 each time you open it.
@@ -45,6 +46,7 @@ const SUPPLY_CHANCE := 0.5
 const HAMMER_REACH := 3.5
 const SHOVEL_REACH := 4.0
 const SHOVEL_COOLDOWN := 0.45  # seconds between digs
+const PICK_REACH := 3.0
 const CHEST_REACH := 4.0  # walk further than this from an open chest or bench and it closes
 
 ## When true the world is only a backdrop for the title screen:
@@ -91,6 +93,12 @@ var places: Array = []
 ## Keys of places you have been near.
 var discovered := {}
 var _shovel_ready_at := 0
+## Rocks broken with the pickaxe (id -> true) and hits left on started ones.
+var broken_rocks := {}
+var rock_hits := {}
+var caches: Caches
+var _beep: AudioStreamPlayer
+var _beep_t := 0.0
 var _dig_marker: MeshInstance3D
 var _dig_marker_key := []
 var _demolish_armed := ""
@@ -320,6 +328,20 @@ func _ready() -> void:
 
 	survival.died.connect(_on_died)
 	terrain.ground_changed.connect(_on_ground_changed)
+	caches = Caches.new()
+	caches.name = "Caches"
+	caches.terrain = terrain
+	caches.world_seed = world_seed
+	add_child(caches)
+	caches.setup()
+	caches.found.connect(func(pos, items):
+		loot.spawn_drop(items, pos)
+		hud.show_banner("You dug up a buried cache! It is in a bag in the hole."))
+	day_night.day_started.connect(caches.on_morning)
+	_beep = AudioStreamPlayer.new()
+	_beep.stream = _beep_sound()
+	_beep.volume_db = -10.0
+	add_child(_beep)
 	_dig_marker = MeshInstance3D.new()
 	_dig_marker.name = "DigMarker"
 	var marker_mat := StandardMaterial3D.new()
@@ -391,7 +413,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 	elif holding_hammer() and _hammer_input(event):
 		get_viewport().set_input_as_handled()
-	elif holding_shovel() and _shovel_input(event):
+	elif dig_tool() != "" and _shovel_input(event):
 		get_viewport().set_input_as_handled()
 	elif guns.item != "" and _gun_input(event):
 		get_viewport().set_input_as_handled()
@@ -428,8 +450,10 @@ func _process(delta: float) -> void:
 			text = _prompt_for(player.interact_target())
 			if text == "" and holding_hammer():
 				text = hammer_prompt(piece_under_crosshair())
-			elif text == "" and holding_shovel():
+			elif text == "" and dig_tool() != "":
 				text = shovel_prompt()
+			elif text == "" and holding("metal_detector"):
+				text = detector_text()
 		hud.set_prompt(text)
 		_update_dig_marker()
 		for i in Inventory.HOTBAR:
@@ -448,9 +472,12 @@ func _process(delta: float) -> void:
 			hints.show_hint("hammer")
 		elif hand == "shovel":
 			hints.show_hint("shovel")
+		elif hand == "metal_detector":
+			hints.show_hint("detector")
 		elif Guns.is_gun(hand):
 			hints.show_hint("gun")
 		melee.set_item(hand)
+		_detector_beep(delta, hand == "metal_detector")
 		guns.set_item(hand)
 		if inventory_ui.is_open() or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 			guns.set_ads(false)
@@ -495,11 +522,23 @@ func holding_hammer() -> bool:
 
 
 func holding_shovel() -> bool:
+	return dig_tool() == "shovel"
+
+
+## "shovel" or "pickaxe" when one is in your hands, otherwise "".
+func dig_tool() -> String:
 	var s := inventory.selected_stack()
-	return not s.is_empty() and s.item == "shovel" and not build_mode.active and not survival.dead
+	if s.is_empty() or build_mode.active or survival.dead or not s.item in ["shovel", "pickaxe"]:
+		return ""
+	return s.item
 
 
-## Where the shovel would dig: a point on the ground under the crosshair, or null.
+func holding(item: String) -> bool:
+	var s := inventory.selected_stack()
+	return not s.is_empty() and s.item == item and not build_mode.active and not survival.dead
+
+
+## Where a digging tool would dig: a point on the ground under the crosshair, or null.
 func dig_point() -> Variant:
 	var hit := player.look_hit(SHOVEL_REACH)
 	if hit.is_empty() or hit.collider != terrain:
@@ -507,30 +546,54 @@ func dig_point() -> Variant:
 	return hit.position
 
 
-## "Sand, dug 0.50 m deep\n[LMB] Dig   [RMB] Fill (3 sand)", or why you can't.
+## Id of the rock under the crosshair (within reach), or -1.
+func rock_under_crosshair() -> int:
+	var hit := player.look_hit(PICK_REACH)
+	if hit.is_empty() or not hit.collider.has_meta("rock_id"):
+		return -1
+	return int(hit.collider.get_meta("rock_id"))
+
+
+## "Clay, dug 1.75 m deep\n[LMB] Dig   [RMB] Fill (3 sand)", or why you can't.
 func shovel_prompt() -> String:
+	var tool := dig_tool()
+	if tool == "pickaxe":
+		var r := rock_under_crosshair()
+		if r >= 0:
+			return "Rock\n[LMB] Break it for stone (%d hits)" % rock_hits_left(r)
 	var p = dig_point()
 	if p == null:
 		return ""
+	return ground_prompt(p, tool)
+
+
+## What a digging tool would do to the ground at p.
+func ground_prompt(p: Vector3, tool: String) -> String:
 	var why := terrain.dig_blocked(p.x, p.z)
 	if why != "":
 		return why
 	var depth := terrain.cell_depth(terrain.dig_cell(p.x, p.z))
-	var text := "Sand"
+	var layer := terrain.next_layer(p.x, p.z)
+	var text: String = layer.capitalize() if layer != "" else "Bedrock"
 	if depth > 0.05:
 		text += ", dug %.2f m deep" % depth
 	elif depth < -0.05:
 		text += ", piled %.2f m high" % -depth
-	if terrain.at_bedrock(p.x, p.z):
-		text += " (bedrock)\n[LMB] Can't dig deeper"
+	if layer == "":
+		text += "\n[LMB] Can't dig deeper"
+	elif layer == "stone" and tool != "pickaxe":
+		text += "\n[LMB] Too hard: you need a pickaxe"
 	else:
 		text += "\n[LMB] Dig"
-	return text + "   [RMB] Fill (%d sand)" % inventory.count_of("sand")
+	if tool == "shovel":
+		text += "   [RMB] Fill (%d sand)" % inventory.count_of("sand")
+	return text
 
 
-## Digs (or fills) the cell at p: digging gives a bag of sand, filling uses one.
+## Digs (or fills) the cell at p: a dig gives a bag of what comes up (sand, clay
+## or stone, deeper down), a fill uses a bag of sand. Solid stone needs the pickaxe.
 ## Returns "" if the ground moved, or the reason it didn't.
-func dig_at(p: Vector3, filling := false) -> String:
+func dig_at(p: Vector3, filling := false, tool := "shovel") -> String:
 	var why := terrain.dig_blocked(p.x, p.z)
 	if why != "":
 		return why
@@ -541,30 +604,64 @@ func dig_at(p: Vector3, filling := false) -> String:
 			return "You can't pile the sand any higher here"
 		inventory.remove("sand", 1)
 		return ""
-	if terrain.at_bedrock(p.x, p.z):
+	var layer := terrain.next_layer(p.x, p.z)
+	if layer == "":
 		return "Bedrock: you can't dig any deeper here"
-	if inventory.add("sand", 1) > 0:
-		return "No room in your bag for the sand"
+	if layer == "stone" and tool != "pickaxe":
+		return "Solid stone: you need a pickaxe to dig deeper"
+	if inventory.add(layer, 1) > 0:
+		return "No room in your bag for the %s" % layer
 	if not terrain.dig(p.x, p.z):
-		inventory.remove("sand", 1)
+		inventory.remove(layer, 1)
 		return "Bedrock: you can't dig any deeper here"
 	return ""
 
 
-## Shovel: left click digs, right click fills.
+## Pickaxe hits left before a rock breaks.
+func rock_hits_left(id: int) -> int:
+	return int(rock_hits.get(id, props.rocks[id].hits))
+
+
+## One pickaxe hit on a rock: a stone each hit, and it breaks after its last.
+## Returns how much stone it gave (0 if your bag is full or the rock is gone).
+func mine_rock(id: int) -> int:
+	if id < 0 or id >= props.rocks.size() or broken_rocks.has(id):
+		return 0
+	if inventory.add("stone", 1) > 0:
+		hud.show_banner("No room in your bag for the stone")
+		return 0
+	var left := rock_hits_left(id) - 1
+	if left <= 0:
+		rock_hits.erase(id)
+		broken_rocks[id] = true
+		props.set_rock_broken(id, true)
+		hud.show_pickup(["The rock breaks apart"])
+	else:
+		rock_hits[id] = left
+	return 1
+
+
+## Shovel: left click digs, right click fills. Pickaxe: left click breaks rocks or digs.
 func _shovel_input(event: InputEvent) -> bool:
 	if not (event is InputEventMouseButton and event.pressed) or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		return false
-	if event.button_index != MOUSE_BUTTON_LEFT and event.button_index != MOUSE_BUTTON_RIGHT:
+	var tool := dig_tool()
+	if event.button_index != MOUSE_BUTTON_LEFT and not (event.button_index == MOUSE_BUTTON_RIGHT and tool == "shovel"):
 		return false
+	var rock := rock_under_crosshair() if tool == "pickaxe" else -1
 	var p = dig_point()
-	if p == null:
+	if p == null and rock < 0:
 		return false
 	if Time.get_ticks_msec() < _shovel_ready_at:
 		return true
-	_shovel_ready_at = Time.get_ticks_msec() + int(SHOVEL_COOLDOWN * 1000.0)
-	melee.play_swing(SHOVEL_COOLDOWN)
-	var why := dig_at(p, event.button_index == MOUSE_BUTTON_RIGHT)
+	var cool := SHOVEL_COOLDOWN * (1.4 if tool == "pickaxe" else 1.0)
+	_shovel_ready_at = Time.get_ticks_msec() + int(cool * 1000.0)
+	melee.play_swing(cool)
+	if rock >= 0:
+		if mine_rock(rock) > 0:
+			hud.show_pickup(["+1 Stone"])
+		return true
+	var why := dig_at(p, event.button_index == MOUSE_BUTTON_RIGHT, tool)
 	if why != "":
 		hud.show_banner(why)
 	return true
@@ -572,7 +669,7 @@ func _shovel_input(event: InputEvent) -> bool:
 
 ## A see-through square on the cell the shovel would dig.
 func _update_dig_marker() -> void:
-	var p = dig_point() if holding_shovel() else null
+	var p = dig_point() if dig_tool() != "" else null
 	if p == null or terrain.dig_blocked(p.x, p.z) != "":
 		_dig_marker.visible = false
 		return
@@ -596,9 +693,55 @@ func _update_dig_marker() -> void:
 	_dig_marker.mesh = m
 
 
+## Metal detector: how close the nearest buried cache is, in beeps.
+func detector_text() -> String:
+	var d := caches.nearest(player.global_position)
+	if d > Caches.RANGE:
+		return "Metal detector: no signal (caches are buried near the base)"
+	if d > 12.0:
+		return "Metal detector: a faint beep now and then"
+	if d > 6.0:
+		return "Metal detector: beep... beep... (getting closer)"
+	if d > 2.0:
+		return "Metal detector: fast beeping (very close)"
+	return "Metal detector: a steady tone. Dig right here, 1 m down!"
+
+
+## Beeps faster the closer the nearest cache is.
+func _detector_beep(delta: float, on: bool) -> void:
+	if not on:
+		_beep_t = 0.0
+		return
+	var d := caches.nearest(player.global_position)
+	if d > Caches.RANGE:
+		return
+	_beep_t -= delta
+	if _beep_t <= 0.0:
+		_beep_t = clampf(d / 10.0, 0.12, 2.0)
+		_beep.pitch_scale = 1.0 + clampf((Caches.RANGE - d) / Caches.RANGE, 0.0, 1.0) * 0.5
+		_beep.play()
+
+
+func _beep_sound() -> AudioStreamWAV:
+	var rate := 22050
+	var n := int(rate * 0.07)
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	for i in n:
+		var t := float(i) / rate
+		var env := minf(t / 0.005, 1.0) * minf((0.07 - t) / 0.01, 1.0)
+		data.encode_s16(i * 2, int(sin(TAU * 1250.0 * t) * env * 12000.0))
+	var wav := AudioStreamWAV.new()
+	wav.format = AudioStreamWAV.FORMAT_16_BITS
+	wav.mix_rate = rate
+	wav.data = data
+	return wav
+
+
 ## The ground was dug or filled: pieces settle or fall, and nobody ends up inside the sand.
 func _on_ground_changed(area: Rect2) -> void:
 	building.settle(area)
+	caches.check(area)
 	var near := area.grow(0.6)
 	var bodies: Array = [player]
 	bodies.append_array(mutants.get_children())
@@ -1081,6 +1224,9 @@ func collect_save_data() -> Dictionary:
 		"shop": shop.save_data(),
 		"drone": drone.save_data(),
 		"terrain": terrain.save_data(),
+		"caches": caches.save_data(),
+		"mining": {"broken": broken_rocks.keys(), "hits": rock_hits.keys().map(func(k): return [k, rock_hits[k]])},
+		"tiers": Building.TIER_NAMES.size(),
 	}
 
 
@@ -1088,6 +1234,17 @@ func apply_save_data(data: Dictionary) -> void:
 	# Dug ground first, so everything else is restored on top of it. Older saves: flat.
 	terrain.load_data(data.get("terrain", {}))
 	base_zone.rebuild()
+	caches.load_data(data.get("caches", {}))
+	for id in broken_rocks:
+		props.set_rock_broken(id, false)
+	broken_rocks = {}
+	rock_hits = {}
+	var mining: Dictionary = data.get("mining", {})
+	for id in mining.get("broken", []):
+		broken_rocks[int(id)] = true
+		props.set_rock_broken(int(id), true)
+	for e in mining.get("hits", []):
+		rock_hits[int(e[0])] = int(e[1])
 	var w: Dictionary = data.get("world", {})
 	day_night.restore(int(w.get("day", 1)), float(w.get("hour", 9.0)))
 	# Upgrades first: chests must be big enough before their contents load.
@@ -1096,7 +1253,8 @@ func apply_save_data(data: Dictionary) -> void:
 	apply_upgrades()
 	loot.load_data(data.get("loot", {}))
 	survival.load_data(data.get("survival", {}))
-	building.load_data(data.get("buildings", []))
+	# Saves from before the stone tier (3 tiers): concrete was tier 2, now 3.
+	building.load_data(data.get("buildings", []), int(data.get("tiers", 3)) < 4)
 	waves.load_data(data.get("waves", {"wave": maxi(day_night.day - 1, 0)}))
 	guns.load_data(data.get("guns", {}))
 	# Older saves: a little starting cash plus pay for the nights already survived.

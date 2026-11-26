@@ -2,6 +2,17 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v1.3.0 (2026-11-26): Mining
+- **Layers:** sand down to 1.5 m, then **clay** down to 2.75 m (reddish brown in the hole), then solid **stone** (grey) down to bedrock at 4 m. A dig gives a bag of whatever it brings up, and the prompt says what the next dig brings ("Clay, dug 1.75 m deep"). The shovel can't cut stone ("Solid stone: you need a pickaxe to dig deeper").
+- **Pickaxe** (workbench: 4 scrap, 2 wood): digs through every layer, and left click on a **rock** out in the desert chips a **stone** off it each hit. Rocks take 1 to 12 hits depending on their size, then break apart and are gone for good (saved). Hitting is a little slower than digging.
+- **Stone building tier** between scrap metal and concrete: **1000 hit points**, upgraded with the hammer for stone plus 1 clay as mortar (a wall: 5 stone, 1 clay), repaired with stone. Stone pieces are a warm grey-brown. **Older saves keep their concrete as concrete** (saves now record how many tiers there are).
+- **Metal detector** (workbench: 6 scrap, 4 nails, 2 cloth) and **buried caches:** six caches are buried around the base (at least 8 m from the flag and 8 m apart) and one more most mornings, up to six hidden at a time. Hold the detector: it beeps faster the closer you are ("no signal", "a faint beep", "beep... beep...", "fast beeping", then "a steady tone. Dig right here, 1 m down!"). Dig that square 1 m down and the cache comes up in a bag: scrap, nails, 9mm rounds, sometimes shells, cement, fuel, food or a medkit. Saved; older saves get a fresh set.
+- The pickaxe, metal detector, stone and clay are in the test box too (it fills from every item).
+- **Tests (31 new):** the recipes and test box, sand then clay then stone, the shovel stopped by stone and the pickaxe not, the prompt, aiming at a rock, hits giving stone, a rock breaking, rocks saved and restored (and older saves having every rock), caches buried, the detector over a cache and far away, a cache coming up only 1 m down, found caches saved, older saves getting fresh caches, the stone tier upgrade and its cost, refunds, and older saves keeping scrap metal and concrete. New screenshot views `43_layers` and `44_detector`; `14_tiers` shows four walls.
+
+**Try:** take the pickaxe and detector from the test box, break a few rocks, follow the beeps to a cache, then upgrade a wall to stone.
+**Next:** v1.4, the water well: dig down at the base to strike water for a slow, endless supply, and digging and building cost stamina.
+
 ## v1.2.0 (2026-11-26): Trenches and pits
 - **Mutants and pits:** mutants walk or fall into holes, and climb a steep sand wall slowly: walkers and spitters at 0.35 m/s, runners at 0.55, brutes at 0.22. A wall **2 m high or more holds them** (they can't climb it, and pushing no longer slides them up the sand). In the soak test (wave 8, walls only, you away all night), a 2.25 m deep trench ring 14 m out caught **15 of 23** mutants and only 1 wall was lost; without the trench, 20 of 24 walls were torn down.
 - **Spiked pit** (4 wood, 6 nails, build mode): goes in a hole at least 1 m deep ("Dig a pit at least 1 m deep here first"). Its stakes bite a mutant in it for 30 every second and slow it to 30% (climbing out too), and they wear out.

@@ -19,6 +19,12 @@ const ROCK := Color(0.55, 0.36, 0.25)
 const ROCK_HIGH := Color(0.68, 0.50, 0.36)
 const DAMP_SAND := Color(0.50, 0.32, 0.19)
 const BEDROCK_COL := Color(0.42, 0.36, 0.33)
+const CLAY_COL := Color(0.58, 0.30, 0.19)
+const STONE_COL := Color(0.46, 0.43, 0.40)
+## Layers under the sand: clay from SAND_DEPTH down, solid stone from CLAY_DEPTH
+## (only a pickaxe gets through it) down to bedrock.
+const SAND_DEPTH := 1.5
+const CLAY_DEPTH := 2.75
 
 ## Diggable ground: a square of 1 m cells from -DIG_HALF to +DIG_HALF on x and z.
 const DIG_HALF := 48.0
@@ -321,6 +327,28 @@ func raise_area(area: Rect2, h: float) -> bool:
 	return true
 
 
+## What a dig at world (x, z) brings up next: "sand", "clay" or "stone" ("" at bedrock).
+func next_layer(x: float, z: float) -> String:
+	var c := dig_cell(x, z)
+	if c.x < 0 or at_bedrock(x, z):
+		return ""
+	return layer_at(cell_dug_max(c) + DIG_STEP * 0.5)
+
+
+## The layer at a depth below the original ground.
+static func layer_at(depth: float) -> String:
+	if depth > CLAY_DEPTH:
+		return "stone"
+	if depth > SAND_DEPTH:
+		return "clay"
+	return "sand"
+
+
+## How deep the least dug corner of a cell is (a dig takes that corner down next).
+func cell_dug_max(c: Vector2i) -> float:
+	return -maxf(maxf(vertex_delta(c.x, c.y), vertex_delta(c.x + 1, c.y)), maxf(vertex_delta(c.x, c.y + 1), vertex_delta(c.x + 1, c.y + 1)))
+
+
 ## True if the cell can't go any deeper.
 func at_bedrock(x: float, z: float) -> bool:
 	var c := dig_cell(x, z)
@@ -391,8 +419,12 @@ func _rebuild_chunk(k: Vector2i) -> void:
 				nrm = nrm.normalized()
 				var col := _color_for(a, b, cc, nrm, rng)
 				if dug < -0.02:
-					col = col.lerp(DAMP_SAND, clampf(-dug / 0.5, 0.3, 1.0)).darkened(0.12 * (1.0 - nrm.y) + 0.06)
-					col = col.lerp(BEDROCK_COL, clampf((-dug - BEDROCK * 0.6) / (BEDROCK * 0.4), 0.0, 1.0))
+					var layer_col: Color = DAMP_SAND
+					if -dug > CLAY_DEPTH:
+						layer_col = STONE_COL.lerp(BEDROCK_COL, clampf((-dug - CLAY_DEPTH) / (BEDROCK - CLAY_DEPTH), 0.0, 1.0))
+					elif -dug > SAND_DEPTH:
+						layer_col = CLAY_COL
+					col = col.lerp(layer_col, clampf(-dug / 0.5, 0.3, 1.0)).darkened(0.12 * (1.0 - nrm.y) + 0.06)
 				elif dug > 0.02:
 					col = col.lightened(0.06)
 				for v in [a, b, cc]:

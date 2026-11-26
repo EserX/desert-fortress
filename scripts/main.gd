@@ -899,7 +899,7 @@ func _prompt_for(id: String) -> String:
 		return "[E] Use the shop terminal   ($%d)" % shop.cash
 	if id == "testbox":
 		return "[E] Open the TEST box (every item, cash to $%d)" % TEST_CASH
-	for prefix in ["gate:", "chest:", "bench:", "gen:", "fire:", "turret:", "well:"]:
+	for prefix in ["gate:", "hatch:", "chest:", "bench:", "gen:", "fire:", "turret:", "well:"]:
 		if id.begins_with(prefix):
 			return building.prompt(id)
 	return loot.prompt(id)
@@ -941,8 +941,8 @@ func interact(id: String) -> void:
 	if id == "testbox":
 		open_test_box()
 		return
-	if id.begins_with("gate:"):
-		building.toggle_gate(id.trim_prefix("gate:"))
+	if id.begins_with("gate:") or id.begins_with("hatch:"):
+		building.toggle_gate(id.substr(id.find(":") + 1))
 		return
 	if id.begins_with("chest:"):
 		var storage = building.storage_of(id.trim_prefix("chest:"))

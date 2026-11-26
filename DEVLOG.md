@@ -2,6 +2,21 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v1.6.0 (2026-11-26): More pieces
+Eight new pieces at the end of the build list (scroll the mouse wheel in build mode). All take material tiers unless said otherwise.
+- **Half wall** (2 wood, 2 nails): 1.2 m high, under your eyes (1.65 m), so you can shoot over it. **Low wall** (1 wood, 2 nails): 0.7 m. Neither holds anything up.
+- **Gun slit wall** (3 wood, 3 nails): a full wall with a 1 m wide, 16 cm slot at 1.4 m to shoot through. It holds up floors like a wall.
+- **Pillar** (2 wood, 2 nails): a new kind of slot on the **corners** of the grid. Pillars stand on the sand or on any of the four foundations around their corner, stack, and **hold up floors** (one pillar under any corner of a square is enough, at the same 10-point support cost as a wall). Now you can put a floor in the open without walls.
+- **Floor with trapdoor** (4 wood, 4 nails): a floor (it holds up floors next to it) with a 1 m hatch on one side. **E** opens and closes it; the state is saved. Put a ladder under it to climb up.
+- **Triangle foundation** (2 wood, 2 nails) and **triangle roof** (2 scrap, 1 nail): half a square, cut corner to corner, turned with R. They have triangle colliders and work like a foundation and a roof (walls stand on a triangle foundation, a triangle roof holds up floors next to it), for rounder towers.
+- **Metal door** (8 scrap, 4 nails): a doorway with a metal leaf, **1400 hit points**, no tiers. E opens and closes it ("[E] Open door"). It holds up floors like a wall.
+- The pit ladder from v1.2 works against walls too, so it is the ladder for upper floors.
+- **Code:** a new slot kind `post` (grid corners) with `post_cells()`/`post_key()`, `FOUNDATIONS`, `TRIS` with `prism_points()`/`prism_mesh()`, the trapdoor hatch (`_add_hatch`, "hatch:" interact ids), and pieces flagged `"gate"` get a gate.
+- **Tests (36 new):** every new piece in the build list, the heights of the half and low walls, half walls not holding floors and having tiers, the gun slit, a pillar snapping to the nearest corner, pillars on sand holding a floor at 90%, stacking, saving, one pillar being enough and the floor falling with both gone, the trapdoor (upstairs, holding a neighbour, the hole, the prompt, opening, saved open), the triangle foundation's height and collider, a wall on it and a triangle roof above, the build-mode ghost, and the metal door (hp, no tiers, prompt, opening, holding a floor). New screenshot view `47_pieces`.
+
+**Try:** build a lookout: four pillars, a floor on top with a trapdoor and a ladder under it, and half walls round the edge to shoot over.
+**Next:** v1.7, faster building: drag to lay a line of walls or foundations, repair or upgrade an area at once, and pick a piece up to put it down elsewhere.
+
 ## v1.5.0 (2026-11-26): Structural stability
 - **Support:** every piece now has a support value counted from the ground. Ground-level pieces have **100%**. Resting on what is below (a floor on walls, a wall on a wall, a stair on a floor) costs **10 points**, a floor hanging off the floor next to it **25**, and anything standing on a floor 5. Heavier tiers cost more: scrap metal ×1.15, stone ×1.4, concrete ×1.3 (reinforced). Below **20%** a piece can't stand.
   - With wooden floors: 90% on the walls, then 65%, 40%, and a fourth square out (15%) is refused with "Too far from support (15%): build closer to walls".

@@ -1876,6 +1876,102 @@ func _check_debris() -> void:
 	check(chunks.size() > 0 and worst < 0.3 and fastest < 1.5, "debris settles on the sand (%d chunks, deepest %.2f m under, fastest %.2f m/s)" % [chunks.size(), worst, fastest])
 
 
+## True if a point (in a piece's local space) is inside one of its colliders.
+func _inside_collider(type: String, p: Vector3) -> bool:
+	var b = main.building
+	for c in b.piece_colliders(type):
+		var half: Vector3 = c[0] * 0.5
+		var d: Vector3 = (p - c[1]).abs()
+		if d.x <= half.x and d.y <= half.y and d.z <= half.z:
+			return true
+	return false
+
+
+## v1.6: more pieces.
+func _test_more_pieces_2() -> void:
+	var b = main.building
+	main.terrain.load_data({})
+	b.load_data([])
+	for t in ["half_wall", "low_wall", "slit_wall", "pillar", "trapdoor", "tri_foundation", "tri_roof", "metal_door"]:
+		check(b.PIECES.has(t) and t in b.ORDER, "%s is in the build list" % t)
+	# Half and low walls: you can shoot over them, they hold nothing up.
+	var hs := {"kind": "edge", "cx": -8, "cz": 7, "dir": 0, "level": 0}
+	var hk: String = b.place("half_wall", hs, b.evaluate("half_wall", hs).y)
+	check(_inside_collider("half_wall", Vector3(0, 1.0, 0)) and not _inside_collider("half_wall", Vector3(0, 1.3, 0)), "a half wall is %.1f m high, below your eyes (%.2f)" % [b.HALF_H, main.player.EYE_HEIGHT])
+	check(not _inside_collider("low_wall", Vector3(0, 0.8, 0)) and _inside_collider("low_wall", Vector3(0, 0.5, 0)), "a low wall is %.1f m high" % b.LOW_H)
+	check(not b.evaluate("floor", {"kind": "cell", "cx": -8, "cz": 7, "dir": 0, "level": 1}).ok, "a half wall can't hold a floor up")
+	check(b.describe(b.pieces[hk]) == "Wood half wall" and not b.upgrade_cost(b.pieces[hk]).is_empty(), "half walls have tiers: " + b.describe(b.pieces[hk]))
+	# Gun slit: a gap at eye height to shoot through, otherwise a full wall.
+	var sy: float = b.SLIT_Y + b.SLIT_H * 0.5
+	check(not _inside_collider("slit_wall", Vector3(0, sy, 0)) and _inside_collider("slit_wall", Vector3(0.8, sy, 0)) and _inside_collider("slit_wall", Vector3(0, 1.0, 0)) and _inside_collider("slit_wall", Vector3(0, 2.0, 0)), "a gun slit wall has a slot at %.2f m" % sy)
+	b.load_data([])
+	# Pillars stand on grid corners and hold up floors.
+	var ps: Dictionary = b.slot_for("pillar", Vector3(-11.8, 0, 16.3), 0)
+	check(ps.kind == "post" and ps.cx == -6 and ps.cz == 8, "a pillar snaps to the nearest grid corner (%s)" % str(ps))
+	var pk: Array = []
+	for o in [Vector2i(0, 0), Vector2i(1, 0)]:
+		var s := {"kind": "post", "cx": -6 + o.x, "cz": 8 + o.y, "dir": 0, "level": 0}
+		var ev: Dictionary = b.evaluate("pillar", s)
+		check(ev.ok, "a pillar on the sand (%s)" % ev.reason)
+		pk.append(b.place("pillar", s, ev.y))
+	var fs := {"kind": "cell", "cx": -6, "cz": 8, "dir": 0, "level": 1}  # its north-west corner is pillar 0
+	var fev: Dictionary = b.evaluate("floor", fs)
+	check(fev.ok and is_equal_approx(fev.support, 90.0) and absf(fev.y - (b.pieces[pk[0]].y + b.WALL_H)) < 0.001, "pillars hold a floor up (%s, %s)" % [fev.reason, str(fev.get("support"))])
+	var fk: String = b.place("floor", fs, fev.y)
+	var up := {"kind": "post", "cx": -6, "cz": 8, "dir": 0, "level": 1}
+	check(b.evaluate("pillar", up).ok, "pillars stack")
+	var save: Array = JSON.parse_string(JSON.stringify(b.save_data()))
+	b.load_data(save)
+	check(b.pieces.has(pk[0]) and b.pieces.has(fk), "pillars are saved")
+	b.damage(pk[0], 99999.0)
+	check(b.pieces.has(fk), "one pillar is enough")
+	b.damage(pk[1], 99999.0)
+	check(not b.pieces.has(fk), "with both gone the floor falls")
+	b.load_data([])
+	# Trapdoor: a floor with a hatch that opens.
+	for e in b.cell_edges(-6, 8, 0):
+		b.place("wall", e, b.evaluate("wall", e).y)
+	var ts := {"kind": "cell", "cx": -6, "cz": 8, "dir": 0, "level": 1}
+	var tev: Dictionary = b.evaluate("trapdoor", ts)
+	check(tev.ok, "a trapdoor goes upstairs like a floor (%s)" % tev.reason)
+	var tk: String = b.place("trapdoor", ts, tev.y)
+	check(b.evaluate("floor", {"kind": "cell", "cx": -5, "cz": 8, "dir": 0, "level": 1}).ok, "it holds up a floor next to it")
+	check(not _inside_collider("trapdoor", Vector3(0, -0.07, -0.45)) and _inside_collider("trapdoor", Vector3(0, -0.07, 0.6)), "its frame has a hole for the hatch")
+	var hid: String = "hatch:" + tk
+	check(main._prompt_for(hid) == "[E] Open trapdoor", "trapdoor prompt")
+	main.interact(hid)
+	check(b.pieces[tk].open and absf(b.pieces[tk].hinge.rotation.x) > 1.0, "E opens the hatch")
+	save = JSON.parse_string(JSON.stringify(b.save_data()))
+	b.load_data(save)
+	check(b.pieces[tk].open, "an open trapdoor is saved open")
+	b.load_data([])
+	# Triangle foundation and roof.
+	var tf := {"kind": "cell", "cx": -8, "cz": 8, "dir": 1}
+	var tfev: Dictionary = b.evaluate("tri_foundation", tf)
+	check(tfev.ok and absf(tfev.y - (main.terrain.BASE_HEIGHT + 0.12)) < 0.01, "a triangle foundation sits like a foundation (%s)" % tfev.reason)
+	var tfk: String = b.place("tri_foundation", tf, tfev.y)
+	var shape = b.pieces[tfk].node.get_children().filter(func(n): return n is CollisionShape3D)[0].shape
+	check(shape is ConvexPolygonShape3D and shape.points.size() == 6, "it has a triangular collider")
+	var we := {"kind": "edge", "cx": -8, "cz": 8, "dir": 0}
+	check(absf(b.evaluate("wall", we).y - tfev.y) < 0.001, "walls stand on it")
+	var wk: String = b.place("wall", we, b.evaluate("wall", we).y)
+	var tr := {"kind": "cell", "cx": -8, "cz": 8, "dir": 1, "level": 1}
+	check(b.evaluate("tri_roof", tr).ok, "a triangle roof goes on top")
+	main.build_mode._rebuild_ghost("tri_roof")
+	check(main.build_mode._ghost.get_child_count() >= 1, "build mode shows the triangle")
+	b.load_data([])
+	# Metal door.
+	var ds := {"kind": "edge", "cx": -6, "cz": 8, "dir": 0}
+	var dk: String = b.place("metal_door", ds, b.evaluate("metal_door", ds).y)
+	var drec: Dictionary = b.pieces[dk]
+	check(drec.hp == 1400.0 and b.describe(drec) == "Metal door" and b.upgrade_cost(drec).is_empty(), "a metal door: 1400 hp, no tiers")
+	check(main._prompt_for("gate:" + dk) == "[E] Open door", "door prompt")
+	main.interact("gate:" + dk)
+	check(drec.open, "E opens it")
+	check(b.evaluate("floor", {"kind": "cell", "cx": -6, "cz": 8, "dir": 0, "level": 1}).ok, "it holds up a floor like a wall")
+	b.load_data([])
+
+
 func _process(_delta: float) -> bool:
 	frame += 1
 	var player = main.player
@@ -2092,6 +2188,7 @@ func _process(_delta: float) -> bool:
 			_test_mining()
 			_test_well()
 			_test_stability()
+			_test_more_pieces_2()
 			_start_ladder()
 		3300:
 			_check_debris()

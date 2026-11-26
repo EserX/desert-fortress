@@ -54,6 +54,7 @@ var shots := [
 	{"name": "44_detector", "pos": Vector3(0, 0, 9), "yaw": 0.4, "pitch": -0.3, "hour": 10.0, "detector": true},
 	{"name": "45_well", "pos": Vector3(-11, 0, -1.6), "yaw": 0.0, "pitch": -0.3, "hour": 10.0, "well": true},
 	{"name": "46_support", "pos": Vector3(15, 0, -1.5), "yaw": 0.0, "pitch": 0.12, "hour": 16.0, "support": true},
+	{"name": "47_pieces", "pos": Vector3(-7, 0, 25), "yaw": 0.0, "pitch": -0.08, "hour": 15.0, "pieces2": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -142,6 +143,8 @@ func _process(_d: float) -> bool:
 			_digging_sample()
 		if s.get("layers", false):
 			_layers_sample()
+		if s.get("pieces2", false):
+			_pieces2_sample()
 		if s.get("support", false):
 			var b = main.building
 			main.terrain.load_data({})
@@ -571,3 +574,37 @@ func _layers_sample() -> void:
 				main.dig_at(Vector3(x + 0.5, 0, z + 0.5), false, "pickaxe")
 	main.inventory.load_data({})
 	main.inventory.add("pickaxe", 1)
+
+
+## The v1.6 pieces: triangle foundations, a metal door, a gun slit wall, half
+## and low walls, pillars holding a floor, and an open trapdoor.
+func _pieces2_sample() -> void:
+	var b = main.building
+	main.terrain.load_data({})
+	main.mutants.clear()
+	b.load_data([])
+	var put := func(t: String, slot: Dictionary) -> String:
+		var ev: Dictionary = b.evaluate(t, slot)
+		return b.place(t, slot, ev.y) if ev.ok else ""
+	put.call("foundation", {"kind": "cell", "cx": -5, "cz": 8, "dir": 0})
+	put.call("foundation", {"kind": "cell", "cx": -4, "cz": 8, "dir": 0})
+	put.call("tri_foundation", {"kind": "cell", "cx": -6, "cz": 8, "dir": 1})
+	put.call("tri_foundation", {"kind": "cell", "cx": -3, "cz": 8, "dir": 0})
+	put.call("metal_door", {"kind": "edge", "cx": -5, "cz": 9, "dir": 0})
+	put.call("slit_wall", {"kind": "edge", "cx": -4, "cz": 9, "dir": 0})
+	put.call("wall", {"kind": "edge", "cx": -5, "cz": 8, "dir": 0})
+	put.call("wall", {"kind": "edge", "cx": -4, "cz": 8, "dir": 0})
+	put.call("wall", {"kind": "edge", "cx": -5, "cz": 8, "dir": 1})
+	put.call("wall", {"kind": "edge", "cx": -3, "cz": 8, "dir": 1})
+	var tk: String = put.call("trapdoor", {"kind": "cell", "cx": -5, "cz": 8, "dir": 0, "level": 1})
+	put.call("floor", {"kind": "cell", "cx": -4, "cz": 8, "dir": 0, "level": 1})
+	if tk != "":
+		b.set_gate(tk, true)
+	for i in 2:
+		put.call("half_wall", {"kind": "edge", "cx": -5 + i, "cz": 9, "dir": 0, "level": 1})
+	put.call("low_wall", {"kind": "edge", "cx": -2, "cz": 11, "dir": 0})
+	put.call("low_wall", {"kind": "edge", "cx": -1, "cz": 11, "dir": 0})
+	for o in [Vector2i(-8, 9), Vector2i(-7, 9), Vector2i(-8, 10), Vector2i(-7, 10)]:
+		put.call("pillar", {"kind": "post", "cx": o.x, "cz": o.y, "dir": 0})
+	put.call("floor", {"kind": "cell", "cx": -8, "cz": 9, "dir": 0, "level": 1})
+	put.call("tri_roof", {"kind": "cell", "cx": -9, "cz": 9, "dir": 1, "level": 1})

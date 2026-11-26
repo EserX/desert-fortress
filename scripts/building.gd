@@ -60,7 +60,7 @@ signal spilled(items: Dictionary, pos: Vector3)
 const PIECES := {
 	"foundation": {"name": "Wooden foundation", "slot": "cell", "cost": {"wood": 4, "nails": 4}, "dirs": 1},
 	"wall": {"name": "Wooden wall", "slot": "edge", "cost": {"wood": 3, "nails": 3}, "dirs": 2},
-	"doorway": {"name": "Doorway with gate", "slot": "edge", "cost": {"wood": 4, "nails": 4}, "dirs": 2},
+	"doorway": {"name": "Doorway with gate", "slot": "edge", "cost": {"wood": 4, "nails": 4}, "dirs": 2, "gate": true},
 	"window": {"name": "Wall with window", "slot": "edge", "cost": {"wood": 3, "nails": 3}, "dirs": 2},
 	"floor": {"name": "Wooden floor", "slot": "cell", "cost": {"wood": 3, "nails": 3}, "dirs": 1},
 	"stairs": {"name": "Wooden stairs", "slot": "cell", "cost": {"wood": 5, "nails": 4}, "dirs": 4, "long": true},
@@ -80,10 +80,18 @@ const PIECES := {
 	"landing_pad": {"name": "Drone landing pad", "slot": "obj", "cost": {"wood": 4, "scrap": 2, "nails": 4}, "dirs": 1, "fixed": true},
 	"sandbags": {"name": "Sandbag wall", "slot": "edge", "cost": {"sand": 6, "cloth": 2}, "dirs": 2, "fixed": true, "hp": 900.0, "blueprint": true},
 	"ladder": {"name": "Ladder", "slot": "obj", "cost": {"wood": 4, "nails": 4}, "dirs": 4, "fixed": true, "steep_ok": true, "noblock": true},
+	"half_wall": {"name": "Wooden half wall", "slot": "edge", "cost": {"wood": 2, "nails": 2}, "dirs": 2},
+	"low_wall": {"name": "Wooden low wall", "slot": "edge", "cost": {"wood": 1, "nails": 2}, "dirs": 2},
+	"slit_wall": {"name": "Wooden gun slit wall", "slot": "edge", "cost": {"wood": 3, "nails": 3}, "dirs": 2},
+	"pillar": {"name": "Wooden pillar", "slot": "post", "cost": {"wood": 2, "nails": 2}, "dirs": 1},
+	"trapdoor": {"name": "Floor with trapdoor", "slot": "cell", "cost": {"wood": 4, "nails": 4}, "dirs": 4},
+	"tri_foundation": {"name": "Wooden triangle foundation", "slot": "cell", "cost": {"wood": 2, "nails": 2}, "dirs": 4},
+	"tri_roof": {"name": "Scrap triangle roof", "slot": "cell", "cost": {"scrap": 2, "nails": 1}, "dirs": 4},
+	"metal_door": {"name": "Metal door", "slot": "edge", "cost": {"scrap": 8, "nails": 4}, "dirs": 2, "fixed": true, "hp": 1400.0, "gate": true},
 	"well": {"name": "Water well", "slot": "obj", "cost": {"stone": 8, "wood": 4, "scrap": 2}, "dirs": 4, "fixed": true, "steep_ok": true, "pit": WELL_DEPTH, "over_pit": true},
 	"spiked_pit": {"name": "Spiked pit", "slot": "obj", "cost": {"wood": 4, "nails": 6}, "dirs": 1, "fixed": true, "trap": true, "steep_ok": true, "pit": PIT_DEPTH},
 }
-const ORDER := ["foundation", "wall", "doorway", "window", "floor", "stairs", "ramp", "roof", "chest", "workbench", "spikes", "spike_strip", "barbed_wire", "landmine", "fire_pit", "generator", "electric_fence", "floodlight", "turret", "landing_pad", "sandbags", "ladder", "spiked_pit", "well"]
+const ORDER := ["foundation", "wall", "doorway", "window", "floor", "stairs", "ramp", "roof", "chest", "workbench", "spikes", "spike_strip", "barbed_wire", "landmine", "fire_pit", "generator", "electric_fence", "floodlight", "turret", "landing_pad", "sandbags", "ladder", "spiked_pit", "well", "half_wall", "low_wall", "slit_wall", "pillar", "trapdoor", "tri_foundation", "tri_roof", "metal_door"]
 ## Pieces marked "blueprint" must be unlocked first (blueprints come by drone).
 const TURRET_RANGE := 22.0
 const TURRET_AMMO := 240     # 9mm rounds its ammo box holds
@@ -99,9 +107,20 @@ const MAX_DEBRIS := 72
 ## which only the hammer's aim ray looks at.
 const TRAP_LAYER := 16
 ## Edge pieces that hold up whatever is built above them.
-const WALLISH := ["wall", "doorway", "window"]
+const WALLISH := ["wall", "doorway", "window", "slit_wall", "metal_door"]
 ## Cell pieces you can stand on at an upper level.
-const DECKS := ["floor", "roof"]
+const DECKS := ["floor", "roof", "trapdoor", "tri_roof"]
+## Ground pieces that walls and floors stand on.
+const FOUNDATIONS := ["foundation", "tri_foundation"]
+## Prism pieces: half a square, cut corner to corner.
+const TRIS := ["tri_foundation", "tri_roof"]
+const HALF_H := 1.2   # half wall
+const LOW_H := 0.7    # low wall
+const SLIT_Y := 1.4   # gun slit: bottom and height
+const SLIT_H := 0.16
+const SLIT_W := 1.0
+const PILLAR_T := 0.3
+const HATCH := 1.0    # trapdoor opening, on the north side of its square
 
 var terrain  # Terrain
 ## type -> {key: true}, kept up to date by place() and remove(), so systems
@@ -170,6 +189,8 @@ func _tier_mat(tier: int, key: String) -> Material:
 static func slot_for(type: String, p: Vector3, dir: int) -> Dictionary:
 	var cx := int(floor(p.x / CELL))
 	var cz := int(floor(p.z / CELL))
+	if PIECES[type].slot == "post":
+		return {"kind": "post", "cx": int(round(p.x / CELL)), "cz": int(round(p.z / CELL)), "dir": 0, "level": 0}
 	if PIECES[type].slot != "edge":
 		return {"kind": PIECES[type].slot, "cx": cx, "cz": cz, "dir": dir % PIECES[type].dirs, "level": 0}
 	if dir % 2 == 0:
@@ -203,6 +224,8 @@ static func slot_keys(type: String, slot: Dictionary) -> Array:
 
 ## Centre of a slot on the ground plane (y = 0). Long pieces: between their squares.
 static func slot_center(slot: Dictionary, type := "") -> Vector3:
+	if slot.kind == "post":
+		return Vector3(slot.cx * CELL, 0, slot.cz * CELL)
 	if slot.kind != "edge":
 		var c := Vector3((slot.cx + 0.5) * CELL, 0, (slot.cz + 0.5) * CELL)
 		if type != "" and PIECES[type].get("long", false):
@@ -220,7 +243,7 @@ static func piece_transform(type: String, slot: Dictionary, y: float) -> Transfo
 	var yaw := 0.0
 	if slot.kind == "edge":
 		yaw = 0.0 if slot.dir == 0 else PI / 2
-	elif PIECES[type].get("long", false) or slot.kind == "obj":
+	elif PIECES[type].get("long", false) or slot.kind == "obj" or type in TRIS or type == "trapdoor":
 		yaw = -slot.dir * PI / 2
 	return Transform3D(Basis(Vector3.UP, yaw), Vector3(c.x, y, c.z))
 
@@ -231,7 +254,10 @@ func _ground_samples(type: String, slot: Dictionary) -> Array:
 	var h := CELL * 0.5
 	var centers: Array = []
 	var pts: Array
-	if slot.kind != "edge":
+	if slot.kind == "post":
+		centers.append(slot_center(slot))
+		pts = [Vector2.ZERO, Vector2(0.15, 0.15), Vector2(-0.15, -0.15)]
+	elif slot.kind != "edge":
 		centers.append(slot_center(slot))
 		if PIECES[type].get("long", false):
 			var s := climb_step(slot.dir)
@@ -253,7 +279,7 @@ func piece_at(key: String) -> Dictionary:
 
 func foundation_top(cx: int, cz: int) -> float:
 	var p := piece_at(cell_key(cx, cz, 0))
-	return p.y if not p.is_empty() and p.type == "foundation" else NAN
+	return p.y if not p.is_empty() and p.type in FOUNDATIONS else NAN
 
 
 ## The two squares either side of an edge.
@@ -261,6 +287,15 @@ static func edge_cells(slot: Dictionary) -> Array:
 	if slot.dir == 0:
 		return [Vector2i(slot.cx, slot.cz - 1), Vector2i(slot.cx, slot.cz)]
 	return [Vector2i(slot.cx - 1, slot.cz), Vector2i(slot.cx, slot.cz)]
+
+
+## The four squares around a grid corner (a post slot).
+static func post_cells(slot: Dictionary) -> Array:
+	return [Vector2i(slot.cx - 1, slot.cz - 1), Vector2i(slot.cx, slot.cz - 1), Vector2i(slot.cx - 1, slot.cz), Vector2i(slot.cx, slot.cz)]
+
+
+static func post_key(cx: int, cz: int, level: int) -> String:
+	return slot_key({"kind": "post", "cx": cx, "cz": cz, "dir": 0, "level": level})
 
 
 ## The four edges around a square.
@@ -285,14 +320,23 @@ func _ground_level(type: String, slot: Dictionary) -> Dictionary:
 		return {"y": terrain.original_height(c.x, c.z) if terrain.has_method("original_height") else hi, "steep": false}
 	if slot.kind == "obj":
 		var under := piece_at(cell_key(slot.cx, slot.cz, 0))
-		if not under.is_empty() and under.type in ["foundation", "floor"]:
+		if not under.is_empty() and under.type in FOUNDATIONS + ["floor", "trapdoor"]:
 			return {"y": under.y, "steep": false}
 		return {"y": lo, "steep": steep}
+	if slot.kind == "post":
+		var ptop := -INF
+		for c in post_cells(slot):
+			var t := foundation_top(c.x, c.y)
+			if not is_nan(t):
+				ptop = maxf(ptop, t)
+		if ptop > -INF:
+			return {"y": ptop, "steep": false}
+		return {"y": lo - 0.1, "steep": steep}
 	if slot.kind == "cell":
 		var t := foundation_top(slot.cx, slot.cz)
-		if type != "foundation" and not is_nan(t):
+		if not type in FOUNDATIONS and not is_nan(t):
 			return {"y": t, "steep": false}
-		return {"y": hi + 0.12 if type == "foundation" else lo, "steep": steep}
+		return {"y": hi + 0.12 if type in FOUNDATIONS else lo, "steep": steep}
 	var top := -INF
 	for c in edge_cells(slot):
 		var t := foundation_top(c.x, c.y)
@@ -306,6 +350,15 @@ func _ground_level(type: String, slot: Dictionary) -> Dictionary:
 ## Base height of what holds up an upper-level slot, or NAN if nothing does.
 func _support_y(slot: Dictionary) -> float:
 	var lv: int = slot.level
+	if slot.kind == "post":
+		var pb := piece_at(post_key(slot.cx, slot.cz, lv - 1))
+		if not pb.is_empty():
+			return pb.y + WALL_H
+		for c in post_cells(slot):
+			var f := piece_at(cell_key(c.x, c.y, lv))
+			if not f.is_empty() and f.type in DECKS:
+				return f.y
+		return NAN
 	if slot.kind == "obj":
 		var deck := piece_at(cell_key(slot.cx, slot.cz, lv))
 		return deck.y if not deck.is_empty() and deck.type in DECKS else NAN
@@ -315,6 +368,10 @@ func _support_y(slot: Dictionary) -> float:
 			var w := piece_at(slot_key(e))
 			if not w.is_empty() and w.type in WALLISH:
 				return w.y + WALL_H
+		for o in [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)]:
+			var pl := piece_at(post_key(slot.cx + o.x, slot.cz + o.y, lv - 1))
+			if not pl.is_empty():
+				return pl.y + WALL_H
 		for s in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
 			var f := piece_at(cell_key(slot.cx + s.x, slot.cz + s.y, lv))
 			if not f.is_empty() and f.type in DECKS:
@@ -332,7 +389,7 @@ func _support_y(slot: Dictionary) -> float:
 
 ## Which level a piece goes on when the crosshair hits height hit_y.
 func level_for(type: String, slot: Dictionary, hit_y: float) -> int:
-	if type == "foundation":
+	if type in FOUNDATIONS:
 		return 0
 	var base: float = _ground_level(type, slot).y
 	return clampi(int(round((hit_y - base) / WALL_H)), 0, MAX_LEVEL)
@@ -346,7 +403,7 @@ func evaluate(type: String, slot: Dictionary) -> Dictionary:
 	if not in_zone(type, slot):
 		return {"y": _ground_level(type, slot).y, "ok": false, "reason": "Outside the base zone (stay within %d m of the flag)" % int(zone_radius)}
 	if slot.get("level", 0) > 0:
-		if type == "foundation":
+		if type in FOUNDATIONS:
 			return {"y": 0.0, "ok": false, "reason": "Foundations go on the ground"}
 		var sy := _support_y(slot)
 		if is_nan(sy):
@@ -393,6 +450,32 @@ static func piece_boxes(type: String) -> Array:
 			for i in 3:
 				out.append([Vector3(CELL - 0.02, 0.05, WALL_T + 0.02), Vector3(0, 0.6 * (i + 1), 0), "wood_dark"])
 			out.append_array(_posts())
+		"half_wall", "low_wall":
+			var h := HALF_H if type == "half_wall" else LOW_H
+			out.append([Vector3(CELL, h, WALL_T), Vector3(0, h * 0.5, 0), "wood"])
+			out.append([Vector3(CELL - 0.02, 0.06, WALL_T + 0.04), Vector3(0, h - 0.03, 0), "wood_dark"])
+		"slit_wall":
+			var side := (CELL - SLIT_W) * 0.5
+			out.append([Vector3(CELL, SLIT_Y, WALL_T), Vector3(0, SLIT_Y * 0.5, 0), "wood"])
+			out.append([Vector3(CELL, WALL_H - SLIT_Y - SLIT_H, WALL_T), Vector3(0, (WALL_H + SLIT_Y + SLIT_H) * 0.5, 0), "wood"])
+			for sx in [-1.0, 1.0]:
+				out.append([Vector3(side, SLIT_H, WALL_T), Vector3(sx * (SLIT_W + side) * 0.5, SLIT_Y + SLIT_H * 0.5, 0), "wood"])
+			out.append([Vector3(SLIT_W + 0.1, 0.04, WALL_T + 0.06), Vector3(0, SLIT_Y - 0.02, 0), "wood_dark"])
+			out.append_array(_posts())
+		"pillar":
+			out.append([Vector3(PILLAR_T, WALL_H, PILLAR_T), Vector3(0, WALL_H * 0.5, 0), "wood"])
+			out.append([Vector3(PILLAR_T + 0.06, 0.08, PILLAR_T + 0.06), Vector3(0, WALL_H - 0.04, 0), "wood_dark"])
+		"trapdoor":
+			# A floor with a HATCH x HATCH hole at its north edge (the lid is added on its own).
+			var rest := CELL - HATCH - 0.1
+			out.append([Vector3(CELL, FLOOR_T, rest), Vector3(0, -FLOOR_T * 0.5, CELL * 0.5 - rest * 0.5), "plank"])
+			for sx in [-1.0, 1.0]:
+				out.append([Vector3((CELL - HATCH) * 0.5, FLOOR_T, HATCH + 0.1), Vector3(sx * (CELL + HATCH) * 0.25, -FLOOR_T * 0.5, -CELL * 0.5 + (HATCH + 0.1) * 0.5), "plank"])
+		"metal_door":
+			var mside := (CELL - DOOR_W) * 0.5
+			for sx in [-1.0, 1.0]:
+				out.append([Vector3(mside, WALL_H, WALL_T), Vector3(sx * (DOOR_W + mside) * 0.5, WALL_H * 0.5, 0), "wood"])
+			out.append([Vector3(DOOR_W, WALL_H - DOOR_H, WALL_T), Vector3(0, (WALL_H + DOOR_H) * 0.5, 0), "wood"])
 		"doorway":
 			var side := (CELL - DOOR_W) * 0.5
 			for s in [-1.0, 1.0]:
@@ -574,10 +657,10 @@ static func piece_colliders(type: String) -> Array:
 		"wall", "foundation", "floor", "roof":
 			var b: Array = piece_boxes(type)[0]
 			return [[b[0], b[1], 0.0]]
-		"doorway", "window":
+		"doorway", "window", "slit_wall", "metal_door", "half_wall", "low_wall", "trapdoor", "pillar":
 			var out: Array = []
 			for b in piece_boxes(type):
-				if b[2] == "wood":
+				if b[2] == "wood" or (type == "trapdoor" and b[2] == "plank"):
 					out.append([b[0], b[1], 0.0])
 			return out
 		"stairs", "ramp":
@@ -623,8 +706,14 @@ static func piece_colliders(type: String) -> Array:
 ## The box used to check that a piece has room: [size, centre].
 static func piece_bounds(type: String) -> Array:
 	match type:
-		"doorway", "window":
+		"doorway", "window", "slit_wall", "metal_door":
 			return [Vector3(CELL, WALL_H, WALL_T), Vector3(0, WALL_H * 0.5, 0)]
+		"tri_foundation":
+			return [Vector3(CELL, FOUNDATION_H, CELL), Vector3(0, -FOUNDATION_H * 0.5, 0)]
+		"tri_roof":
+			return [Vector3(CELL, FLOOR_T, CELL), Vector3(0, -FLOOR_T * 0.5, 0)]
+		"trapdoor":
+			return [Vector3(CELL, FLOOR_T, CELL), Vector3(0, -FLOOR_T * 0.5, 0)]
 		"stairs", "ramp":
 			return [Vector3(CELL, WALL_H * 0.5, CELL * 2.0), Vector3(0, WALL_H * 0.25, 0)]
 	var c: Array = piece_colliders(type)[0]
@@ -657,6 +746,8 @@ func place(type: String, slot: Dictionary, y: float, gate_open := false, tier :=
 			mi.position += Basis(Vector3.RIGHT, b[3]) * b[4]
 		mi.set_meta("mat", b[2])
 		body.add_child(mi)
+	if type in TRIS:
+		_add_prism(body, type)
 	for c in piece_colliders(type):
 		var col := CollisionShape3D.new()
 		var shape := BoxShape3D.new()
@@ -682,8 +773,10 @@ func place(type: String, slot: Dictionary, y: float, gate_open := false, tier :=
 	_by_type[type][key] = true
 	for k in slot_keys(type, slot):
 		occupied[k] = key
-	if type == "doorway":
+	if PIECES[type].get("gate", false):
 		_add_gate(rec, gate_open)
+	elif type == "trapdoor":
+		_add_hatch(rec, gate_open)
 	elif type == "chest":
 		rec.storage = Inventory.new(chest_slots)
 		body.set_meta("interact_id", "chest:" + key)
@@ -720,6 +813,61 @@ func place(type: String, slot: Dictionary, y: float, gate_open := false, tier :=
 	if not _bulk:
 		_refresh_support()
 	return key
+
+
+## Triangle pieces: a prism over half the square, cut from its north-east to
+## its south-west corner (the right angle in the north-west): its six corners.
+static func prism_points(type: String) -> PackedVector3Array:
+	var h := FOUNDATION_H if type == "tri_foundation" else FLOOR_T
+	var c := CELL * 0.5
+	var top := [Vector3(-c, 0, -c), Vector3(c, 0, -c), Vector3(-c, 0, c)]
+	var out := PackedVector3Array()
+	for v in top:
+		out.append(v)
+	for v in top:
+		out.append(v - Vector3(0, h, 0))
+	return out
+
+
+static func prism_mesh(type: String) -> ArrayMesh:
+	var p := prism_points(type)
+	var centre := Vector3.ZERO
+	for v in p:
+		centre += v / 6.0
+	var faces: Array = [[p[0], p[1], p[2]], [p[3], p[5], p[4]]]
+	for i in 3:
+		var j := (i + 1) % 3
+		faces.append([p[i], p[i + 3], p[j + 3]])
+		faces.append([p[i], p[j + 3], p[j]])
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for f in faces:
+		var a: Vector3 = f[0]
+		var b: Vector3 = f[1]
+		var cc: Vector3 = f[2]
+		var n := (cc - a).cross(b - a).normalized()
+		if n.dot((a + b + cc) / 3.0 - centre) < 0.0:
+			n = -n
+			var t := b
+			b = cc
+			cc = t
+		st.set_normal(n)
+		st.add_vertex(a)
+		st.add_vertex(b)
+		st.add_vertex(cc)
+	return st.commit()
+
+
+func _add_prism(body: StaticBody3D, type: String) -> void:
+	var mi := MeshInstance3D.new()
+	mi.mesh = prism_mesh(type)
+	mi.set_meta("mat", "wood_dark" if type == "tri_foundation" else "plank")
+	body.add_child(mi)
+	var col := CollisionShape3D.new()
+	var shape := ConvexPolygonShape3D.new()
+	shape.points = prism_points(type)
+	col.shape = shape
+	body.add_child(col)
 
 
 ## The part that turns: a swivel with a gun on it and a muzzle flash.
@@ -834,12 +982,39 @@ func _add_gate(rec: Dictionary, open: bool) -> void:
 	set_gate(slot_key(rec.slot), open)
 
 
+## The trapdoor's hatch: a lid over the opening, hinged at its north edge.
+func _add_hatch(rec: Dictionary, open: bool) -> void:
+	var hinge := Node3D.new()
+	hinge.position = Vector3(0, 0, -CELL * 0.5 + 0.05)
+	rec.node.add_child(hinge)
+	var lid := StaticBody3D.new()
+	lid.set_meta("interact_id", "hatch:" + slot_key(rec.slot))
+	lid.position = Vector3(0, -FLOOR_T * 0.5, HATCH * 0.5)
+	hinge.add_child(lid)
+	for i in 3:
+		var mi := MeshInstance3D.new()
+		mi.mesh = _box_mesh(Vector3(HATCH - 0.04, FLOOR_T * 0.8, HATCH / 3.0 - 0.03))
+		mi.position.z = -HATCH * 0.5 + HATCH / 6.0 + i * HATCH / 3.0
+		mi.set_meta("mat", "plank" if i % 2 == 0 else "wood")
+		lid.add_child(mi)
+	var col := CollisionShape3D.new()
+	col.shape = BoxShape3D.new()
+	col.shape.size = Vector3(HATCH - 0.04, FLOOR_T * 0.8, HATCH - 0.04)
+	lid.add_child(col)
+	rec.hinge = hinge
+	_apply_tier(rec)
+	set_gate(slot_key(rec.slot), open)
+
+
 func set_gate(key: String, open: bool) -> void:
 	var rec: Dictionary = pieces.get(key, {})
 	if rec.is_empty() or not rec.has("hinge"):
 		return
 	rec.open = open
-	rec.hinge.rotation.y = -PI * 0.5 if open else 0.0
+	if rec.type == "trapdoor":
+		rec.hinge.rotation.x = PI * 0.5 if open else 0.0
+	else:
+		rec.hinge.rotation.y = -PI * 0.5 if open else 0.0
 
 
 ## E on a gate: open it if closed, close it if open.
@@ -854,7 +1029,10 @@ func prompt(id: String) -> String:
 	if not pieces.has(key):
 		return ""
 	if id.begins_with("gate:"):
-		return "[E] Close gate" if pieces[key].open else "[E] Open gate"
+		var what := "door" if pieces[key].type == "metal_door" else "gate"
+		return "[E] Close %s" % what if pieces[key].open else "[E] Open %s" % what
+	if id.begins_with("hatch:"):
+		return "[E] Close trapdoor" if pieces[key].open else "[E] Open trapdoor"
 	if id.begins_with("chest:"):
 		return "[E] Open storage chest"
 	if id.begins_with("bench:"):
@@ -931,7 +1109,7 @@ func blocks_person(type: String, slot: Dictionary, y: float, pos: Vector3, radiu
 
 ## Roofs and ramps are made of scrap from the start.
 static func base_tier(type: String) -> int:
-	return 1 if type in ["roof", "ramp"] else 0
+	return 1 if type in ["roof", "ramp", "tri_roof", "metal_door"] else 0
 
 
 func max_hp(rec: Dictionary) -> float:
@@ -1049,6 +1227,15 @@ func piece_key_of(n: Node) -> String:
 func _supporters(slot: Dictionary) -> Array:
 	var out: Array = []
 	var lv: int = slot.level
+	if slot.kind == "post":
+		var pb := piece_at(post_key(slot.cx, slot.cz, lv - 1))
+		if not pb.is_empty():
+			out.append(slot_key(pb.slot))
+		for c in post_cells(slot):
+			var f := piece_at(cell_key(c.x, c.y, lv))
+			if not f.is_empty() and f.type in DECKS:
+				out.append(slot_key(f.slot))
+		return out
 	if slot.kind == "obj":
 		var deck := piece_at(cell_key(slot.cx, slot.cz, lv))
 		if not deck.is_empty() and deck.type in DECKS:
@@ -1059,6 +1246,10 @@ func _supporters(slot: Dictionary) -> Array:
 			var w := piece_at(slot_key(e))
 			if not w.is_empty() and w.type in WALLISH:
 				out.append(slot_key(w.slot))
+		for o in [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)]:
+			var pl := piece_at(post_key(slot.cx + o.x, slot.cz + o.y, lv - 1))
+			if not pl.is_empty():
+				out.append(slot_key(pl.slot))
 		for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
 			var f := piece_at(cell_key(slot.cx + d.x, slot.cz + d.y, lv))
 			if not f.is_empty() and f.type in DECKS:
@@ -1178,7 +1369,7 @@ func on_ladder(pos: Vector3) -> bool:
 ## A new well fills its footprint up to the ground around its shaft.
 func level_under(key: String) -> void:
 	var rec: Dictionary = pieces.get(key, {})
-	if rec.is_empty() or not rec.type in ["foundation", "well"] or terrain == null or not terrain.has_method("raise_area"):
+	if rec.is_empty() or not rec.type in FOUNDATIONS + ["well"] or terrain == null or not terrain.has_method("raise_area"):
 		return
 	var x0: float = rec.slot.cx * CELL
 	var z0: float = rec.slot.cz * CELL
@@ -1207,7 +1398,7 @@ func settle(area: Rect2) -> int:
 			if not near.has_point(Vector2(c.x, c.z)):
 				continue
 			var is_obj: bool = rec.slot.kind == "obj"
-			if (pass_i == 0) != (rec.type == "foundation") or (pass_i == 2) != is_obj:
+			if (pass_i == 0) != (rec.type in FOUNDATIONS) or (pass_i == 2) != is_obj:
 				continue
 			if is_obj:
 				_reseat(rec)
@@ -1229,16 +1420,20 @@ func settle(area: Rect2) -> int:
 ## under its middle, or under half of the points it stands on.
 func undermined(rec: Dictionary) -> bool:
 	var slot: Dictionary = rec.slot
-	if rec.type != "foundation":
+	if not rec.type in FOUNDATIONS:
 		if slot.kind == "cell" and not is_nan(foundation_top(slot.cx, slot.cz)):
 			return false
+		if slot.kind == "post":
+			for c in post_cells(slot):
+				if not is_nan(foundation_top(c.x, c.y)):
+					return false
 		if slot.kind == "edge":
 			for c in edge_cells(slot):
 				if not is_nan(foundation_top(c.x, c.y)):
 					return false
-	var bottom: float = rec.y - (FOUNDATION_H if rec.type == "foundation" else 0.0)
+	var bottom: float = rec.y - (FOUNDATION_H if rec.type in FOUNDATIONS else 0.0)
 	# Foundations may stand on a slope already (up to MAX_SLOPE), so they take a bit more.
-	var limit := UNDERMINE_GAP + (0.4 if rec.type == "foundation" else 0.0)
+	var limit := UNDERMINE_GAP + (0.4 if rec.type in FOUNDATIONS else 0.0)
 	var g := _ground_samples(rec.type, slot)
 	var gaps := 0
 	for h in g:
@@ -1251,7 +1446,7 @@ func undermined(rec: Dictionary) -> bool:
 ## Moves an object on the sand (not on a foundation or floor) to the ground under it.
 func _reseat(rec: Dictionary) -> void:
 	var under := piece_at(cell_key(rec.slot.cx, rec.slot.cz, 0))
-	if not under.is_empty() and under.type in ["foundation", "floor"]:
+	if not under.is_empty() and under.type in FOUNDATIONS + ["floor", "trapdoor"]:
 		return
 	var y: float = _ground_level(rec.type, rec.slot).y
 	if absf(y - rec.y) > 0.001:

@@ -163,6 +163,11 @@ func _rebuild_ghost(type: String) -> void:
 	_ghost_type = type
 	for c in _ghost.get_children():
 		c.queue_free()
+	if type in Building.TRIS:
+		var tri := MeshInstance3D.new()
+		tri.mesh = Building.prism_mesh(type)
+		tri.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_ghost.add_child(tri)
 	for b in Building.piece_boxes(type):
 		var mi := MeshInstance3D.new()
 		var mesh := BoxMesh.new()

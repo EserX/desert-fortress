@@ -292,6 +292,15 @@ func fill(x: float, z: float) -> bool:
 	return _shape_cell(c, func(base: float, d: float) -> float: return minf(maxf(base + d, target) - base, MAX_RAISE))
 
 
+## The ground height at world (x, z) before any digging (nearest grid corner).
+func original_height(x: float, z: float) -> float:
+	var ix := roundi(x + DIG_HALF)
+	var iz := roundi(z + DIG_HALF)
+	if ix < 0 or iz < 0 or ix > DIG_CELLS or iz > DIG_CELLS:
+		return surface_height(x, z)
+	return fine_base[iz * (DIG_CELLS + 1) + ix]
+
+
 ## How deep the ground is dug at world (x, z), at the nearest grid corner (0 outside).
 func depth_at(x: float, z: float) -> float:
 	var ix := roundi(x + DIG_HALF)
@@ -302,13 +311,16 @@ func depth_at(x: float, z: float) -> float:
 
 
 ## Raises every grid corner inside area (x, z, edges included) that is lower than
-## height h up to h (foundations do this). Returns true if anything moved.
-func raise_area(area: Rect2, h: float) -> bool:
+## height h up to h (foundations and wells do this), except the corner nearest
+## keep (a well's shaft). Returns true if anything moved.
+func raise_area(area: Rect2, h: float, keep := Vector2(INF, INF)) -> bool:
 	var n := DIG_CELLS + 1
 	var moved := false
 	var cells: Array = []
 	for iz in range(maxi(ceili(area.position.y + DIG_HALF), 0), mini(floori(area.end.y + DIG_HALF), DIG_CELLS) + 1):
 		for ix in range(maxi(ceili(area.position.x + DIG_HALF), 0), mini(floori(area.end.x + DIG_HALF), DIG_CELLS) + 1):
+			if absf(ix - DIG_HALF - keep.x) < 0.5 and absf(iz - DIG_HALF - keep.y) < 0.5:
+				continue
 			var i := iz * n + ix
 			var d := minf(h - fine_base[i], MAX_RAISE)
 			if d > delta[i] + 0.0005:

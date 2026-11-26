@@ -47,6 +47,11 @@ const HAMMER_REACH := 3.5
 const SHOVEL_REACH := 4.0
 const SHOVEL_COOLDOWN := 0.45  # seconds between digs
 const PICK_REACH := 3.0
+## Stamina for hard work: a dig, a pickaxe hit, building a piece, a hammer job.
+const STAMINA_DIG := 7.0
+const STAMINA_PICK := 9.0
+const STAMINA_BUILD := 6.0
+const STAMINA_HAMMER := 5.0
 const CHEST_REACH := 4.0  # walk further than this from an open chest or bench and it closes
 
 ## When true the world is only a backdrop for the title screen:
@@ -540,7 +545,9 @@ func holding(item: String) -> bool:
 
 ## Where a digging tool would dig: a point on the ground under the crosshair, or null.
 func dig_point() -> Variant:
-	var hit := player.look_hit(SHOVEL_REACH)
+	# Looking down into a hole reaches further (about the same distance out).
+	var reach := minf(SHOVEL_REACH / maxf(cos(player.head.rotation.x), 0.01), SHOVEL_REACH * 1.6)
+	var hit := player.look_hit(reach)
 	if hit.is_empty() or hit.collider != terrain:
 		return null
 	return hit.position
@@ -656,12 +663,15 @@ func _shovel_input(event: InputEvent) -> bool:
 		return true
 	var cool := SHOVEL_COOLDOWN * (1.4 if tool == "pickaxe" else 1.0)
 	_shovel_ready_at = Time.get_ticks_msec() + int(cool * 1000.0)
+	var filling: bool = event.button_index == MOUSE_BUTTON_RIGHT
+	if not use_stamina(STAMINA_PICK if tool == "pickaxe" else (STAMINA_DIG * 0.5 if filling else STAMINA_DIG)):
+		return true
 	melee.play_swing(cool)
 	if rock >= 0:
 		if mine_rock(rock) > 0:
 			hud.show_pickup(["+1 Stone"])
 		return true
-	var why := dig_at(p, event.button_index == MOUSE_BUTTON_RIGHT, tool)
+	var why := dig_at(p, filling, tool)
 	if why != "":
 		hud.show_banner(why)
 	return true
@@ -852,6 +862,10 @@ func _hammer_input(event: InputEvent) -> bool:
 	if key == "":
 		return false
 	if event.button_index == MOUSE_BUTTON_LEFT:
+		var rec: Dictionary = building.pieces[key]
+		if not building.repair_cost(rec).is_empty() or not building.upgrade_cost(rec).is_empty():
+			if not use_stamina(STAMINA_HAMMER):
+				return true
 		hammer_use(key)
 	else:
 		hammer_demolish(key)
@@ -879,7 +893,7 @@ func _prompt_for(id: String) -> String:
 		return "[E] Use the shop terminal   ($%d)" % shop.cash
 	if id == "testbox":
 		return "[E] Open the TEST box (every item, cash to $%d)" % TEST_CASH
-	for prefix in ["gate:", "chest:", "bench:", "gen:", "fire:", "turret:"]:
+	for prefix in ["gate:", "chest:", "bench:", "gen:", "fire:", "turret:", "well:"]:
 		if id.begins_with(prefix):
 			return building.prompt(id)
 	return loot.prompt(id)
@@ -894,7 +908,8 @@ func _build_input(event: InputEvent) -> bool:
 		return false
 	match event.button_index:
 		MOUSE_BUTTON_LEFT:
-			build_mode.try_place()
+			if build_mode.can_build and use_stamina(STAMINA_BUILD):
+				build_mode.try_place()
 		MOUSE_BUTTON_RIGHT:
 			var t := build_mode.try_remove()
 			if t == "old":
@@ -943,6 +958,14 @@ func interact(id: String) -> void:
 		else:
 			hud.show_banner("The turret is full" if inventory.count_of("ammo_9mm") > 0 else "You have no 9mm rounds to load")
 		return
+	if id.begins_with("well:"):
+		var n := take_water(id.trim_prefix("well:"))
+		if n > 0:
+			hud.show_pickup(["+%d Water bottle" % n])
+		else:
+			var w: Dictionary = building.pieces.get(id.trim_prefix("well:"), {})
+			hud.show_banner("No room in your bag" if w.get("water", 0.0) >= 1.0 else "The well is still filling")
+		return
 	if id.begins_with("fire:"):
 		if not power.add_wood(id.trim_prefix("fire:"), inventory):
 			hud.show_banner("The fire pit is full" if inventory.count_of("wood") > 0 else "You need wood for the fire")
@@ -986,6 +1009,28 @@ func apply_upgrades() -> void:
 	building.set_chest_slots(shop.upgrade_value("storage", Building.CHEST_SLOTS))
 	inventory_ui.bench_tier = shop.upgrade_value("bench", 1)
 	inventory_ui.refresh()
+
+
+## Takes the full bottles out of a well. Returns how many you got.
+func take_water(key: String) -> int:
+	var rec: Dictionary = building.pieces.get(key, {})
+	if rec.is_empty() or not rec.has("water"):
+		return 0
+	var full := int(floor(rec.water))
+	if full <= 0:
+		return 0
+	var n := full - inventory.add("water", full)
+	rec.water -= n
+	return n
+
+
+## Pays stamina for hard work. Too tired: says so and returns false.
+func use_stamina(cost: float) -> bool:
+	if player.stamina < cost:
+		hud.show_banner("Too tired: catch your breath")
+		return false
+	player.stamina -= cost
+	return true
 
 
 ## Moves your 9mm rounds into a turret's ammo box. Returns how many went in.

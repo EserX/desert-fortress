@@ -52,6 +52,7 @@ var shots := [
 	{"name": "42_trench", "pos": Vector3(12, 12, 22), "yaw": 0.0, "pitch": -0.7, "hour": 15.5, "digging": true},
 	{"name": "43_layers", "pos": Vector3(-10, 0, -1.5), "yaw": 0.0, "pitch": -0.75, "hour": 14.0, "layers": true},
 	{"name": "44_detector", "pos": Vector3(0, 0, 9), "yaw": 0.4, "pitch": -0.3, "hour": 10.0, "detector": true},
+	{"name": "45_well", "pos": Vector3(-11, 0, -1.6), "yaw": 0.0, "pitch": -0.3, "hour": 10.0, "well": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -140,6 +141,18 @@ func _process(_d: float) -> bool:
 			_digging_sample()
 		if s.get("layers", false):
 			_layers_sample()
+		if s.get("well", false):
+			main.building.load_data([])
+			main.terrain.load_data({})
+			main.inventory.load_data({})
+			for i in 14:
+				main.dig_at(Vector3(-10.5, 0, -4.5), false, "pickaxe")
+			var b = main.building
+			var ws := {"kind": "obj", "cx": -6, "cz": -3, "dir": 0}
+			var wk: String = b.place("well", ws, b.evaluate("well", ws).y)
+			b.level_under(wk)
+			b.pieces[wk].water = 4.0
+			p.head.rotation.x = -0.3
 		if s.get("detector", false):
 			main.terrain.load_data({})
 			main.building.load_data([])

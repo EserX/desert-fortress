@@ -2,7 +2,7 @@ extends Node3D
 ## Generators, power and fire pits. A generator with fuel runs at night (and
 ## during a wave), burning a fuel can every FUEL_SECONDS. Floodlights and
 ## electric fences within POWER_RANGE of a running generator have power.
-## Fire pits burn down the wood put in them.
+## Fire pits burn down the wood put in them. Wells fill up with water.
 
 const TICK := 0.25
 const POWER_RANGE := 18.0
@@ -43,6 +43,9 @@ func _process(delta: float) -> void:
 func tick(dt: float) -> void:
 	var running: Array = []
 	var want := power_wanted()
+	for key in building.keys_of(["well"]):
+		var w: Dictionary = building.pieces[key]
+		w.water = minf(w.water + dt / building.WELL_SECONDS, building.WELL_MAX)
 	for key in building.keys_of(["generator", "fire_pit"]):
 		var rec: Dictionary = building.pieces.get(key, {})
 		if rec.is_empty():

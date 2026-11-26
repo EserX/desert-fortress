@@ -1762,6 +1762,58 @@ func _test_mining() -> void:
 	inv.load_data({})
 
 
+## v1.4: the water well over a 3.5 m shaft, stamina for hard work.
+func _test_well() -> void:
+	var t = main.terrain
+	var b = main.building
+	var inv = main.inventory
+	t.load_data({})
+	b.load_data([])
+	inv.load_data({})
+	var ws := {"kind": "obj", "cx": -6, "cz": -3, "dir": 0}  # x -12..-10, z -6..-4, centre (-11, -5)
+	var ev: Dictionary = b.evaluate("well", ws)
+	check(not ev.ok and ev.reason.begins_with("Dig a pit at least 3.5 m"), "a well needs a deep shaft: " + ev.reason)
+	for i in 14:
+		main.dig_at(Vector3(-10.5, 0, -4.5), false, "pickaxe")
+	check(t.depth_at(-11.0, -5.0) >= 3.5 - 0.001, "a 1 m shaft 3.5 m deep, into the stone")
+	# Looking steeply down into the shaft reaches its bottom.
+	var player = main.player
+	player.position = Vector3(-10.5, t.surface_height(-10.5, -3.6), -3.6)
+	player.rotation.y = 0.0
+	player.head.rotation.x = -1.35
+	player.head.position.y = player.EYE_HEIGHT
+	var dp = main.dig_point()
+	check(dp != null and dp.y < t.BASE_HEIGHT - 3.0, "looking down a shaft, the shovel reaches the bottom (%s)" % str(dp))
+	player.head.rotation.x = 0.0
+	ev = b.evaluate("well", ws)
+	check(ev.ok and absf(ev.y - t.BASE_HEIGHT) < 0.01, "then a well stands over it at ground level (%s %.2f)" % [ev.reason, ev.y])
+	var wk: String = b.place("well", ws, ev.y)
+	b.level_under(wk)
+	check(t.depth_at(-11.0, -5.0) >= 3.5 - 0.001 and t.depth_at(-10.0, -4.0) < 0.01, "its footprint is filled in round the shaft")
+	check(b.prompt("well:" + wk).begins_with("Water well: filling"), "well prompt: " + b.prompt("well:" + wk))
+	main.power.tick(b.WELL_SECONDS)
+	check(b.prompt("well:" + wk).begins_with("[E] Take water"), "a bottle every %.0f s: %s" % [b.WELL_SECONDS, b.prompt("well:" + wk)])
+	check(main.take_water(wk) == 1 and inv.count_of("water") == 1, "E takes the water")
+	check(main.take_water(wk) == 0, "then it fills again")
+	main.power.tick(b.WELL_SECONDS * 20.0)
+	check(is_equal_approx(b.pieces[wk].water, b.WELL_MAX), "it holds up to %d bottles" % int(b.WELL_MAX))
+	main.dig_at(Vector3(-9.5, 0, -4.5))
+	check(absf(b.pieces[wk].y - ev.y) < 0.001, "digging next to it doesn't drop it into its shaft")
+	var data: Dictionary = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	b.pieces[wk].water = 0.0
+	main.apply_save_data(data)
+	check(is_equal_approx(b.pieces[wk].water, b.WELL_MAX), "the water in a well is saved")
+	# Stamina.
+	player.stamina = 5.0
+	check(not main.use_stamina(main.STAMINA_DIG) and is_equal_approx(player.stamina, 5.0), "too tired to dig with 5 stamina")
+	player.stamina = 50.0
+	check(main.use_stamina(main.STAMINA_DIG) and is_equal_approx(player.stamina, 50.0 - main.STAMINA_DIG), "a dig costs %.0f stamina" % main.STAMINA_DIG)
+	player.stamina = player.STAMINA_MAX
+	b.load_data([])
+	t.load_data({})
+	inv.load_data({})
+
+
 func _process(_delta: float) -> bool:
 	frame += 1
 	var player = main.player
@@ -1976,6 +2028,7 @@ func _process(_delta: float) -> bool:
 		3135:
 			_test_trench_pieces()
 			_test_mining()
+			_test_well()
 			_start_ladder()
 		3300:
 			_check_ladder()

@@ -2,6 +2,16 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v1.4.0 (2026-11-26): The water well (M7 done)
+- **Water well** (8 stone, 4 wood, 2 scrap, last in the build list): dig a shaft at least **3.5 m** deep (a single 1 m square is enough; the last metre is stone, so it takes the pickaxe), then build the well on the 2 m square whose middle is a corner of the shaft. It stands at the original ground level with a stone ring, posts, a crank bar and a bucket, and fills the sand round the shaft inside its footprint. It fills **a bottle of water every 75 s, up to 6**. **E** takes them ("Well: 3 bottles, the next in 40 s"). Water in a well is saved. Digging next to it doesn't drop it into its own shaft.
+- **Reaching down holes:** looking steeply down, the shovel and pickaxe reach further (about 4 m out, up to 6.4 m along the line of sight), so you can dig a shaft from its edge.
+- **Stamina for hard work:** a dig costs 7 (a fill 3.5), a pickaxe hit 9, building a piece 6, a hammer repair or upgrade 5. With too little: "Too tired: catch your breath".
+- That finishes **M7, digging and terrain**.
+- **Tests (14 new):** a well needing a deep shaft (the reason says 3.5 m and the pickaxe), the shaft depth, reaching its bottom looking down, the well standing at ground level, the footprint filled round the shaft, the filling prompt, a bottle every 75 s, taking it, the 6-bottle limit, the well staying put when you dig next to it, water saved, and stamina for digging. New screenshot view `45_well`.
+
+**Try:** dig a shaft with the pickaxe next to your base, build a well over it, and stop hauling water bottles in from the wrecks.
+**Next:** M8, v1.5 structural stability: a support value for each piece counted from the ground, overhangs and tall towers that collapse, and debris.
+
 ## v1.3.0 (2026-11-26): Mining
 - **Layers:** sand down to 1.5 m, then **clay** down to 2.75 m (reddish brown in the hole), then solid **stone** (grey) down to bedrock at 4 m. A dig gives a bag of whatever it brings up, and the prompt says what the next dig brings ("Clay, dug 1.75 m deep"). The shovel can't cut stone ("Solid stone: you need a pickaxe to dig deeper").
 - **Pickaxe** (workbench: 4 scrap, 2 wood): digs through every layer, and left click on a **rock** out in the desert chips a **stone** off it each hit. Rocks take 1 to 12 hits depending on their size, then break apart and are gone for good (saved). Hitting is a little slower than digging.

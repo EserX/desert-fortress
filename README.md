@@ -42,6 +42,8 @@ If `git pull` complains about untracked `.uid` files, they are safe to delete.
 
 **Mining.** Below 1.5 m the shovel brings up **clay**, and below 2.75 m comes solid **stone**, which needs a **pickaxe** (workbench: 4 scrap, 2 wood). The pickaxe also breaks rocks out in the desert: a stone per hit, more hits for bigger rocks. Stone and clay upgrade pieces to the **stone** tier (1000 hit points), between scrap metal and concrete. A **metal detector** (workbench: 6 scrap, 4 nails, 2 cloth) beeps faster as you get near a cache buried around the base; at the steady tone, dig that square 1 m down for a bag of ammo, scrap and supplies. Six are buried at the start and another turns up most mornings.
 
+**Water well.** Dig a shaft at least **3.5 m** deep (the last metre is stone, so bring the pickaxe; looking straight down into a hole reaches its bottom), then build a **water well** over it (8 stone, 4 wood, 2 scrap). It fills a bottle of water every 75 seconds, up to 6; press **E** on it to take them. Hard work costs **stamina**: a dig 7 (filling 3.5), a pickaxe hit 9, building a piece 6, a hammer repair or upgrade 5. Out of breath, you have to wait.
+
 **Nights.** At 18:30 a siren warns you. At 20:00 a wave of mutants comes in from the edge of the map and marches on the base. Close to you they know where you are, walls or not, and tear through anything in their way. The wave ends when all are dead or at dawn. A summary shows your kills and your pay.
 
 | Mutant | What to know |

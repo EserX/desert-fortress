@@ -32,6 +32,11 @@ const CHEST_SLOTS := 20      # before upgrades
 ## A spiked pit goes in a hole at least this deep. A ladder is this tall.
 const PIT_DEPTH := 0.9
 const LADDER_H := 4.2
+## A well goes over a shaft dug this deep (down into the stone) and fills a
+## bottle of water every WELL_SECONDS, holding up to WELL_MAX.
+const WELL_DEPTH := 3.5
+const WELL_SECONDS := 75.0
+const WELL_MAX := 6.0
 ## Dig more than this out from under a piece standing on the sand and it falls
 ## (foundations take 0.4 m more).
 const UNDERMINE_GAP := 0.6
@@ -67,9 +72,10 @@ const PIECES := {
 	"landing_pad": {"name": "Drone landing pad", "slot": "obj", "cost": {"wood": 4, "scrap": 2, "nails": 4}, "dirs": 1, "fixed": true},
 	"sandbags": {"name": "Sandbag wall", "slot": "edge", "cost": {"sand": 6, "cloth": 2}, "dirs": 2, "fixed": true, "hp": 900.0, "blueprint": true},
 	"ladder": {"name": "Ladder", "slot": "obj", "cost": {"wood": 4, "nails": 4}, "dirs": 4, "fixed": true, "steep_ok": true, "noblock": true},
+	"well": {"name": "Water well", "slot": "obj", "cost": {"stone": 8, "wood": 4, "scrap": 2}, "dirs": 4, "fixed": true, "steep_ok": true, "pit": WELL_DEPTH, "over_pit": true},
 	"spiked_pit": {"name": "Spiked pit", "slot": "obj", "cost": {"wood": 4, "nails": 6}, "dirs": 1, "fixed": true, "trap": true, "steep_ok": true, "pit": PIT_DEPTH},
 }
-const ORDER := ["foundation", "wall", "doorway", "window", "floor", "stairs", "ramp", "roof", "chest", "workbench", "spikes", "spike_strip", "barbed_wire", "landmine", "fire_pit", "generator", "electric_fence", "floodlight", "turret", "landing_pad", "sandbags", "ladder", "spiked_pit"]
+const ORDER := ["foundation", "wall", "doorway", "window", "floor", "stairs", "ramp", "roof", "chest", "workbench", "spikes", "spike_strip", "barbed_wire", "landmine", "fire_pit", "generator", "electric_fence", "floodlight", "turret", "landing_pad", "sandbags", "ladder", "spiked_pit", "well"]
 ## Pieces marked "blueprint" must be unlocked first (blueprints come by drone).
 const TURRET_RANGE := 22.0
 const TURRET_AMMO := 240     # 9mm rounds its ammo box holds
@@ -113,6 +119,7 @@ func _ready() -> void:
 	_mats.stone_dark = LowPoly.material(Color(0.33, 0.27, 0.22))
 	_mats.cloth = LowPoly.material(Color(0.7, 0.6, 0.42))
 	_mats.cloth_dark = LowPoly.material(Color(0.6, 0.51, 0.36))
+	_mats.water = LowPoly.material(Color(0.18, 0.32, 0.38), 0.1)
 	_mats.live = StandardMaterial3D.new()  # electric fence wire with the power on
 	_mats.live.albedo_color = Color(0.6, 0.9, 1.0)
 	_mats.live.emission_enabled = true
@@ -257,6 +264,10 @@ func _ground_level(type: String, slot: Dictionary) -> Dictionary:
 	var lo: float = g.min()
 	var hi: float = g.max()
 	var steep := hi - lo > MAX_SLOPE
+	if slot.kind == "obj" and PIECES[type].get("over_pit", false):
+		# Stands at the original ground level, over the shaft dug under it.
+		var c := slot_center(slot)
+		return {"y": terrain.original_height(c.x, c.z) if terrain.has_method("original_height") else hi, "steep": false}
 	if slot.kind == "obj":
 		var under := piece_at(cell_key(slot.cx, slot.cz, 0))
 		if not under.is_empty() and under.type in ["foundation", "floor"]:
@@ -332,7 +343,7 @@ func evaluate(type: String, slot: Dictionary) -> Dictionary:
 	if PIECES[type].has("pit") and terrain and terrain.has_method("depth_at"):
 		var c := slot_center(slot)
 		if terrain.depth_at(c.x, c.z) < float(PIECES[type].pit) - 0.001:
-			return {"y": g.y, "ok": false, "reason": "Dig a pit at least 1 m deep here first (shovel)"}
+			return {"y": g.y, "ok": false, "reason": "Dig a pit at least %s m deep here first (%s)" % [str(PIECES[type].pit).trim_suffix(".0").replace("0.9", "1"), "pickaxe" if PIECES[type].pit > 2.7 else "shovel"]}
 	return {"y": g.y, "ok": true, "reason": ""}
 
 
@@ -487,6 +498,18 @@ static func piece_boxes(type: String) -> Array:
 			for i in int(LADDER_H / 0.35):
 				var h := 0.3 + i * 0.35
 				out.append([Vector3(0.56, 0.05, 0.05), Vector3(0, h, -0.8 + (h - LADDER_H * 0.5) * -tan(lean)), "wood"])
+		"well":
+			# A ring of stone covering the shaft (first four boxes: also its colliders),
+			# two posts, a crank bar and a bucket.
+			for s in [-1.0, 1.0]:
+				out.append([Vector3(2.0, 0.85, 0.45), Vector3(0, 0.42, s * 0.775), "stone"])
+				out.append([Vector3(0.45, 0.85, 1.1), Vector3(s * 0.775, 0.42, 0), "stone"])
+			for s in [-1.0, 1.0]:
+				out.append([Vector3(0.1, 1.5, 0.1), Vector3(s * 0.78, 1.6, 0), "wood_dark"])
+			out.append([Vector3(1.66, 0.08, 0.08), Vector3(0, 2.3, 0), "wood"])
+			out.append([Vector3(0.02, 0.9, 0.02), Vector3(0, 1.85, 0), "cloth_dark"])
+			out.append([Vector3(0.28, 0.3, 0.28), Vector3(0, 1.3, 0), "wood"])
+			out.append([Vector3(1.1, 0.04, 1.1), Vector3(0, 0.3, 0), "water"])
 		"spiked_pit":
 			out.append([Vector3(1.9, 0.05, 1.9), Vector3(0, 0.03, 0), "wood_dark"])
 			for i in 4:
@@ -571,6 +594,11 @@ static func piece_colliders(type: String) -> Array:
 			return [[Vector3(0.7, LADDER_H, 0.3), Vector3(0, LADDER_H * 0.5, -0.8), 0.0]]
 		"spiked_pit":
 			return [[Vector3(1.8, 0.6, 1.8), Vector3(0, 0.3, 0), 0.0]]
+		"well":
+			var out: Array = []
+			for b in piece_boxes("well").slice(0, 4):
+				out.append([b[0], b[1], 0.0])
+			return out
 	return []
 
 
@@ -662,6 +690,9 @@ func place(type: String, slot: Dictionary, y: float, gate_open := false, tier :=
 		spot.visible = false
 		body.add_child(spot)
 		rec.light = spot
+	elif type == "well":
+		rec.water = 0.0
+		body.set_meta("interact_id", "well:" + key)
 	elif type == "turret":
 		rec.ammo = 0
 		body.set_meta("interact_id", "turret:" + key)
@@ -814,6 +845,13 @@ func prompt(id: String) -> String:
 		return "[E] Add a fuel can   Generator %d/%d cans, %s" % [ceili(rec.fuel), int(GEN_TANK), state]
 	if id.begins_with("turret:"):
 		return "[E] Load 9mm rounds   Auto-turret %d/%d rounds%s" % [rec.ammo, TURRET_AMMO, "" if rec.ammo > 0 else ", EMPTY"]
+	if id.begins_with("well:"):
+		var next := int(ceil((1.0 - fmod(rec.water, 1.0)) * WELL_SECONDS))
+		if rec.water >= WELL_MAX:
+			return "[E] Take water   Well: %d bottles (full)" % int(WELL_MAX)
+		if rec.water >= 1.0:
+			return "[E] Take water   Well: %d bottle%s, the next in %d s" % [int(rec.water), "" if int(rec.water) == 1 else "s", next]
+		return "Water well: filling, the first bottle in %d s" % next
 	if id.begins_with("fire:"):
 		if rec.burn <= 0.0:
 			return "[E] Light the fire (1 wood)"
@@ -1053,13 +1091,17 @@ func on_ladder(pos: Vector3) -> bool:
 
 
 ## A new foundation fills the sand under it up to its bottom (no gaps under it).
+## A new well fills its footprint up to the ground around its shaft.
 func level_under(key: String) -> void:
 	var rec: Dictionary = pieces.get(key, {})
-	if rec.is_empty() or rec.type != "foundation" or terrain == null or not terrain.has_method("raise_area"):
+	if rec.is_empty() or not rec.type in ["foundation", "well"] or terrain == null or not terrain.has_method("raise_area"):
 		return
 	var x0: float = rec.slot.cx * CELL
 	var z0: float = rec.slot.cz * CELL
-	terrain.raise_area(Rect2(x0, z0, CELL, CELL), rec.y - FOUNDATION_H)
+	if rec.type == "well":
+		terrain.raise_area(Rect2(x0, z0, CELL, CELL), rec.y, Vector2(x0 + CELL * 0.5, z0 + CELL * 0.5))
+	else:
+		terrain.raise_area(Rect2(x0, z0, CELL, CELL), rec.y - FOUNDATION_H)
 
 
 ## The ground changed (digging): pieces standing on the sand nearby are checked.
@@ -1298,7 +1340,7 @@ func save_data() -> Array:
 		var d := {"type": p.type, "kind": p.slot.kind, "cx": p.slot.cx, "cz": p.slot.cz, "dir": p.slot.dir, "level": p.slot.level, "y": p.y, "open": p.open, "tier": p.tier, "hp": p.hp}
 		if p.has("storage"):
 			d.items = p.storage.save_data()
-		for k in ["fuel", "burn", "ammo"]:
+		for k in ["fuel", "burn", "ammo", "water"]:
 			if p.has(k):
 				d[k] = p[k]
 		out.append(d)
@@ -1322,5 +1364,7 @@ func load_data(data: Array, old_tiers := false) -> void:
 				pieces[key].fuel = clampf(float(p.get("fuel", 0.0)), 0.0, GEN_TANK)
 			if pieces[key].has("ammo"):
 				pieces[key].ammo = clampi(int(p.get("ammo", 0)), 0, TURRET_AMMO)
+			if pieces[key].has("water"):
+				pieces[key].water = clampf(float(p.get("water", 0.0)), 0.0, WELL_MAX)
 			if pieces[key].has("burn"):
 				pieces[key].burn = clampf(float(p.get("burn", 0.0)), 0.0, FIRE_MAX)

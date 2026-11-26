@@ -2,6 +2,20 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v0.25.0 (2026-11-26): Difficulty and first-time hints (v1.0, part 1)
+The v1.0 item is big, so it comes in parts. It stays unticked on the roadmap until all of it is done.
+- **Difficulty:** New game now asks for **Easy, Normal or Hard**. It stays with that game (it is in the save):
+  - Easy: waves 30% smaller, mutants with 20% less health that do 40% less damage, 25% more pay, hunger and thirst 30% slower.
+  - Hard: waves 40% bigger, mutants with 25% more health that do 40% more damage, 10% less pay, hunger and thirst 30% faster.
+  - Older saves play on Normal.
+- **First-time hints:** a "TIP" box under the title the first time something happens: a new game, picking up loot, build mode, holding the hammer, holding a gun, the dusk siren, the first mutant that spots you, the first pay, and getting hungry or hurt. Each shows once, ever (they queue up if several come at once). **Settings → First-time hints** turns them off; turning them back on shows them all again.
+- Fix: a wave's stats could be missing a key and stop the kill count (seen only in the screenshot tool).
+- The screenshot tool now puts a `.gdignore` in `screenshots/`, so Godot no longer imports every PNG.
+- **Tests:** the default difficulty, wave sizes per difficulty, reduced damage on easy, the difficulty saved, a hint showing once, hints queuing, and no hints when turned off. New screenshot view `37_hint`.
+
+**Try:** start a new game on Hard if the first nights feel too easy.
+**Next:** the rest of v1.0: a graphics quality setting (performance), a standalone Linux export, and the README as a short manual.
+
 ## v0.24.0 (2026-11-26): Base upgrades and the radio
 The shop terminal has a third page, **Base upgrades**:
 - **Bigger build zone:** 26 m to **34 m** ($200), then **42 m** ($400). The ring of stakes and the dashed line in build mode move out with it.

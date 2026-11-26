@@ -30,6 +30,7 @@ const Turrets = preload("res://scripts/turrets.gd")
 const Shop = preload("res://scripts/shop.gd")
 const ShopUI = preload("res://scripts/shop_ui.gd")
 const Drone = preload("res://scripts/drone.gd")
+const Hints = preload("res://scripts/hints.gd")
 
 const DISCOVER_RANGE := 45.0
 const REFILLS_PER_MORNING := 4
@@ -73,6 +74,7 @@ var turrets: Turrets
 var shop: Shop
 var shop_ui: ShopUI
 var drone: Drone
+var hints: Hints
 ## Wrecks and ruins: {"key": "w3", "kind": "wreck", "pos": Vector3}.
 var places: Array = []
 ## Keys of places you have been near.
@@ -173,6 +175,7 @@ func _ready() -> void:
 	mutants.world_seed = world_seed
 	mutants.player_dead = func(): return survival == null or survival.dead
 	add_child(mutants)
+	mutants.health_mult = Game.diff("health")
 	mutants.top_up(day_night.day)
 
 	traps = Traps.new()
@@ -200,6 +203,8 @@ func _ready() -> void:
 	waves.name = "Waves"
 	waves.mutants = mutants
 	waves.world_seed = world_seed
+	waves.size_mult = Game.diff("waves")
+	waves.cash_mult = Game.diff("cash")
 	add_child(waves)
 	power.waves = waves
 	day_night.dusk_started.connect(waves.on_dusk)
@@ -237,6 +242,7 @@ func _ready() -> void:
 	survival.name = "Survival"
 	add_child(survival)
 	player.landed.connect(survival.fall)
+	survival.need_mult = Game.diff("needs")
 
 	hud = Hud.new()
 	hud.survival = survival
@@ -284,6 +290,11 @@ func _ready() -> void:
 	add_child(map_ui)
 
 	survival.died.connect(_on_died)
+	hints = Hints.new()
+	hints.name = "Hints"
+	hints.hud = hud
+	add_child(hints)
+	_connect_hints()
 	survival.died.connect(waves.note_death)
 	waves.wave_started.connect(func(n, size):
 		if shop.upgrades.radio > 0:
@@ -385,6 +396,12 @@ func _process(delta: float) -> void:
 		base_zone.set_highlight(build_mode.active)
 		var held: Dictionary = inventory.selected_stack()
 		var hand: String = "" if build_mode.active or survival.dead or held.is_empty() else held.item
+		if build_mode.active:
+			hints.show_hint("build")
+		elif hand == "hammer":
+			hints.show_hint("hammer")
+		elif Guns.is_gun(hand):
+			hints.show_hint("gun")
 		melee.set_item(hand)
 		guns.set_item(hand)
 		if inventory_ui.is_open() or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
@@ -764,6 +781,7 @@ func _on_player_hit(dmg: float, from: Vector3, kind := "walker") -> void:
 	if survival.dead:
 		return
 	var who: String = Mutants.Mutant.TYPES.get(kind, {}).get("name", "mutant").to_lower()
+	dmg *= Game.diff("damage")
 	survival.damage(dmg, ("Acid from a spitter got you." if kind == "spitter" and dmg > 10.0 else "A %s got you." % who))
 	waves.note_damage(dmg)
 	var to: Vector3 = from - player.global_position
@@ -772,6 +790,24 @@ func _on_player_hit(dmg: float, from: Vector3, kind := "walker") -> void:
 
 
 var _attack_warned_at := -100000
+
+## When each first-time hint shows.
+func _connect_hints() -> void:
+	inventory.changed.connect(func():
+		if inventory.weight() > 2.6:  # more than the starting tools
+			hints.show_hint("loot"))
+	day_night.dusk_started.connect(func(_d): hints.show_hint("dusk"))
+	waves.wave_ended.connect(func(_s): hints.show_hint("cash"))
+	survival.warning.connect(func(_t): hints.show_hint("hurt"))
+	for m in mutants.get_children():
+		if m.has_signal("spotted"):
+			m.spotted.connect(func(_m): hints.show_hint("mutant"))
+	mutants.child_entered_tree.connect(func(m):
+		if m.has_signal("spotted"):
+			m.spotted.connect(func(_m): hints.show_hint("mutant")))
+	if Game.fresh_game:
+		get_tree().create_timer(2.0).timeout.connect(func(): hints.show_hint("welcome"))
+
 
 ## Mutants clawing at the base: a warning now and then, saying which way.
 func _on_piece_attacked(key: String) -> void:

@@ -1257,6 +1257,37 @@ func _test_upgrades() -> void:
 	inv.load_data({})
 
 
+## v1.0: difficulty levels and first-time hints.
+func _test_difficulty_and_hints() -> void:
+	var Waves = load("res://scripts/waves.gd")
+	var rng := RandomNumberGenerator.new()
+	check(game.difficulty == "normal" and game.diff("waves") == 1.0, "the default difficulty is normal")
+	check(Waves.wave_mix(5, rng, game.DIFFICULTIES.hard.waves).size() == 17 and Waves.wave_mix(5, rng, game.DIFFICULTIES.easy.waves).size() == 8, "hard waves are bigger, easy ones smaller (night 5: 17 / 12 / 8)")
+	game.difficulty = "easy"
+	main.survival.health = 100.0
+	main._on_player_hit(10.0, main.player.global_position)
+	check(is_equal_approx(main.survival.health, 94.0), "on easy a 10 damage claw does 6")
+	check(game.save_game("test") and game.read_slot("test").get("difficulty", "") == "easy", "the difficulty is saved with the game")
+	game.delete_slot("test")
+	game.difficulty = "normal"
+	main.survival.health = 100.0
+	var s = root.get_node("Settings")
+	var was: bool = s.hints
+	s.hints = true
+	s.hints_seen = []
+	check(main.hints.show_hint("gun") and main.hud.hint_box.visible and main.hud._hint_label.text.contains("reload"), "a first-time hint shows: " + main.hud._hint_label.text)
+	check(not main.hints.show_hint("gun"), "only the first time")
+	main.hud._hint_time = 0.0
+	main.hints.show_hint("build")
+	main.hints.show_hint("hammer")
+	check(main.hud._hint_queue.size() == 1, "hints wait their turn")
+	s.hints = false
+	check(not main.hints.show_hint("mutant"), "no hints when they are turned off")
+	s.hints = was
+	s.hints_seen = []
+	s.save_settings()
+
+
 func _start_spitter() -> void:
 	var player = main.player
 	var py: float = main.terrain.surface_height(8, -8)
@@ -1496,6 +1527,7 @@ func _process(_delta: float) -> bool:
 			_test_shop()
 			_test_drone()
 			_test_upgrades()
+			_test_difficulty_and_hints()
 		2370:
 			_start_turret()
 		2490:

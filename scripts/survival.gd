@@ -29,6 +29,7 @@ var food := MAX
 var water := MAX
 var dead := false
 var hot := false  # in the midday heat right now (for the HUD)
+var need_mult := 1.0  # difficulty: how fast food and water run down
 var cause := ""   # what hurt you last, for the death screen ("" = hunger, thirst or a fall)
 var _warned := {}
 
@@ -53,8 +54,8 @@ func tick(delta: float, hour: float, sprinting: bool, in_shade: bool) -> void:
 	if hour < 6.0 or hour >= 20.0:
 		water_rate *= NIGHT_FACTOR
 		food_rate *= NIGHT_FACTOR
-	food = maxf(food - food_rate * delta, 0.0)
-	water = maxf(water - water_rate * delta, 0.0)
+	food = maxf(food - food_rate * need_mult * delta, 0.0)
+	water = maxf(water - water_rate * need_mult * delta, 0.0)
 	if food <= 0.0 or water <= 0.0:
 		damage(STARVE_DAMAGE * delta)
 	elif food > 50.0 and water > 50.0:

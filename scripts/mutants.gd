@@ -21,6 +21,7 @@ var player_dead := func(): return false
 var world_seed := 1337
 var night := false
 var kills := 0
+var health_mult := 1.0  # difficulty
 var _sounds := {}
 var _count := 0
 var _rng := RandomNumberGenerator.new()
@@ -45,6 +46,7 @@ func spawn(kind: String, pos: Vector3, hp := -1.0) -> Mutant:
 	m.name = "%s%d" % [kind.capitalize(), _count]
 	pos.y = terrain.surface_height(pos.x, pos.z) + 0.05 if terrain else pos.y
 	m.setup(kind, pos, hash("%d:%d" % [world_seed, _count]))
+	m.health *= health_mult
 	if hp > 0.0:
 		m.health = hp
 	m.target = player

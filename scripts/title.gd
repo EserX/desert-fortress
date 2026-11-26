@@ -60,12 +60,21 @@ func show_page(page: String) -> void:
 			var cont := UI.button(_col, "Continue", func(): Game.continue_game(), latest != "")
 			if latest != "":
 				cont.tooltip_text = Game.describe_slot(latest)
-			UI.button(_col, "New game", Game.new_game)
+			UI.button(_col, "New game", func(): show_page("new"))
 			UI.button(_col, "Load game", func(): show_page("load"), Game.has_any_save())
 			UI.button(_col, "Settings", func(): show_page("settings"))
 			UI.button(_col, "Quit to desktop", Game.quit_to_desktop)
 			if latest != "":
 				UI.note(_col, "Last save: " + Game.describe_slot(latest))
+		"new":
+			UI.title(_col, "NEW GAME", 28)
+			UI.note(_col, "Pick a difficulty. It stays with this game.")
+			for level in ["easy", "normal", "hard"]:
+				var d: Dictionary = Game.DIFFICULTIES[level]
+				var b := UI.button(_col, d.name, Game.new_game.bind(level))
+				b.tooltip_text = d.info
+				UI.note(_col, d.info)
+			UI.button(_col, "Back", func(): show_page("main"))
 		"load":
 			UI.title(_col, "LOAD GAME", 28)
 			UI.slot_list(_col, "load", func(slot: String): Game.load_game(slot))

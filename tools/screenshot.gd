@@ -44,6 +44,7 @@ var shots := [
 	{"name": "34_drone_shop", "pos": Vector3(4, 0, 9), "yaw": 0.6, "pitch": 0.0, "hour": 15.0, "drone_shop": true},
 	{"name": "35_upgrades", "pos": Vector3(-0.6, 0, 4.2), "yaw": 0.5, "pitch": -0.2, "hour": 10.0, "upgrades": true},
 	{"name": "36_chest", "pos": Vector3(-0.6, 0, 4.2), "yaw": 0.5, "pitch": -0.2, "hour": 10.0, "bigchest": true},
+	{"name": "37_hint", "pos": Vector3(0, 0, 9), "yaw": 0.3, "pitch": -0.05, "hour": 9.0, "hint": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -141,6 +142,14 @@ func _process(_d: float) -> bool:
 			main.inventory.add_all({"hammer": 1, "pistol": 1})
 		if s.get("drone", false) or s.get("drone_shop", false):
 			_drone_sample()
+		if s.get("hint", false):
+			main.building.load_data([])
+			main.mutants.clear()
+			main.hud.show_hint(main.hints.HINTS.welcome)
+			main.hud._hint_time = 5.0
+		elif main.hud.hint_box.visible:
+			main.hud.hint_box.visible = false
+			main.hud._hint_time = 0.0
 		if s.get("upgrades", false):
 			main.shop.cash = 520
 			main.shop.upgrades = {"zone": 1, "storage": 0, "bench": 2, "radio": 0}
@@ -195,6 +204,8 @@ func _process(_d: float) -> bool:
 			main.pause_menu.resume()
 	elif frame % 20 == 15:
 		DirAccess.make_dir_recursive_absolute("res://screenshots")
+		if not FileAccess.file_exists("res://screenshots/.gdignore"):
+			FileAccess.open("res://screenshots/.gdignore", FileAccess.WRITE).store_string("")  # keep Godot from importing the PNGs
 		var img := root.get_viewport().get_texture().get_image()
 		img.save_png("res://screenshots/%s.png" % s.name)
 		print("saved ", s.name)

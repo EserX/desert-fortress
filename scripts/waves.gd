@@ -16,6 +16,8 @@ signal wave_ended(summary: Dictionary)
 signal siren
 
 var mutants  # Mutants
+var size_mult := 1.0        # difficulty: wave size
+var cash_mult := 1.0        # difficulty: pay
 var world_seed := 1337
 var wave := 0               # number of the last wave that started
 var active := false
@@ -42,8 +44,8 @@ static func wave_size(n: int) -> int:
 ## The mutant types of night n, in arrival order. Night 1 is all walkers;
 ## runners join on night 2, spitters on night 3 and brutes on night 4,
 ## and their share grows each night.
-static func wave_mix(n: int, rng: RandomNumberGenerator) -> Array:
-	var size := wave_size(n)
+static func wave_mix(n: int, rng: RandomNumberGenerator, mult := 1.0) -> Array:
+	var size := maxi(2, int(round(wave_size(n) * mult)))
 	var weights := {"walker": 1.0}
 	if n >= 2:
 		weights.runner = minf(0.25 + 0.05 * n, 0.8)
@@ -75,7 +77,7 @@ static func wave_mix(n: int, rng: RandomNumberGenerator) -> Array:
 func preview_next() -> Array:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash("wave:%d:%d" % [world_seed, wave + 1])
-	return wave_mix(wave + 1, rng)
+	return wave_mix(wave + 1, rng, size_mult)
 
 
 ## "6 walkers, 2 runners, 1 brute"
@@ -99,7 +101,7 @@ func start_wave() -> void:
 	wave += 1
 	active = true
 	_rng.seed = hash("wave:%d:%d" % [world_seed, wave])
-	queue = wave_mix(wave, _rng)
+	queue = wave_mix(wave, _rng, size_mult)
 	to_spawn = queue.size()
 	spawn_timer = 1.0
 	stats = {"kills": 0, "damage": 0.0, "lost": 0, "deaths": 0, "size": to_spawn, "bounty": 0, "pieces": 0}
@@ -155,6 +157,7 @@ func end_wave(cleared: bool) -> void:
 	s.wave = wave
 	s.cleared = cleared
 	s.merge(cash_for(s), true)
+	s.cash = int(round(s.cash * cash_mult))
 	wave_ended.emit(s)
 
 
@@ -164,8 +167,8 @@ func on_dawn(_day: int) -> void:
 
 func note_kill(m: Node) -> void:
 	if active:
-		stats.kills += 1
-		stats.bounty += int(BOUNTY.get(m.type, 10))
+		stats.kills = int(stats.get("kills", 0)) + 1
+		stats.bounty = int(stats.get("bounty", 0)) + int(BOUNTY.get(m.type, 10))
 
 
 ## Cash for a night: the bounty on kills, a payment for surviving it, and a
@@ -186,17 +189,17 @@ static func cash_for(s: Dictionary) -> Dictionary:
 
 func note_damage(amount: float) -> void:
 	if active:
-		stats.damage += amount
+		stats.damage = float(stats.get("damage", 0.0)) + amount
 
 
 func note_lost() -> void:
 	if active:
-		stats.lost += 1
+		stats.lost = int(stats.get("lost", 0)) + 1
 
 
 func note_death() -> void:
 	if active:
-		stats.deaths += 1
+		stats.deaths = int(stats.get("deaths", 0)) + 1
 
 
 ## Lines for the end-of-wave summary.

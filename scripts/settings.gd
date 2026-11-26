@@ -10,6 +10,8 @@ var mouse_sensitivity := 1.0  # multiplier, 0.25 .. 3.0
 var fov := 75.0
 var volume := 0.8             # 0 .. 1
 var fullscreen := false
+var hints := true             # first-time hints
+var hints_seen: Array = []    # ids of hints already shown
 
 
 func _ready() -> void:
@@ -25,6 +27,8 @@ func load_settings() -> void:
 	fov = cfg.get_value("video", "fov", fov)
 	fullscreen = cfg.get_value("video", "fullscreen", fullscreen)
 	volume = cfg.get_value("audio", "volume", volume)
+	hints = cfg.get_value("game", "hints", hints)
+	hints_seen = cfg.get_value("game", "hints_seen", hints_seen)
 
 
 func save_settings() -> void:
@@ -33,6 +37,8 @@ func save_settings() -> void:
 	cfg.set_value("video", "fov", fov)
 	cfg.set_value("video", "fullscreen", fullscreen)
 	cfg.set_value("audio", "volume", volume)
+	cfg.set_value("game", "hints", hints)
+	cfg.set_value("game", "hints_seen", hints_seen)
 	cfg.save(PATH)
 
 

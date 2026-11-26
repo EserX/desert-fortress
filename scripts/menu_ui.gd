@@ -74,6 +74,14 @@ static func settings_page(col: VBoxContainer) -> void:
 	fs.button_pressed = Settings.fullscreen
 	fs.toggled.connect(func(on: bool): Settings.set_value("fullscreen", on))
 	col.add_child(fs)
+	var hints := CheckButton.new()
+	hints.text = "First-time hints (turning them on shows them all again)"
+	hints.button_pressed = Settings.hints
+	hints.toggled.connect(func(on: bool):
+		if on:
+			Settings.hints_seen = []
+		Settings.set_value("hints", on))
+	col.add_child(hints)
 
 
 static func _slider(col: VBoxContainer, fmt: String, key: String, lo: float, hi: float, step: float, shown_scale: float) -> void:

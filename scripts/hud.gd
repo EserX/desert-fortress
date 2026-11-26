@@ -16,6 +16,10 @@ var day_night  # DayNight
 var waves  # Waves
 var guns  # Guns
 var shop  # Shop
+var hint_box: PanelContainer
+var _hint_label: Label
+var _hint_queue: Array = []
+var _hint_time := 0.0
 var ammo_label: Label
 var scope: Control
 var _cross: Label
@@ -80,6 +84,24 @@ func _ready() -> void:
 	root.add_child(scope)
 	root.move_child(scope, 0)
 	_build_summary(root)
+	hint_box = PanelContainer.new()
+	var hs := StyleBoxFlat.new()
+	hs.bg_color = Color(0.1, 0.07, 0.04, 0.8)
+	hs.border_color = Color(0.95, 0.75, 0.4, 0.9)
+	hs.set_border_width_all(1)
+	hs.border_width_left = 4
+	hs.set_corner_radius_all(4)
+	hs.set_content_margin_all(12)
+	hint_box.add_theme_stylebox_override("panel", hs)
+	hint_box.position = Vector2(20, 52)
+	hint_box.custom_minimum_size = Vector2(400, 0)
+	hint_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hint_box.visible = false
+	root.add_child(hint_box)
+	_hint_label = _label("", 17)
+	_hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_hint_label.custom_minimum_size = Vector2(376, 0)
+	hint_box.add_child(_hint_label)
 
 	var title := _label("DESERT FORTRESS  v%s" % ProjectSettings.get_setting("application/config/version", ""), 18)
 	title.position = Vector2(20, 16)
@@ -210,6 +232,13 @@ func _process(delta: float) -> void:
 	if _banner_time > 0.0:
 		_banner_time -= delta
 		banner.modulate.a = clampf(minf(_banner_time, 5.0 - _banner_time) * 1.5, 0.0, 1.0)
+	if _hint_time > 0.0:
+		_hint_time -= delta
+		hint_box.modulate.a = clampf(minf(_hint_time, 10.0 - _hint_time) * 2.0, 0.0, 1.0)
+		if _hint_time <= 0.0:
+			hint_box.visible = false
+	elif not _hint_queue.is_empty():
+		_show_next_hint()
 	if _summary_time > 0.0:
 		_summary_time -= delta
 		summary.modulate.a = clampf(minf(_summary_time, 10.0 - _summary_time) * 2.0, 0.0, 1.0)
@@ -405,6 +434,21 @@ func _draw_scope() -> void:
 	scope.draw_line(Vector2(c.x, c.y - r), Vector2(c.x, c.y - 14), line, 2.0)
 	scope.draw_line(Vector2(c.x, c.y + 14), Vector2(c.x, c.y + r), line, 2.0)
 	scope.draw_circle(c, 2.0, Color(0.9, 0.1, 0.05))
+
+
+## A tip in a box under the title for 10 seconds (one at a time, the rest wait).
+func show_hint(text: String) -> void:
+	_hint_queue.append(text)
+	if _hint_time <= 0.0:
+		_show_next_hint()
+
+
+func _show_next_hint() -> void:
+	_hint_label.text = "TIP  " + _hint_queue.pop_front()
+	hint_box.size = Vector2.ZERO
+	hint_box.visible = true
+	hint_box.modulate.a = 0.0
+	_hint_time = 10.0
 
 
 ## End-of-wave summary card under the compass.

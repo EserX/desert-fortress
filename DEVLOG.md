@@ -2,6 +2,19 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v0.12.0 (2026-11-26): Hands, melee weapons and a training dummy
+- **First-person hands:** with the hammer, the rusty pipe or the machete selected you now see your hands holding it, with a gentle idle sway. Other items (food, water, materials) keep the hands hidden, so the view stays clear.
+- **Rusty pipe:** new games start with one (hotbar slot 2), and older saves get one on load. **Left click** swings it: 25 damage, 12 stamina, one swing every 0.75 s, 2.4 m reach.
+- **Machete:** made at the workbench (3 scrap, 1 cloth, 1 wood). 40 damage, 9 stamina, a swing every 0.55 s, 2.2 m reach.
+- **Stamina:** each swing uses the same stamina as sprinting. If you don't have enough left, you can't swing.
+- **Hit feedback:** a generated whoosh on every swing, a thud on a target and a clank on walls and rocks, an X flashing on the crosshair (orange on a target, grey on a wall), and the damage floating up from what you hit.
+- **Training dummy:** a straw dummy on a post just left of the flag. It wobbles back and forth when hit and never breaks. Damage goes through a `take_hit(damage, point, dir)` method, which the v0.13 mutants will use too.
+- The hammer plays the same swing when it repairs or upgrades.
+- **Tests:** swing stamina cost, swing cooldown, too tired to swing, pipe and machete damage on the dummy, wobble, damage number, missing, hands hiding with other items, the hammer not swinging as a weapon, crafting a machete, older saves getting a pipe. New screenshot view `17_melee`.
+
+**Try:** walk to the dummy left of the flag, press 2 and click away. Then make a machete at a workbench and feel the difference. Watch the stamina bar.
+**Next:** v0.13, the first mutant (the Walker).
+
 ## v0.11.0 (2026-11-26): Base zone, storage chest and workbench
 - **Base build zone:** everything must be built within **26 m of the flag**. A ring of stakes with red rags marks the edge, and in build mode a bright dashed line on the sand shows it too. Outside it the preview turns red: "Outside the base zone".
 - **New build pieces** (key 9 for the chest, or the mouse wheel): **storage chest** (6 wood, 4 nails), **workbench** (6 wood, 3 scrap, 4 nails) and **spike barricade**. They stand in a square on the sand, a foundation or a floor (upper floors too), and R turns them. They have no material tiers, but the hammer repairs and demolishes them.

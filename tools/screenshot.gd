@@ -24,6 +24,7 @@ var shots := [
 	{"name": "14_tiers", "pos": Vector3(7, 0, 16.5), "yaw": 0.0, "pitch": -0.1, "hour": 10.0, "tiers": true},
 	{"name": "15_base", "pos": Vector3(1, 0, 10), "yaw": PI + 0.15, "pitch": -0.12, "hour": 16.0, "base": true, "zone": true},
 	{"name": "16_bench", "pos": Vector3(-1, 0, 19.6), "yaw": 0.0, "pitch": -0.3, "hour": 16.0, "base": true, "bench": true},
+	{"name": "17_melee", "pos": Vector3(-2.6, 0, 6.0), "yaw": 0.2, "pitch": -0.08, "hour": 9.5, "melee": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -98,6 +99,15 @@ func _process(_d: float) -> bool:
 			main.inventory_ui.open_bench(main.building.slot_key({"kind": "obj", "cx": -1, "cz": 8, "dir": 0, "level": 0}))
 		elif main.inventory_ui.bench_key != "":
 			main.inventory_ui.close()
+		if s.get("melee", false):
+			main.inventory.load_data({})
+			main.inventory.add("machete", 1)
+			main.inventory.selected = 0
+			main.melee.set_item("machete")
+			main.melee.play_swing(30.0)
+			main.melee.swing_time = 0.12
+			main.dummy.take_hit(40.0, main.dummy.global_position + Vector3(0, 1.5, 0.2), Vector3(0, 0, -1))
+			main.hud.show_hitmarker("target")
 		if s.get("build", false):
 			_build_sample()
 		elif s.get("zone", false):

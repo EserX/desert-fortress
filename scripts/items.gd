@@ -11,6 +11,8 @@ const ITEMS := {
 	"water": {"name": "Water bottle", "weight": 0.5, "stack": 10},
 	"cement": {"name": "Cement bag", "weight": 2.0, "stack": 10},
 	"hammer": {"name": "Hammer", "weight": 1.0, "stack": 1},
+	"pipe": {"name": "Rusty pipe", "weight": 1.5, "stack": 1},
+	"machete": {"name": "Machete", "weight": 0.8, "stack": 1},
 	"bandage": {"name": "Bandage", "weight": 0.1, "stack": 10},
 	"spike_barricade": {"name": "Spike barricade", "weight": 4.0, "stack": 5},
 }
@@ -26,6 +28,7 @@ const LOOT_TABLES := {
 ## Workbench recipes, in the order shown: item -> {"count": made, "cost": {item: n}, "info": String}.
 const RECIPES := {
 	"hammer": {"count": 1, "cost": {"scrap": 2, "wood": 2}, "info": "Repairs, upgrades and demolishes"},
+	"machete": {"count": 1, "cost": {"scrap": 3, "cloth": 1, "wood": 1}, "info": "Hits harder and faster than the pipe"},
 	"bandage": {"count": 1, "cost": {"cloth": 2}, "info": "Heals 30 health (use it like food)"},
 	"spike_barricade": {"count": 1, "cost": {"wood": 4, "nails": 4}, "info": "Build it in build mode, keeps mutants back"},
 }

@@ -65,6 +65,7 @@ var building  # Building
 var break_key := ""           # the piece it is tearing at in BREAK
 var _blocked_t := 0.0
 var _spit_cd := 0.0
+var slow_mult := 1.0          # barbed wire and spike strips slow it down for a moment
 var _los := false             # line of sight to the target, refreshed a few times a second
 var _wander_to := Vector3.ZERO
 var _wander_wait := 0.0
@@ -407,6 +408,8 @@ func _physics_process(delta: float) -> void:
 				_attack_t = -1.0
 				_spit_cd = stats.spit.cooldown
 				state = State.CHASE
+	speed *= slow_mult
+	slow_mult = move_toward(slow_mult, 1.0, delta * 2.0)
 	# Walk around whatever is in the way: sidestep for a moment when stuck.
 	if want != Vector3.ZERO and _side_t > 0.0:
 		_side_t -= delta
@@ -486,6 +489,11 @@ func _break(delta: float) -> void:
 	if _attack_t > stats.windup + 0.35:
 		_attack_t = -1.0
 		_cooldown = stats.cooldown
+
+
+## Caught in wire or on spikes: move at this share of the normal speed for a moment.
+func slow(f: float) -> void:
+	slow_mult = minf(slow_mult, f)
 
 
 ## Damage without the flinch (spikes, traps).

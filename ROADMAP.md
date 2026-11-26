@@ -34,7 +34,7 @@ One version per development run, in this order. The full plan with reasons is in
 ### M5: Defence
 - [x] v0.17: Pistol: aim down sights, recoil, muzzle flash, reload, ammo as an item, sound
 - [x] v0.18: Shotgun and rifle, weapon switching, ammo types, headshot bonus
-- [ ] v0.19: Traps: spike strip, barbed wire (slows), landmine
+- [x] v0.19: Traps: spike strip, barbed wire (slows), landmine
 - [ ] v0.20: Fire pit, electric fence with a fuel generator, floodlights
 - [ ] v0.21: Auto-turret fed from an ammo box, range circle shown while placing
 

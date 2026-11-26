@@ -24,6 +24,7 @@ const Dummy = preload("res://scripts/dummy.gd")
 const Mutants = preload("res://scripts/mutants.gd")
 const Waves = preload("res://scripts/waves.gd")
 const Guns = preload("res://scripts/guns.gd")
+const Traps = preload("res://scripts/traps.gd")
 
 const DISCOVER_RANGE := 45.0
 const REFILLS_PER_MORNING := 4
@@ -61,6 +62,7 @@ var dummy: Dummy
 var mutants: Mutants
 var waves: Waves
 var guns: Guns
+var traps: Traps
 ## Wrecks and ruins: {"key": "w3", "kind": "wreck", "pos": Vector3}.
 var places: Array = []
 ## Keys of places you have been near.
@@ -151,6 +153,14 @@ func _ready() -> void:
 	add_child(mutants)
 	mutants.top_up(day_night.day)
 
+	traps = Traps.new()
+	traps.name = "Traps"
+	traps.building = building
+	traps.mutants = mutants
+	traps.player = player
+	add_child(traps)
+	traps.exploded.connect(func(pos): mutants.alert(pos, 60.0))
+
 	waves = Waves.new()
 	waves.name = "Waves"
 	waves.mutants = mutants
@@ -229,6 +239,12 @@ func _ready() -> void:
 	waves.siren.connect(func(): hud.show_banner("Siren! Mutants come at nightfall. Get back to the base."))
 	mutants.player_hit.connect(_on_player_hit)
 	mutants.piece_hit.connect(_on_piece_attacked)
+	traps.player_hurt.connect(func(dmg, from, cause):
+		if survival.dead:
+			return
+		survival.damage(dmg, cause)
+		var local: Vector3 = player.global_transform.basis.inverse() * (from - player.global_position)
+		hud.show_damage(atan2(local.x, -local.z)))
 	building.piece_destroyed.connect(func(_k, t): hud.show_pickup(["%s was destroyed!" % Building.PIECES[t].name]))
 	building.piece_collapsed.connect(func(_k, t): hud.show_pickup(["%s collapsed" % Building.PIECES[t].name]))
 	melee.hit_landed.connect(hud.show_hitmarker)

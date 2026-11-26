@@ -2,6 +2,19 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v0.19.0 (2026-11-26): Traps
+Three new pieces in build mode (mouse wheel past the spike barricade). They don't block anyone, so you and the mutants walk straight over them, and they are set for mutant weight, so they never hurt you (except a mine's blast).
+- **Spike strip** (2 wood, 8 nails): a board bristling with nails. A mutant stepping on it takes **18 damage**, at most once every 0.8 s, and stumbles (slowed for a moment). Each bite wears the strip down (12 of its 250 hit points), so it lasts about 20 bites.
+- **Barbed wire** (3 scrap, 4 nails): a low fence of wire on two posts. A mutant caught in it moves at **35% speed** and is cut for 4 damage a second. The wire wears 3 hit points a second per mutant in it. Great in front of walls, to hold them where your guns can reach them.
+- **Landmine** (4 scrap, 4 nails, 1 cloth): buried, with a little flag so you know where it is. When a mutant steps on it, it beeps and goes off a quarter of a second later: **220 damage at the centre, less out to 5 m** (a walker on it is blown apart, a brute survives at around 260 health), 120 damage to building pieces within 3 m, and up to 70 to you if you are within 5 m. Fireball, flash, smoke and a deep boom that brings mutants within 60 m running.
+- Traps have hit points like any piece: the hammer shows them, repairs them and demolishes them (half refund).
+- Dust from collapsing pieces and mine smoke are now little low-poly puffs instead of flat squares.
+- **Code:** new `traps.gd` (checks every trap against every mutant ten times a second, mine fuses and explosions). Traps sit on their own physics layer (5), which only the hammer looks at. Mutants have `slow()`.
+- **Tests:** each trap can be built, traps don't block, the strip biting and wearing and not biting every tick, wire slowing and cutting, the mine's fuse, blast, walker on it killed, a walker 3.5 m away hurt, a brute surviving, you being safe at a distance and hurt close up, and a strip wearing out. New screenshot view `28_traps`.
+
+**Try:** lay barbed wire 4–6 m in front of your weakest wall, spike strips in the gaps and a few mines further out where the waves come in.
+**Next:** v0.20, a fire pit, an electric fence with a fuel generator, and floodlights.
+
 ## v0.18.0 (2026-11-26): Shotgun, rifle and headshots
 - **Shotgun:** pump-action, 6 shells. Each blast fires 9 pellets (13 damage each) in a wide cone, so up close it nearly kills a walker in one blast, but past 20 m only a pellet or two land. Slow (one blast every 0.85 s), heavy kick, a deep boom, and it can be heard 60 m away. 2.6 s reload.
 - **Hunting rifle:** bolt action, 5 rounds, 90 damage, reaches 220 m. **Aiming looks through the scope:** the screen goes black around a round sight picture with cross hairs and a red dot, zoomed in about 3×. At the hip it is inaccurate. One shot every 1.1 s, 2.4 s reload, and loud (75 m).

@@ -50,8 +50,14 @@ const PIECES := {
 	"chest": {"name": "Storage chest", "slot": "obj", "cost": {"wood": 6, "nails": 4}, "dirs": 4, "fixed": true},
 	"workbench": {"name": "Workbench", "slot": "obj", "cost": {"wood": 6, "scrap": 3, "nails": 4}, "dirs": 4, "fixed": true},
 	"spikes": {"name": "Spike barricade", "slot": "obj", "cost": {"spike_barricade": 1}, "dirs": 2, "fixed": true, "pickup": true},
+	"spike_strip": {"name": "Spike strip", "slot": "obj", "cost": {"wood": 2, "nails": 8}, "dirs": 2, "fixed": true, "trap": true},
+	"barbed_wire": {"name": "Barbed wire", "slot": "obj", "cost": {"scrap": 3, "nails": 4}, "dirs": 2, "fixed": true, "trap": true},
+	"landmine": {"name": "Landmine", "slot": "obj", "cost": {"scrap": 4, "nails": 4, "cloth": 1}, "dirs": 1, "fixed": true, "trap": true},
 }
-const ORDER := ["foundation", "wall", "doorway", "window", "floor", "stairs", "ramp", "roof", "chest", "workbench", "spikes"]
+const ORDER := ["foundation", "wall", "doorway", "window", "floor", "stairs", "ramp", "roof", "chest", "workbench", "spikes", "spike_strip", "barbed_wire", "landmine"]
+## Traps don't block anyone: their bodies sit on their own physics layer (5),
+## which only the hammer's aim ray looks at.
+const TRAP_LAYER := 16
 ## Edge pieces that hold up whatever is built above them.
 const WALLISH := ["wall", "doorway", "window"]
 ## Cell pieces you can stand on at an upper level.
@@ -355,6 +361,26 @@ static func piece_boxes(type: String) -> Array:
 				var x := -0.8 + i * 0.4
 				out.append([Vector3(0.08, 0.08, 1.4), Vector3(x, 0.5, 0), "plank", 0.6])
 				out.append([Vector3(0.08, 0.08, 1.4), Vector3(x + 0.1, 0.5, 0), "wood", -0.6])
+		"spike_strip":
+			out.append([Vector3(1.8, 0.05, 0.5), Vector3(0, 0.03, 0), "wood_dark"])
+			for i in 8:
+				for j in [-1.0, 0.0, 1.0]:
+					out.append([Vector3(0.025, 0.13, 0.025), Vector3(-0.77 + i * 0.22 + j * 0.05, 0.11, j * 0.15), "metal"])
+		"barbed_wire":
+			for sx in [-1.0, 1.0]:
+				out.append([Vector3(0.07, 0.95, 0.07), Vector3(sx * 0.85, 0.47, 0), "wood_dark"])
+			for h in [0.22, 0.45, 0.7, 0.9]:
+				out.append([Vector3(1.75, 0.02, 0.02), Vector3(0, h, 0), "metal"])
+			for z in [-0.2, 0.2]:
+				for h in [0.3, 0.6]:
+					out.append([Vector3(1.75, 0.02, 0.02), Vector3(0, h + z * 0.2, z), "metal"])
+			for i in 9:
+				out.append([Vector3(0.05, 0.05, 0.05), Vector3(-0.8 + i * 0.2, [0.22, 0.45, 0.7][i % 3], 0), "rust"])
+		"landmine":
+			out.append([Vector3(0.36, 0.07, 0.36), Vector3(0, 0.02, 0), "rust"])
+			out.append([Vector3(0.12, 0.04, 0.12), Vector3(0, 0.07, 0), "metal"])
+			out.append([Vector3(0.025, 0.45, 0.025), Vector3(0.3, 0.22, 0.3), "wood"])  # a little marker flag
+			out.append([Vector3(0.14, 0.09, 0.01), Vector3(0.37, 0.4, 0.3), "rust"])
 	return out
 
 
@@ -394,6 +420,12 @@ static func piece_colliders(type: String) -> Array:
 			return [[Vector3(1.7, 0.95, 0.8), Vector3(0, 0.475, 0), 0.0]]
 		"spikes":
 			return [[Vector3(1.9, 1.0, 1.2), Vector3(0, 0.5, 0), 0.0]]
+		"spike_strip":
+			return [[Vector3(1.8, 0.25, 0.5), Vector3(0, 0.12, 0), 0.0]]
+		"barbed_wire":
+			return [[Vector3(1.8, 0.95, 0.5), Vector3(0, 0.47, 0), 0.0]]
+		"landmine":
+			return [[Vector3(0.5, 0.3, 0.5), Vector3(0, 0.15, 0), 0.0]]
 	return []
 
 
@@ -442,6 +474,9 @@ func place(type: String, slot: Dictionary, y: float, gate_open := false, tier :=
 		col.position = c[1]
 		col.rotation.x = c[2]
 		body.add_child(col)
+	if PIECES[type].get("trap", false):
+		body.collision_layer = TRAP_LAYER
+		body.collision_mask = 0
 	add_child(body)
 	if tier < 0:
 		tier = base_tier(type)
@@ -774,12 +809,13 @@ func _debris(rec: Dictionary) -> void:
 	dust.gravity = Vector3(0, -0.6, 0)
 	dust.scale_amount_min = 0.5
 	dust.scale_amount_max = 1.2
-	var q := QuadMesh.new()
-	q.size = Vector2(0.6, 0.6)
+	var q := SphereMesh.new()
+	q.radius = 0.3
+	q.height = 0.6
+	q.radial_segments = 6
+	q.rings = 3
 	var dm := StandardMaterial3D.new()
-	dm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	dm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	dm.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
 	dm.albedo_color = Color(0.8, 0.68, 0.5, 0.5)
 	q.material = dm
 	dust.mesh = q

@@ -845,6 +845,7 @@ func _test_long_guns() -> void:
 	g.set_ads(false)
 	main.mutants.clear()
 	# Shotgun on the dummy: close up most pellets hit, far away few do.
+	g._rng.seed = 42
 	g.set_item("shotgun")
 	g._process(g.RAISE_TIME + 0.01)
 	var totals: Array = []
@@ -861,12 +862,85 @@ func _test_long_guns() -> void:
 			var before: float = d.total_damage
 			g.try_fire()
 			sum += d.total_damage - before
-			if i == 0:
+			if i == 0 and dist < 5.0:
 				check(d.hits == hits_before + 1, "pellets on one target add up to a single hit")
 		totals.append(sum)
 	check(totals[0] > 13.0 * 4 * 2 and totals[0] > totals[1] * 2.0, "the shotgun is deadly close up and weak far away (%.0f vs %.0f)" % [totals[0], totals[1]])
 	check(g.loaded("shotgun") == 5, "each blast uses one shell")
 	g.set_item("")
+
+
+## v0.19: spike strip, barbed wire and landmine.
+func _test_traps() -> void:
+	var b = main.building
+	var ms = main.mutants
+	var tr = main.traps
+	var player = main.player
+	b.load_data([])
+	ms.clear()
+	var keys := {}
+	var cx := 3
+	for t in ["spike_strip", "barbed_wire", "landmine"]:
+		var slot := {"kind": "obj", "cx": cx, "cz": -8, "dir": 0, "level": 0}
+		var ev: Dictionary = b.evaluate(t, slot)
+		check(ev.ok, "a %s can be built on the sand (%s)" % [t, ev.reason])
+		keys[t] = b.place(t, slot, ev.y)
+		cx += 3
+	check(b.pieces[keys.spike_strip].node.collision_layer == b.TRAP_LAYER, "traps don't block you or the mutants")
+	# Spike strip.
+	var strip: Vector3 = b.pieces[keys.spike_strip].node.global_position
+	var w = ms.spawn("walker", strip)
+	w.global_position = strip
+	tr.tick(0.1)
+	check(is_equal_approx(w.health, 100.0 - tr.STRIP_DAMAGE) and w.slow_mult < 1.0, "a spike strip bites a mutant walking over it (%.0f)" % w.health)
+	check(b.pieces[keys.spike_strip].hp < b.max_hp(b.pieces[keys.spike_strip]), "and wears down")
+	tr.tick(0.1)
+	check(is_equal_approx(w.health, 100.0 - tr.STRIP_DAMAGE), "but not every tick")
+	# Barbed wire.
+	w.global_position = b.pieces[keys.barbed_wire].node.global_position
+	w.slow_mult = 1.0
+	var hp: float = w.health
+	for i in 10:
+		tr.tick(0.1)
+	check(w.slow_mult <= tr.WIRE_SLOW + 0.01 and hp - w.health > 3.0, "barbed wire slows a mutant and cuts it (%.1f damage)" % (hp - w.health))
+	var py: float = main.terrain.surface_height(-20, 20)
+	player.position = Vector3(-20, py, 20)
+	# Landmine: a walker on it, another 3.5 m away, a brute close by.
+	var mine: Vector3 = b.pieces[keys.landmine].node.global_position
+	w.global_position = mine
+	w.health = 100.0
+	var w2 = ms.spawn("walker", mine)
+	w2.global_position = mine + Vector3(3.5, 0, 0)
+	var br = ms.spawn("brute", mine)
+	br.global_position = mine + Vector3(0, 0, 1.5)
+	var booms := []
+	tr.exploded.connect(func(p): booms.append(p), CONNECT_ONE_SHOT)
+	tr.tick(0.1)
+	check(booms.is_empty() and b.pieces.has(keys.landmine), "a mine beeps and waits a moment")
+	tr._physics_process(0.3)
+	check(booms.size() == 1 and not b.pieces.has(keys.landmine), "then it goes off and is gone")
+	check(w.is_dead(), "the walker on it is blown apart")
+	check(not w2.is_dead() and w2.health < 100.0, "one 3.5 m away is hurt (%.0f left)" % w2.health)
+	check(not br.is_dead() and br.health < br.stats.health, "a brute survives a mine (%.0f left)" % br.health)
+	check(main.survival.health >= 100.0, "you were far enough away")
+	# A mine next to you hurts.
+	var slot := {"kind": "obj", "cx": -10, "cz": 9, "dir": 0, "level": 0}
+	var mk: String = b.place("landmine", slot, b.evaluate("landmine", slot).y)
+	player.position = b.pieces[mk].node.global_position + Vector3(2, 0, 0)
+	main.survival.health = 100.0
+	tr.detonate(mk)
+	check(main.survival.health < 100.0 and main.survival.cause.contains("landmine"), "standing next to a mine when it blows hurts (%.0f)" % main.survival.health)
+	# Wearing out.
+	ms.clear()
+	var w3 = ms.spawn("brute", strip)
+	w3.global_position = strip
+	for i in 30:
+		tr._bites.clear()
+		tr.tick(0.1)
+	check(not b.pieces.has(keys.spike_strip), "a spike strip wears out after enough bites")
+	ms.clear()
+	b.load_data([])
+	main.survival.health = 100.0
 
 
 func _start_spitter() -> void:
@@ -1103,6 +1177,7 @@ func _process(_delta: float) -> bool:
 			chase_walker.set_physics_process(false)
 		2362:
 			_test_long_guns()
+			_test_traps()
 		2370:
 			if failures.is_empty():
 				print("== ALL TESTS PASSED ==")

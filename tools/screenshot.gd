@@ -35,6 +35,7 @@ var shots := [
 	{"name": "25_pistol_ads", "pos": Vector3(60, 0, 60), "yaw": 0.4, "pitch": -0.03, "hour": 18.8, "gun": "pistol", "aim": true},
 	{"name": "26_shotgun", "pos": Vector3(60, 0, 60), "yaw": 0.4, "pitch": -0.03, "hour": 9.0, "gun": "shotgun", "aim": false},
 	{"name": "27_rifle_scope", "pos": Vector3(60, 0, 60), "yaw": 0.4, "pitch": -0.0, "hour": 9.0, "gun": "rifle", "aim": true},
+	{"name": "28_traps", "pos": Vector3(5, 0, -0.5), "yaw": 0.55, "pitch": -0.3, "hour": 16.5, "traps": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -124,6 +125,8 @@ func _process(_d: float) -> bool:
 			_gun_sample(p, s.gun, s.aim)
 		elif main.guns.item != "":
 			main.guns.set_item("")
+		if s.get("traps", false):
+			_traps_sample()
 		if s.get("types", false):
 			_types_sample(p)
 		if s.get("breakin", false):
@@ -326,3 +329,19 @@ func _gun_sample(p: Node3D, gun: String, aimed: bool) -> void:
 		main.guns._flash.visible = true
 		main.guns._flash_t = 30.0
 		main.guns._kick = 0.4
+
+
+## A line of traps north of the flag, a walker caught in the wire and a mine going off (v0.19).
+func _traps_sample() -> void:
+	var b = main.building
+	var ms = main.mutants
+	b.load_data([])
+	ms.clear()
+	for o in [["spike_strip", -1, -2], ["spike_strip", 0, -2], ["spike_strip", 1, -2], ["barbed_wire", -1, -4], ["barbed_wire", 0, -4], ["barbed_wire", 1, -4], ["landmine", -1, -6], ["landmine", 1, -6]]:
+		var slot := {"kind": "obj", "cx": o[1], "cz": o[2], "dir": 0, "level": 0}
+		b.place(o[0], slot, b.evaluate(o[0], slot).y)
+	var w = ms.spawn("walker", Vector3(1.5, 0, -6.8))
+	w.rotation.y = PI
+	w.set_physics_process(false)
+	w._animate(0.0, 0.5)
+	main.traps._explosion(Vector3(-3.5, main.terrain.surface_height(-3.5, -11), -11))

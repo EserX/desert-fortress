@@ -17,6 +17,9 @@ const MINE_RADIUS := 5.0
 const MINE_DAMAGE := 220.0     # at the centre, less further out
 const MINE_PLAYER_DAMAGE := 70.0
 const MINE_PIECE_DAMAGE := 120.0
+const SHOCK_DAMAGE := 20.0     # electric fence, per jolt
+const SHOCK_EVERY := 0.5
+const FIRE_DPS := 12.0
 
 signal player_hurt(damage: float, from: Vector3, cause: String)
 signal exploded(pos: Vector3)
@@ -38,6 +41,10 @@ func _on_trap(rec: Dictionary, m: Node3D) -> bool:
 	match rec.type:
 		"landmine":
 			return Vector2(local.x, local.z).length() < 0.9
+		"electric_fence":
+			return absf(local.x) < 1.05 and absf(local.z) < 0.8 and local.y > -0.5 and local.y < 2.0
+		"fire_pit":
+			return Vector2(local.x, local.z).length() < 0.85
 		_:
 			return absf(local.x) < 1.0 and absf(local.z) < 0.55
 
@@ -63,7 +70,8 @@ func _physics_process(delta: float) -> void:
 func tick(dt: float) -> void:
 	var traps: Array = []
 	for key in building.pieces:
-		if building.PIECES[building.pieces[key].type].get("trap", false):
+		var rec: Dictionary = building.pieces[key]
+		if building.PIECES[rec.type].get("trap", false) or rec.get("powered", false) or rec.get("burn", 0.0) > 0.0:
 			traps.append(key)
 	if traps.is_empty():
 		return
@@ -86,6 +94,16 @@ func tick(dt: float) -> void:
 					m.slow(WIRE_SLOW)
 					m.hurt(WIRE_DPS * dt)
 					building.damage(key, WIRE_WEAR * dt)
+				"electric_fence":
+					var bk := "%s|%d" % [key, m.get_instance_id()]
+					if rec.get("powered", false) and not _bites.has(bk):
+						_bites[bk] = SHOCK_EVERY
+						m.hurt(SHOCK_DAMAGE)
+						m.slow(0.15)
+						building.damage(key, 2.0)
+						_zap(m.global_position + Vector3(0, 1.0, 0))
+				"fire_pit":
+					m.hurt(FIRE_DPS * dt)
 				"landmine":
 					if not _fuses.has(key):
 						_fuses[key] = MINE_FUSE
@@ -113,6 +131,47 @@ func detonate(key: String) -> void:
 			building.damage(k, MINE_PIECE_DAMAGE)
 	_explosion(pos)
 	exploded.emit(pos)
+
+
+## Blue sparks and a crackle where a mutant touches a live fence.
+func _zap(at: Vector3) -> void:
+	var p := CPUParticles3D.new()
+	p.one_shot = true
+	p.amount = 12
+	p.lifetime = 0.35
+	p.explosiveness = 1.0
+	p.spread = 180.0
+	p.initial_velocity_min = 2.0
+	p.initial_velocity_max = 5.0
+	var q := BoxMesh.new()
+	q.size = Vector3(0.03, 0.03, 0.12)
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = Color(0.6, 0.9, 1.0)
+	q.material = mat
+	p.mesh = q
+	add_child(p)
+	p.global_position = at
+	p.emitting = true
+	get_tree().create_timer(0.6).timeout.connect(p.queue_free)
+	var a := AudioStreamPlayer3D.new()
+	var wav := AudioStreamWAV.new()
+	var n := int(22050 * 0.25)
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	var rng := RandomNumberGenerator.new()
+	for i in n:
+		var t := float(i) / 22050.0
+		var s := (rng.randf_range(-1, 1) * 0.6 + signf(sin(TAU * 120.0 * t)) * 0.3) * exp(-t * 10.0)
+		data.encode_s16(i * 2, int(s * 20000.0))
+	wav.format = AudioStreamWAV.FORMAT_16_BITS
+	wav.mix_rate = 22050
+	wav.data = data
+	a.stream = wav
+	add_child(a)
+	a.global_position = at
+	a.play()
+	a.finished.connect(a.queue_free)
 
 
 func _beep(at: Vector3) -> void:

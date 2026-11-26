@@ -53,8 +53,16 @@ const PIECES := {
 	"spike_strip": {"name": "Spike strip", "slot": "obj", "cost": {"wood": 2, "nails": 8}, "dirs": 2, "fixed": true, "trap": true},
 	"barbed_wire": {"name": "Barbed wire", "slot": "obj", "cost": {"scrap": 3, "nails": 4}, "dirs": 2, "fixed": true, "trap": true},
 	"landmine": {"name": "Landmine", "slot": "obj", "cost": {"scrap": 4, "nails": 4, "cloth": 1}, "dirs": 1, "fixed": true, "trap": true},
+	"fire_pit": {"name": "Fire pit", "slot": "obj", "cost": {"wood": 4}, "dirs": 1, "fixed": true},
+	"generator": {"name": "Fuel generator", "slot": "obj", "cost": {"scrap": 12, "nails": 8}, "dirs": 4, "fixed": true},
+	"electric_fence": {"name": "Electric fence", "slot": "edge", "cost": {"scrap": 5, "nails": 6}, "dirs": 2, "fixed": true},
+	"floodlight": {"name": "Floodlight", "slot": "obj", "cost": {"scrap": 4, "wood": 2, "nails": 2}, "dirs": 4, "fixed": true},
 }
-const ORDER := ["foundation", "wall", "doorway", "window", "floor", "stairs", "ramp", "roof", "chest", "workbench", "spikes", "spike_strip", "barbed_wire", "landmine"]
+const ORDER := ["foundation", "wall", "doorway", "window", "floor", "stairs", "ramp", "roof", "chest", "workbench", "spikes", "spike_strip", "barbed_wire", "landmine", "fire_pit", "generator", "electric_fence", "floodlight"]
+const FENCE_H := 1.7
+const GEN_TANK := 10.0       # fuel cans a generator holds
+const FIRE_MAX := 300.0      # seconds of burning a fire pit holds
+const FIRE_PER_WOOD := 60.0
 ## Traps don't block anyone: their bodies sit on their own physics layer (5),
 ## which only the hammer's aim ray looks at.
 const TRAP_LAYER := 16
@@ -80,6 +88,22 @@ func _ready() -> void:
 	_mats.concrete = LowPoly.material(Color(0.5, 0.49, 0.46))
 	_mats.concrete_dark = LowPoly.material(Color(0.38, 0.37, 0.35))
 	_mats.crack = LowPoly.material(Color(0.08, 0.06, 0.05))
+	_mats.stone = LowPoly.material(Color(0.45, 0.41, 0.37))
+	_mats.live = StandardMaterial3D.new()  # electric fence wire with the power on
+	_mats.live.albedo_color = Color(0.6, 0.9, 1.0)
+	_mats.live.emission_enabled = true
+	_mats.live.emission = Color(0.4, 0.8, 1.0)
+	_mats.live.emission_energy_multiplier = 1.6
+	_mats.lamp = StandardMaterial3D.new()
+	_mats.lamp.albedo_color = Color(1.0, 0.97, 0.85)
+	_mats.lamp.emission_enabled = true
+	_mats.lamp.emission = Color(1.0, 0.95, 0.8)
+	_mats.lamp.emission_energy_multiplier = 0.0
+	_mats.lamp_on = _mats.lamp.duplicate()
+	_mats.lamp_on.emission_energy_multiplier = 4.0
+	_mats.flame = StandardMaterial3D.new()
+	_mats.flame.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_mats.flame.albedo_color = Color(1.0, 0.6, 0.15)
 
 
 ## The material a mesh part uses at a tier (parts are designed in wood).
@@ -381,6 +405,32 @@ static func piece_boxes(type: String) -> Array:
 			out.append([Vector3(0.12, 0.04, 0.12), Vector3(0, 0.07, 0), "metal"])
 			out.append([Vector3(0.025, 0.45, 0.025), Vector3(0.3, 0.22, 0.3), "wood"])  # a little marker flag
 			out.append([Vector3(0.14, 0.09, 0.01), Vector3(0.37, 0.4, 0.3), "rust"])
+		"fire_pit":
+			for i in 8:
+				var a := i * TAU / 8.0
+				out.append([Vector3(0.28, 0.2, 0.22), Vector3(cos(a) * 0.5, 0.1, sin(a) * 0.5), "stone"])
+			out.append([Vector3(0.8, 0.12, 0.12), Vector3(0, 0.1, 0), "wood_dark"])
+			out.append([Vector3(0.12, 0.12, 0.8), Vector3(0, 0.2, 0), "wood_dark"])
+		"generator":
+			out.append([Vector3(1.0, 0.55, 0.6), Vector3(0, 0.38, 0), "metal"])
+			out.append([Vector3(0.7, 0.2, 0.5), Vector3(-0.1, 0.75, 0), "rust"])     # fuel tank
+			out.append([Vector3(1.1, 0.08, 0.7), Vector3(0, 0.07, 0), "wood_dark"])  # skid
+			out.append([Vector3(0.08, 0.4, 0.08), Vector3(0.4, 0.85, 0.2), "metal"])  # exhaust
+			out.append([Vector3(0.08, 0.08, 0.02), Vector3(0.35, 0.5, -0.31), "lamp"])  # running light
+		"electric_fence":
+			for sx in [-1.0, 1.0]:
+				out.append([Vector3(0.1, FENCE_H, 0.1), Vector3(sx * (CELL * 0.5 - 0.05), FENCE_H * 0.5, 0), "wood_dark"])
+			for i in 5:
+				out.append([Vector3(CELL - 0.1, 0.025, 0.025), Vector3(0, 0.3 + i * 0.32, 0), "metal"])
+				for sx in [-1.0, 1.0]:
+					out.append([Vector3(0.05, 0.06, 0.06), Vector3(sx * (CELL * 0.5 - 0.12), 0.3 + i * 0.32, 0), "rust"])
+		"floodlight":
+			out.append([Vector3(0.5, 0.1, 0.5), Vector3(0, 0.05, 0), "concrete_dark"])
+			out.append([Vector3(0.1, 3.2, 0.1), Vector3(0, 1.6, 0), "metal"])
+			out.append([Vector3(0.7, 0.07, 0.07), Vector3(0, 3.2, -0.05), "metal"])
+			for sx in [-1.0, 1.0]:
+				out.append([Vector3(0.3, 0.22, 0.18), Vector3(sx * 0.28, 3.2, -0.15), "metal"])
+				out.append([Vector3(0.26, 0.18, 0.02), Vector3(sx * 0.28, 3.2, -0.25), "lamp"])
 	return out
 
 
@@ -426,6 +476,14 @@ static func piece_colliders(type: String) -> Array:
 			return [[Vector3(1.8, 0.95, 0.5), Vector3(0, 0.47, 0), 0.0]]
 		"landmine":
 			return [[Vector3(0.5, 0.3, 0.5), Vector3(0, 0.15, 0), 0.0]]
+		"fire_pit":
+			return [[Vector3(1.2, 0.3, 1.2), Vector3(0, 0.15, 0), 0.0]]
+		"generator":
+			return [[Vector3(1.1, 0.9, 0.7), Vector3(0, 0.45, 0), 0.0]]
+		"electric_fence":
+			return [[Vector3(CELL, FENCE_H, 0.15), Vector3(0, FENCE_H * 0.5, 0), 0.0]]
+		"floodlight":
+			return [[Vector3(0.5, 3.4, 0.5), Vector3(0, 1.7, 0), 0.0]]
 	return []
 
 
@@ -495,7 +553,75 @@ func place(type: String, slot: Dictionary, y: float, gate_open := false, tier :=
 		body.set_meta("interact_id", "chest:" + key)
 	elif type == "workbench":
 		body.set_meta("interact_id", "bench:" + key)
+	elif type == "generator":
+		rec.fuel = 0.0
+		rec.running = false
+		body.set_meta("interact_id", "gen:" + key)
+	elif type == "fire_pit":
+		rec.burn = 0.0
+		body.set_meta("interact_id", "fire:" + key)
+		_add_flame(rec)
+	elif type == "floodlight":
+		var spot := SpotLight3D.new()
+		spot.position = Vector3(0, 3.1, -0.3)
+		spot.rotation.x = -0.45
+		spot.spot_range = 30.0
+		spot.spot_angle = 38.0
+		spot.light_energy = 5.0
+		spot.light_color = Color(1.0, 0.96, 0.85)
+		spot.visible = false
+		body.add_child(spot)
+		rec.light = spot
+	if type in ["floodlight", "electric_fence"]:
+		rec.powered = false
 	return key
+
+
+## Lamps glow and fence wires look live while the piece has power.
+func set_powered(rec: Dictionary, on: bool) -> void:
+	if rec.get("powered", null) == null and rec.type != "generator":
+		return
+	if rec.has("powered"):
+		if rec.powered == on:
+			return
+		rec.powered = on
+	for mi in _meshes(rec.node):
+		var m: String = mi.get_meta("mat")
+		if m == "lamp":
+			mi.material_override = _mats.lamp_on if on else _mats.lamp
+		elif m == "metal" and rec.type == "electric_fence" and mi.mesh.size.x > 1.0:
+			mi.material_override = _mats.live if on else _mats.metal
+	if rec.has("light"):
+		rec.light.visible = on
+
+
+## Flames (a few unshaded wedges) and a flickering light, shown while it burns.
+func _add_flame(rec: Dictionary) -> void:
+	var flame := Node3D.new()
+	flame.name = "Flame"
+	flame.position.y = 0.25
+	rec.node.add_child(flame)
+	for i in 4:
+		var mi := MeshInstance3D.new()
+		var cone := CylinderMesh.new()
+		cone.top_radius = 0.0
+		cone.bottom_radius = 0.22 - i * 0.03
+		cone.height = 0.7 - i * 0.08
+		cone.radial_segments = 5
+		cone.rings = 1
+		mi.mesh = cone
+		mi.material_override = _mats.flame
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.position = Vector3(cos(i * 2.1) * 0.12, cone.height * 0.5, sin(i * 2.1) * 0.12) if i > 0 else Vector3(0, cone.height * 0.5, 0)
+		flame.add_child(mi)
+	var light := OmniLight3D.new()
+	light.light_color = Color(1.0, 0.6, 0.25)
+	light.light_energy = 2.0
+	light.omni_range = 9.0
+	light.position.y = 0.6
+	flame.add_child(light)
+	flame.visible = false
+	rec.flame = flame
 
 
 ## A plank gate on a hinge inside a doorway. E opens and closes it.
@@ -554,6 +680,14 @@ func prompt(id: String) -> String:
 		return "[E] Open storage chest"
 	if id.begins_with("bench:"):
 		return "[E] Use workbench"
+	var rec: Dictionary = pieces[key]
+	if id.begins_with("gen:"):
+		var state := "running" if rec.running else ("idle, runs at night" if rec.fuel > 0.0 else "out of fuel")
+		return "[E] Add a fuel can   Generator %d/%d cans, %s" % [ceili(rec.fuel), int(GEN_TANK), state]
+	if id.begins_with("fire:"):
+		if rec.burn <= 0.0:
+			return "[E] Light the fire (1 wood)"
+		return "[E] Add wood   Burning %d:%02d" % [int(rec.burn) / 60, int(rec.burn) % 60]
 	return ""
 
 
@@ -930,6 +1064,9 @@ func save_data() -> Array:
 		var d := {"type": p.type, "kind": p.slot.kind, "cx": p.slot.cx, "cz": p.slot.cz, "dir": p.slot.dir, "level": p.slot.level, "y": p.y, "open": p.open, "tier": p.tier, "hp": p.hp}
 		if p.has("storage"):
 			d.items = p.storage.save_data()
+		for k in ["fuel", "burn"]:
+			if p.has(k):
+				d[k] = p[k]
 		out.append(d)
 	return out
 
@@ -943,3 +1080,7 @@ func load_data(data: Array) -> void:
 			var key := place(p.type, slot, float(p.y), bool(p.get("open", false)), int(p.get("tier", -1)), float(p.get("hp", -1.0)))
 			if pieces[key].has("storage") and p.has("items"):
 				pieces[key].storage.load_data(p.items)
+			if pieces[key].has("fuel"):
+				pieces[key].fuel = clampf(float(p.get("fuel", 0.0)), 0.0, GEN_TANK)
+			if pieces[key].has("burn"):
+				pieces[key].burn = clampf(float(p.get("burn", 0.0)), 0.0, FIRE_MAX)

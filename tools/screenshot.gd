@@ -36,6 +36,7 @@ var shots := [
 	{"name": "26_shotgun", "pos": Vector3(60, 0, 60), "yaw": 0.4, "pitch": -0.03, "hour": 9.0, "gun": "shotgun", "aim": false},
 	{"name": "27_rifle_scope", "pos": Vector3(60, 0, 60), "yaw": 0.4, "pitch": -0.0, "hour": 9.0, "gun": "rifle", "aim": true},
 	{"name": "28_traps", "pos": Vector3(5, 0, -0.5), "yaw": 0.55, "pitch": -0.3, "hour": 16.5, "traps": true},
+	{"name": "29_power", "pos": Vector3(6, 0, 10), "yaw": 0.35, "pitch": -0.12, "hour": 22.0, "power": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -125,6 +126,8 @@ func _process(_d: float) -> bool:
 			_gun_sample(p, s.gun, s.aim)
 		elif main.guns.item != "":
 			main.guns.set_item("")
+		if s.get("power", false):
+			_power_sample()
 		if s.get("traps", false):
 			_traps_sample()
 		if s.get("types", false):
@@ -345,3 +348,28 @@ func _traps_sample() -> void:
 	w.set_physics_process(false)
 	w._animate(0.0, 0.5)
 	main.traps._explosion(Vector3(-3.5, main.terrain.surface_height(-3.5, -11), -11))
+
+
+## A generator powering floodlights and an electric fence at night, and a fire pit (v0.20).
+func _power_sample() -> void:
+	var b = main.building
+	var ms = main.mutants
+	b.load_data([])
+	ms.clear()
+	var g: String = ""
+	for o in [["generator", "obj", 0, 2, 0], ["floodlight", "obj", -2, 0, 0], ["floodlight", "obj", 3, 0, 0], ["fire_pit", "obj", 2, 3, 0],
+			["electric_fence", "edge", -2, -1, 0], ["electric_fence", "edge", -1, -1, 0], ["electric_fence", "edge", 0, -1, 0], ["electric_fence", "edge", 1, -1, 0], ["electric_fence", "edge", 2, -1, 0]]:
+		var slot := {"kind": o[1], "cx": o[2], "cz": o[3], "dir": o[4], "level": 0}
+		var k: String = b.place(o[0], slot, b.evaluate(o[0], slot).y)
+		if o[0] == "generator":
+			g = k
+		if o[0] == "fire_pit":
+			b.pieces[k].burn = 200.0
+	b.pieces[g].fuel = 6.0
+	main.day_night.restore(1, 22.0)
+	main.power.tick(0.25)
+	for i in 2:
+		var w = ms.spawn("walker", Vector3(-1.0 + i * 3.0, 0, -5.5))
+		w.rotation.y = PI
+		w.set_physics_process(false)
+		w._animate(0.0, 1.0)

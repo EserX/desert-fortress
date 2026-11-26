@@ -21,15 +21,16 @@ const ITEMS := {
 	"rifle": {"name": "Hunting rifle", "weight": 3.8, "stack": 1},
 	"shells": {"name": "Shotgun shells", "weight": 0.04, "stack": 30},
 	"ammo_762": {"name": "7.62 rounds", "weight": 0.025, "stack": 40},
+	"fuel": {"name": "Fuel can", "weight": 1.2, "stack": 10},
 }
 
 ## What each kind of container can hold: item -> [min, max]. A negative min
 ## makes the item rarer (anything rolled below 1 means none).
 const LOOT_TABLES := {
 	"glovebox": {"cloth": [0, 2], "nails": [0, 4], "canned_food": [0, 1], "water": [0, 1]},
-	"trunk": {"scrap": [2, 5], "nails": [2, 6], "cloth": [0, 2], "water": [0, 1], "ammo_9mm": [-6, 6], "shells": [-8, 4]},
+	"trunk": {"scrap": [2, 5], "nails": [2, 6], "cloth": [0, 2], "water": [0, 1], "ammo_9mm": [-6, 6], "shells": [-8, 4], "fuel": [-1, 2]},
 	"crate": {"wood": [2, 5], "nails": [1, 4], "canned_food": [0, 2], "water": [0, 2], "cement": [0, 1]},
-	"supply": {"wood": [4, 8], "scrap": [3, 7], "nails": [8, 16], "canned_food": [1, 3], "water": [2, 4], "cloth": [1, 3], "cement": [1, 3], "ammo_9mm": [8, 20], "pistol": [-1, 1], "shells": [2, 8], "ammo_762": [-2, 6], "shotgun": [-3, 1], "rifle": [-4, 1]},
+	"supply": {"wood": [4, 8], "scrap": [3, 7], "nails": [8, 16], "canned_food": [1, 3], "water": [2, 4], "cloth": [1, 3], "cement": [1, 3], "ammo_9mm": [8, 20], "pistol": [-1, 1], "shells": [2, 8], "ammo_762": [-2, 6], "shotgun": [-3, 1], "rifle": [-4, 1], "fuel": [1, 4]},
 }
 
 ## Workbench recipes, in the order shown: item -> {"count": made, "cost": {item: n}, "info": String}.

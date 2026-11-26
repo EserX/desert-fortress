@@ -943,6 +943,77 @@ func _test_traps() -> void:
 	main.survival.health = 100.0
 
 
+## v0.20: generator fuel, power range, floodlights, electric fence, fire pit.
+func _test_power() -> void:
+	var b = main.building
+	var ms = main.mutants
+	var pw = main.power
+	var tr = main.traps
+	var inv = main.inventory
+	b.load_data([])
+	ms.clear()
+	inv.load_data({})
+	var place := func(t: String, slot: Dictionary) -> String:
+		var ev: Dictionary = b.evaluate(t, slot)
+		check(ev.ok, "a %s can be built (%s)" % [t, ev.reason])
+		return b.place(t, slot, ev.y)
+	var gk: String = place.call("generator", {"kind": "obj", "cx": 2, "cz": 2, "dir": 0, "level": 0})
+	var near: String = place.call("floodlight", {"kind": "obj", "cx": 5, "cz": 2, "dir": 0, "level": 0})
+	var far: String = place.call("floodlight", {"kind": "obj", "cx": -9, "cz": -4, "dir": 0, "level": 0})
+	var fk: String = place.call("electric_fence", {"kind": "edge", "cx": 3, "cz": 5, "dir": 0, "level": 0})
+	var pk: String = place.call("fire_pit", {"kind": "obj", "cx": -3, "cz": 6, "dir": 0, "level": 0})
+	check(not pw.add_fuel(gk, inv), "no fuel cans, no fuel")
+	inv.add("fuel", 12)
+	for i in 12:
+		pw.add_fuel(gk, inv)
+	check(is_equal_approx(b.pieces[gk].fuel, b.GEN_TANK) and inv.count_of("fuel") == 2, "the tank takes %d cans" % int(b.GEN_TANK))
+	check(main._prompt_for("gen:" + gk).contains("10/10 cans"), "generator prompt: " + main._prompt_for("gen:" + gk))
+	main.day_night.restore(main.day_night.day, 12.0)
+	pw.tick(0.25)
+	check(not b.pieces[gk].running and not b.pieces[near].powered, "by day the generator stays off")
+	main.day_night.restore(main.day_night.day, 22.0)
+	pw.tick(0.25)
+	check(b.pieces[gk].running and b.pieces[near].powered and b.pieces[near].light.visible, "at night it runs and a floodlight nearby lights up")
+	check(not b.pieces[far].powered, "a floodlight %d m away is out of range" % int(b.pieces[far].node.global_position.distance_to(b.pieces[gk].node.global_position)))
+	check(b.pieces[fk].powered, "the electric fence is live")
+	var before: float = b.pieces[gk].fuel
+	pw.tick(pw.FUEL_SECONDS)
+	check(is_equal_approx(before - b.pieces[gk].fuel, 1.0), "a can lasts %d seconds" % int(pw.FUEL_SECONDS))
+	# Shock a walker against the fence.
+	var fpos: Vector3 = b.pieces[fk].node.global_position
+	var w = ms.spawn("walker", fpos)
+	w.global_position = fpos + Vector3(0, 0, -0.5)
+	tr.tick(0.1)
+	check(is_equal_approx(w.health, 100.0 - tr.SHOCK_DAMAGE), "a live fence shocks a mutant touching it (%.0f)" % w.health)
+	# Run dry.
+	b.pieces[gk].fuel = 0.01
+	pw.tick(1.0)
+	check(not b.pieces[gk].running and not b.pieces[near].powered and not b.pieces[fk].powered, "out of fuel, the power goes off")
+	tr._bites.clear()
+	var hp: float = w.health
+	tr.tick(0.1)
+	check(is_equal_approx(w.health, hp), "a dead fence doesn't shock")
+	# Fire pit.
+	check(main._prompt_for("fire:" + pk) == "[E] Light the fire (1 wood)", "fire pit prompt")
+	inv.add("wood", 2)
+	main.interact("fire:" + pk)
+	check(b.pieces[pk].burn > 0.0 and b.pieces[pk].flame.visible and inv.count_of("wood") == 1, "a piece of wood lights the fire")
+	w.global_position = b.pieces[pk].node.global_position
+	hp = w.health
+	for i in 10:
+		tr.tick(0.1)
+	check(w.health < hp - 10.0, "mutants walking through the fire get burned (%.0f)" % (hp - w.health))
+	b.pieces[gk].fuel = 3.5
+	var data: Array = b.save_data()
+	b.load_data(data)
+	check(is_equal_approx(b.pieces[gk].fuel, 3.5) and b.pieces[pk].burn > 50.0, "fuel and fire are saved")
+	pw.tick(61.0)
+	check(not b.pieces[pk].flame.visible, "the fire burns out")
+	main.day_night.restore(main.day_night.day, 10.0)
+	ms.clear()
+	b.load_data([])
+
+
 func _start_spitter() -> void:
 	var player = main.player
 	var py: float = main.terrain.surface_height(8, -8)
@@ -1178,6 +1249,7 @@ func _process(_delta: float) -> bool:
 		2362:
 			_test_long_guns()
 			_test_traps()
+			_test_power()
 		2370:
 			if failures.is_empty():
 				print("== ALL TESTS PASSED ==")

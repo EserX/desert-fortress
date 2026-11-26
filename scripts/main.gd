@@ -25,6 +25,7 @@ const Mutants = preload("res://scripts/mutants.gd")
 const Waves = preload("res://scripts/waves.gd")
 const Guns = preload("res://scripts/guns.gd")
 const Traps = preload("res://scripts/traps.gd")
+const Power = preload("res://scripts/power.gd")
 
 const DISCOVER_RANGE := 45.0
 const REFILLS_PER_MORNING := 4
@@ -63,6 +64,7 @@ var mutants: Mutants
 var waves: Waves
 var guns: Guns
 var traps: Traps
+var power: Power
 ## Wrecks and ruins: {"key": "w3", "kind": "wreck", "pos": Vector3}.
 var places: Array = []
 ## Keys of places you have been near.
@@ -161,11 +163,18 @@ func _ready() -> void:
 	add_child(traps)
 	traps.exploded.connect(func(pos): mutants.alert(pos, 60.0))
 
+	power = Power.new()
+	power.name = "Power"
+	power.building = building
+	power.day_night = day_night
+	add_child(power)
+
 	waves = Waves.new()
 	waves.name = "Waves"
 	waves.mutants = mutants
 	waves.world_seed = world_seed
 	add_child(waves)
+	power.waves = waves
 	day_night.dusk_started.connect(waves.on_dusk)
 	day_night.night_started.connect(func(_d): waves.start_wave())
 	day_night.day_started.connect(waves.on_dawn)
@@ -480,8 +489,9 @@ func _gun_input(event: InputEvent) -> bool:
 
 
 func _prompt_for(id: String) -> String:
-	if id.begins_with("gate:") or id.begins_with("chest:") or id.begins_with("bench:"):
-		return building.prompt(id)
+	for prefix in ["gate:", "chest:", "bench:", "gen:", "fire:"]:
+		if id.begins_with(prefix):
+			return building.prompt(id)
 	return loot.prompt(id)
 
 
@@ -525,6 +535,14 @@ func interact(id: String) -> void:
 	if id.begins_with("bench:"):
 		if building.pieces.has(id.trim_prefix("bench:")):
 			inventory_ui.open_bench(id.trim_prefix("bench:"))
+		return
+	if id.begins_with("gen:"):
+		if not power.add_fuel(id.trim_prefix("gen:"), inventory):
+			hud.show_banner("The tank is full" if inventory.count_of("fuel") > 0 else "You have no fuel cans. Search car trunks.")
+		return
+	if id.begins_with("fire:"):
+		if not power.add_wood(id.trim_prefix("fire:"), inventory):
+			hud.show_banner("The fire pit is full" if inventory.count_of("wood") > 0 else "You need wood for the fire")
 		return
 	var items: Dictionary
 	if loot.drops.has(id):

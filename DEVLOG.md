@@ -2,6 +2,21 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v0.20.0 (2026-11-26): Fire, power and light
+Four new build pieces (mouse wheel in build mode, after the landmine):
+- **Fire pit** (4 wood): a ring of stones with crossed logs. **E** puts in a piece of wood: each one burns for a minute (up to 5 minutes' worth). It lights up the area with a warm flickering glow, and mutants walking through it burn (12 damage a second). The prompt shows how long it has left.
+- **Fuel generator** (12 scrap, 8 nails): **E** pours in a **fuel can** (it holds 10). It starts by itself at nightfall or when a wave begins, and stops at dawn, so you don't waste fuel by day. One can runs it for 90 seconds, about three cans a night. It putters while running and has a small light on the front. The prompt shows the cans left and whether it is running.
+- **Electric fence** (5 scrap, 6 nails): posts and five wires along a grid edge, like a wall. It blocks mutants, and with power the wires glow blue and **shock** anything touching them: 20 damage every half second and a near standstill while it is jolted, with sparks and a crackle. Without power it is just a flimsy fence that mutants will tear down.
+- **Floodlight** (4 scrap, 2 wood, 2 nails): a 3 m pole with two lamps throwing a wide cone of light 30 m forward (R turns it). Lights up when powered.
+- **Power:** a running generator powers every floodlight and electric fence within **18 m**.
+- **Fuel cans:** a new item, found in some car trunks (0–2) and every supply crate (1–4).
+- **Saved:** fuel in each generator and the burn time left in each fire pit.
+- **Code:** new `power.gd` (generator fuel and running state, what is in range, fire pits burning down, the generator hum). Electric fence shocks and fire damage live in `traps.gd` with the other traps. `building.set_powered()` swaps the lamp and wire materials.
+- **Tests:** each piece can be built, filling the tank, the generator prompt, staying off by day, running at night, a floodlight in range lighting up and one 25 m away staying dark, the fence going live, a can lasting 90 s, the fence shocking a walker, power going off when the fuel runs out (and a dead fence not shocking), lighting the fire with wood, fire burning a mutant, fuel and fire saved, and the fire burning out. New screenshot view `29_power`.
+
+**Try:** collect fuel cans from car trunks, put a generator in the middle of your base with floodlights facing out, and run an electric fence along the side the waves come from.
+**Next:** v0.21, the auto-turret fed from an ammo box, with its range circle shown while placing.
+
 ## v0.19.0 (2026-11-26): Traps
 Three new pieces in build mode (mouse wheel past the spike barricade). They don't block anyone, so you and the mutants walk straight over them, and they are set for mutant weight, so they never hurt you (except a mine's blast).
 - **Spike strip** (2 wood, 8 nails): a board bristling with nails. A mutant stepping on it takes **18 damage**, at most once every 0.8 s, and stumbles (slowed for a moment). Each bite wears the strip down (12 of its 250 hit points), so it lasts about 20 bites.

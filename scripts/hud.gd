@@ -15,6 +15,8 @@ var banner: Label
 var day_night  # DayNight
 var prompt: Label
 var hitmarker: Label
+var damage_vignette: TextureRect
+var damage_arrow: Control
 var pickups: VBoxContainer
 var inventory  # Inventory
 var survival  # Survival
@@ -52,6 +54,8 @@ func _ready() -> void:
 	hitmarker.position = -hitmarker.size / 2
 	hitmarker.modulate.a = 0.0
 	root.add_child(hitmarker)
+
+	_build_damage(root)
 
 	var title := _label("DESERT FORTRESS  v%s" % ProjectSettings.get_setting("application/config/version", ""), 18)
 	title.position = Vector2(20, 16)
@@ -291,6 +295,55 @@ func show_hitmarker(kind: String) -> void:
 	hitmarker.modulate.a = 1.0
 	var tw := hitmarker.create_tween()
 	tw.tween_property(hitmarker, "modulate:a", 0.0, 0.3)
+
+
+## Red edges and a red wedge pointing to where the hit came from.
+func _build_damage(root: Control) -> void:
+	var grad := Gradient.new()
+	grad.set_color(0, Color(0.7, 0.0, 0.0, 0.0))
+	grad.set_color(1, Color(0.7, 0.0, 0.0, 0.75))
+	grad.add_point(0.55, Color(0.7, 0.0, 0.0, 0.0))
+	var tex := GradientTexture2D.new()
+	tex.gradient = grad
+	tex.fill = GradientTexture2D.FILL_RADIAL
+	tex.fill_from = Vector2(0.5, 0.5)
+	tex.fill_to = Vector2(1.0, 1.0)
+	tex.width = 256
+	tex.height = 256
+	damage_vignette = TextureRect.new()
+	damage_vignette.texture = tex
+	damage_vignette.set_anchors_preset(Control.PRESET_FULL_RECT)
+	damage_vignette.stretch_mode = TextureRect.STRETCH_SCALE
+	damage_vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	damage_vignette.modulate.a = 0.0
+	root.add_child(damage_vignette)
+	damage_arrow = Control.new()
+	damage_arrow.set_anchors_preset(Control.PRESET_CENTER)
+	damage_arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	damage_arrow.modulate.a = 0.0
+	root.add_child(damage_arrow)
+	var wedge := Polygon2D.new()
+	var pts := PackedVector2Array()
+	for i in 9:
+		var a := lerpf(-0.35, 0.35, i / 8.0) - PI / 2
+		pts.append(Vector2(cos(a), sin(a)) * 150.0)
+	for i in 9:
+		var a := lerpf(0.3, -0.3, i / 8.0) - PI / 2
+		pts.append(Vector2(cos(a), sin(a)) * 132.0)
+	wedge.polygon = pts
+	wedge.color = Color(1.0, 0.15, 0.1, 0.85)
+	damage_arrow.add_child(wedge)
+
+
+## Flash for a hit from a mutant. angle: 0 = straight ahead, positive = to the right.
+func show_damage(angle: float) -> void:
+	damage_vignette.modulate.a = 1.0
+	damage_arrow.modulate.a = 1.0
+	damage_arrow.rotation = angle
+	var tw := damage_vignette.create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(damage_vignette, "modulate:a", 0.0, 0.8)
+	tw.tween_property(damage_arrow, "modulate:a", 0.0, 1.4)
 
 
 func show_pickup(lines: Array) -> void:

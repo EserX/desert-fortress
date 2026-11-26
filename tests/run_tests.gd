@@ -261,6 +261,7 @@ func _test_building() -> void:
 	_test_tiers()
 	_test_base()
 	_test_melee()
+	_test_mutants()
 	b.load_data([])
 	bm.toggle()
 	inv.load_data({})
@@ -367,6 +368,7 @@ func _test_tiers() -> void:
 
 ## Ramp: walk up it for real.
 var ramp_top := 0.0
+var chase_walker: Node
 var ramp_base := 0.0
 ## v0.11: base zone, storage chest, workbench crafting, bandages, spike barricade.
 func _test_base() -> void:
@@ -497,6 +499,93 @@ func _test_melee() -> void:
 	inv.load_data({})
 	main.apply_save_data(main.collect_save_data())
 	check(inv.count_of("pipe") == 1, "older saves get a rusty pipe")
+
+
+## v0.13: the Walker. Sight, hearing, hits, death, saving, spawning.
+func _test_mutants() -> void:
+	var ms = main.mutants
+	var player = main.player
+	check(ms.alive().size() == ms.WANDERERS, "a new game has %d walkers roaming (%d)" % [ms.WANDERERS, ms.alive().size()])
+	check(ms.alive().all(func(m): return Vector2(m.position.x, m.position.z).length() >= ms.MIN_BASE_DIST - 0.1), "walkers start far from the base")
+	var data: Dictionary = main.collect_save_data()
+	ms.clear()
+	var py: float = main.terrain.surface_height(8, -8)
+	player.position = Vector3(8, py, -8)
+	player.velocity = Vector3.ZERO
+	player.rotation.y = 0.0
+	player.head.rotation.x = 0.0
+	var w = ms.spawn("walker", Vector3(8, 0, -20))
+	w.rotation.y = PI  # facing the player (+Z)
+	check(w.notices_target(false), "a walker 12 m away sees you in daylight")
+	w.rotation.y = 0.0
+	check(not w.notices_target(false), "it doesn't see you behind its back")
+	w.position = Vector3(8, py, -14)
+	check(w.notices_target(false), "but it hears you when you are close")
+	player.crouching = true
+	check(not w.notices_target(false), "crouching keeps you quiet")
+	player.crouching = false
+	w.position = Vector3(8, py, -34)
+	w.rotation.y = PI
+	check(not w.notices_target(false), "26 m away it doesn't notice you")
+	check(w.notices_target(false) == false and not w.notices_target(true), "at night it sees less far")
+	# Saving.
+	ms.clear()
+	var a = ms.spawn("walker", Vector3(100, 0, 40), 60.0)
+	var saved: Dictionary = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	ms.clear()
+	main.apply_save_data(saved)
+	var back: Array = ms.alive()
+	check(back.size() == 1 and back[0].position.distance_to(a.position) < 0.2 and is_equal_approx(back[0].health, 60.0), "walkers are saved with position and health")
+	saved.erase("mutants")
+	main.apply_save_data(saved)
+	check(ms.alive().size() == 1, "older saves keep the walkers already there")
+	ms.clear()
+	check(ms.top_up(2) == ms.WANDERERS and ms.alive().size() == ms.WANDERERS, "each morning the walkers are topped up")
+	# Death by walker.
+	main.survival.health = 5.0
+	main._on_player_hit(12.0, player.global_position + Vector3(0, 0, -2))
+	check(main.survival.dead and main.death_screen.is_open(), "a walker can kill you")
+	check(main.death_screen._cause.text.contains("walker"), "the death screen says what got you: " + main.death_screen._cause.text)
+	main.respawn()
+	main.apply_save_data(data)
+	ms.clear()
+
+
+## Melee on the walker that just chased you down.
+func _test_walker_hits() -> void:
+	var ms = main.mutants
+	var player = main.player
+	var w = chase_walker
+	var py: float = player.position.y
+	w.health = 100.0
+	player.rotation.y = 0.0
+	player.head.rotation.x = -0.1
+	# Hits from the pipe.
+	main.melee.set_item("pipe")
+	player.rotation.y = 0.0  # looking at -Z, at the walker
+	var r: Dictionary = main.melee.strike()
+	check(r.kind == "target" and r.node == w and is_equal_approx(w.health, 75.0), "the pipe hits a walker for 25 (%s, %.0f)" % [r.kind, w.health])
+	check(w.state == w.State.CHASE, "a hit makes it chase you")
+	var kills: int = ms.kills
+	w.take_hit(80.0, w.global_position, Vector3(0, 0, -1))
+	check(w.is_dead() and w.collision_layer == 0 and ms.kills == kills + 1, "at 0 health it dies and stops blocking")
+	check(not ms.alive().has(w), "dead walkers don't count as alive")
+	w.take_hit(25.0, w.global_position, Vector3(0, 0, -1))
+	check(ms.kills == kills + 1, "hitting a corpse does nothing")
+	main.melee.set_item("")
+
+
+## Real chase over many frames: it walks up to the player and claws.
+func _start_chase() -> void:
+	var ms = main.mutants
+	var player = main.player
+	main.day_night.restore(main.day_night.day, 10.0)
+	var py: float = main.terrain.surface_height(8, -8)
+	player.position = Vector3(8, py, -8)
+	player.velocity = Vector3.ZERO
+	main.survival.health = 100.0
+	chase_walker = ms.spawn("walker", Vector3(8, 0, -20))
+	chase_walker.rotation.y = PI
 
 
 func _start_ramp_walk() -> void:
@@ -636,7 +725,16 @@ func _process(_delta: float) -> bool:
 			Input.action_release("move_forward")
 			check(ramp_top > 1.8, "the player can walk up a ramp (climbed %.2f m)" % ramp_top)
 			main.building.load_data([])
-		820:
+			_start_chase()
+		900:
+			var d: float = chase_walker.global_position.distance_to(main.player.global_position)
+			check(chase_walker.state != chase_walker.State.WANDER and d < 8.0, "the walker spots you and chases (%.1f m away)" % d)
+		1100:
+			check(main.survival.health < 100.0, "the walker reaches you and claws (health %.0f)" % main.survival.health)
+			_test_walker_hits()
+			main.mutants.clear()
+			main.survival.health = 100.0
+		1110:
 			if failures.is_empty():
 				print("== ALL TESTS PASSED ==")
 				quit(0)

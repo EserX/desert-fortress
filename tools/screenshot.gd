@@ -25,6 +25,8 @@ var shots := [
 	{"name": "15_base", "pos": Vector3(1, 0, 10), "yaw": PI + 0.15, "pitch": -0.12, "hour": 16.0, "base": true, "zone": true},
 	{"name": "16_bench", "pos": Vector3(-1, 0, 19.6), "yaw": 0.0, "pitch": -0.3, "hour": 16.0, "base": true, "bench": true},
 	{"name": "17_melee", "pos": Vector3(-2.6, 0, 6.0), "yaw": 0.2, "pitch": -0.08, "hour": 9.5, "melee": true},
+	{"name": "18_walker", "pos": Vector3(60, 0, 60), "yaw": 0.4, "pitch": -0.05, "hour": 17.5, "walker": true},
+	{"name": "19_walker_night", "pos": Vector3(60, 0, 60), "yaw": 0.4, "pitch": -0.02, "hour": 22.5, "walker": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -108,6 +110,8 @@ func _process(_d: float) -> bool:
 			main.melee.swing_time = 0.12
 			main.dummy.take_hit(40.0, main.dummy.global_position + Vector3(0, 1.5, 0.2), Vector3(0, 0, -1))
 			main.hud.show_hitmarker("target")
+		if s.get("walker", false):
+			_walker_sample(p)
 		if s.get("build", false):
 			_build_sample()
 		elif s.get("zone", false):
@@ -185,3 +189,27 @@ func _base_sample() -> void:
 	for o in [["chest", -3, 8, 0], ["workbench", -1, 8, 0], ["spikes", 0, 10, 0], ["spikes", 1, 10, 0], ["spikes", -1, 10, 0]]:
 		var slot := {"kind": "obj", "cx": o[1], "cz": o[2], "dir": o[3], "level": 0}
 		b.place(o[0], slot, b.evaluate(o[0], slot).y)
+
+
+## Two walkers coming at you and one lying dead (v0.13).
+func _walker_sample(p: Node3D) -> void:
+	var ms = main.mutants
+	ms.clear()
+	var fwd := -p.global_transform.basis.z
+	var right := p.global_transform.basis.x
+	var spots := [fwd * 3.2 + right * 0.6, fwd * 7.5 - right * 2.5, fwd * 5.0 + right * 3.5]
+	for i in spots.size():
+		var w = ms.spawn("walker", p.position + spots[i])
+		w.rotation.y = p.rotation.y + PI - 0.3 * (i - 1)
+		w.set_physics_process(false)
+		w._anim_t = 1.0 + i * 1.7
+		w._animate(0.0, 2.5)
+		if i == 0:
+			w._attack_t = 0.4
+			w._animate(0.0, 0.5)
+		if i == 2:
+			w.take_hit(200.0, w.global_position, -fwd)
+	main.inventory.load_data({})
+	main.inventory.add("machete", 1)
+	main.inventory.selected = 0
+	main.melee.set_item("machete")

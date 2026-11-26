@@ -64,6 +64,7 @@ func _ready() -> void:
 
 	floor_max_angle = deg_to_rad(50.0)
 	floor_snap_length = 0.5
+	collision_mask = 1 | 8  # the world and mutants
 	if DisplayServer.get_name() != "headless":
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 

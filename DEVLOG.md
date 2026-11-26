@@ -2,6 +2,21 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v0.13.0 (2026-11-26): The first mutant, the Walker
+- **Walkers** roam the desert: five of them, always at least 70 m from the flag, each shambling around its own patch of sand. Every morning the dead ones are replaced. Low-poly, hunched, sickly green with glowing orange eyes (easy to spot at night).
+- **Spotting you:** a walker sees you up to 24 m away by day and 15 m at night, but only in front of it and only if nothing blocks the view (walls, wrecks, dunes). It also **hears** you within 9 m, more if you sprint and much less if you crouch. When it spots you it groans and comes after you at a fast shamble (3.3 m/s, slower than your walk), and it gives up when you get 38 m away.
+- **Attacks:** close up it raises its arms and claws you for 12 health, about once every 2 seconds. A red flash on the screen edges and a red wedge around the crosshair show which side the hit came from. If a walker kills you the death screen says "A walker got you."
+- **Fighting back:** walkers have 100 health, so the pipe takes 4 hits and the machete 3. Each hit shows the damage, makes it flash red and stagger back, and makes it chase you if it was just wandering. At 0 it **falls over** away from the blow, stops blocking you, and sinks into the sand after about 30 s.
+- **Sounds:** generated groans, a snarl when it lunges, a grunt when hit and a moan when it falls, all in 3D.
+- Walkers walk around things in their way by side-stepping when they get stuck. They don't break walls yet (that's v0.15).
+- Far from you (over 140 m) wandering walkers pause, to keep things cheap.
+- **Saved:** where each walker is, its home spot and its health, plus a kill count for later. Older saves keep the walkers a new world spawns.
+- **Code:** `mutant.gd` (a `TYPES` table ready for the Runner, Brute and Spitter) and `mutants.gd` (spawning, morning top-up, shared sounds, saving). Mutants live on physics layer 4; the player and melee swings now see that layer.
+- **Tests:** sight in front and not behind, hearing, crouching, range by day and night, a real chase over many frames ending in a claw, pipe damage on a walker, death, corpses ignoring hits, saving, older saves, morning top-up, death by walker. New screenshot views `18_walker` and `19_walker_night`.
+
+**Try:** walk out 80 m or so from the base and look for a hunched figure. Crouch to sneak past, or take the machete and go for it. Try it at night when you can only see the eyes.
+**Next:** v0.14, the wave system: a siren at dusk, mutants coming from the map edge at night, a wave counter and an end-of-wave summary.
+
 ## v0.12.0 (2026-11-26): Hands, melee weapons and a training dummy
 - **First-person hands:** with the hammer, the rusty pipe or the machete selected you now see your hands holding it, with a gentle idle sway. Other items (food, water, materials) keep the hands hidden, so the view stays clear.
 - **Rusty pipe:** new games start with one (hotbar slot 2), and older saves get one on load. **Left click** swings it: 25 damage, 12 stamina, one swing every 0.75 s, 2.4 m reach.

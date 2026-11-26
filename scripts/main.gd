@@ -21,6 +21,7 @@ const BuildMode = preload("res://scripts/build_mode.gd")
 const BaseZone = preload("res://scripts/base_zone.gd")
 const Melee = preload("res://scripts/melee.gd")
 const Dummy = preload("res://scripts/dummy.gd")
+const Mutants = preload("res://scripts/mutants.gd")
 
 const DISCOVER_RANGE := 45.0
 const REFILLS_PER_MORNING := 4
@@ -55,6 +56,7 @@ var build_mode: BuildMode
 var base_zone: BaseZone
 var melee: Melee
 var dummy: Dummy
+var mutants: Mutants
 ## Wrecks and ruins: {"key": "w3", "kind": "wreck", "pos": Vector3}.
 var places: Array = []
 ## Keys of places you have been near.
@@ -135,6 +137,15 @@ func _ready() -> void:
 	ambience.day_night = day_night
 	add_child(ambience)
 
+	mutants = Mutants.new()
+	mutants.name = "Mutants"
+	mutants.terrain = terrain
+	mutants.player = player
+	mutants.world_seed = world_seed
+	mutants.player_dead = func(): return survival == null or survival.dead
+	add_child(mutants)
+	mutants.top_up(day_night.day)
+
 	inventory = Inventory.new()
 	inventory.changed.connect(func(): player.overloaded = inventory.overloaded())
 	inventory.add("hammer", 1)  # everyone starts with a hammer
@@ -188,10 +199,12 @@ func _ready() -> void:
 	add_child(map_ui)
 
 	survival.died.connect(_on_died)
+	mutants.player_hit.connect(_on_player_hit)
 	melee.hit_landed.connect(hud.show_hitmarker)
 	survival.warning.connect(hud.show_banner)
 
 	day_night.day_started.connect(_on_morning)
+	day_night.day_started.connect(mutants.top_up)
 	# Autosave every morning (after the morning loot is in place).
 	day_night.day_started.connect(func(_d): Game.save_game("auto", _screenshot()))
 	Game.saved.connect(func(slot): hud.show_banner("Game saved (%s)" % Game.slot_label(slot)))
@@ -238,6 +251,7 @@ func _process(delta: float) -> void:
 			in_shade = _check_shade()
 			_discover_nearby()
 		survival.tick(delta, day_night.hour, player.sprinting, in_shade)
+		mutants.night = day_night.is_night()
 	if hud and not get_tree().paused:
 		var text := ""
 		if not inventory_ui.is_open():
@@ -545,13 +559,25 @@ func _on_morning(d: int) -> void:
 
 func _on_died() -> void:
 	var cause := "You fell too far."
-	if survival.water <= 0.0:
+	if survival.cause != "":
+		cause = survival.cause
+	elif survival.water <= 0.0:
 		cause = "You died of thirst."
 	elif survival.food <= 0.0:
 		cause = "You starved."
 	if inventory_ui.is_open():
 		inventory_ui.close()
 	death_screen.open(cause)
+
+
+## A mutant clawed you: lose health, red flash on the side it came from.
+func _on_player_hit(dmg: float, from: Vector3) -> void:
+	if survival.dead:
+		return
+	survival.damage(dmg, "A walker got you.")
+	var to: Vector3 = from - player.global_position
+	var local: Vector3 = player.global_transform.basis.inverse() * to
+	hud.show_damage(atan2(local.x, -local.z))
 
 
 ## Back at the base flag with your items.
@@ -595,6 +621,7 @@ func collect_save_data() -> Dictionary:
 		"survival": survival.save_data(),
 		"map": {"discovered": discovered.keys()},
 		"buildings": building.save_data(),
+		"mutants": mutants.save_data(),
 	}
 
 
@@ -604,6 +631,8 @@ func apply_save_data(data: Dictionary) -> void:
 	loot.load_data(data.get("loot", {}))
 	survival.load_data(data.get("survival", {}))
 	building.load_data(data.get("buildings", []))
+	if data.has("mutants"):
+		mutants.load_data(data.mutants)  # older saves keep the freshly spawned walkers
 	discovered = {}
 	for key in data.get("map", {}).get("discovered", []):
 		discovered[str(key)] = true

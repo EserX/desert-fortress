@@ -50,6 +50,11 @@ var shots := [
 	{"name": "40_wave_map", "pos": Vector3(20, 0, 40), "yaw": 0.9, "pitch": 0.0, "hour": 21.5, "wave_map": true},
 	{"name": "41_digging", "pos": Vector3(12, 0, 13.4), "yaw": 0.0, "pitch": -0.9, "hour": 15.5, "digging": true},
 	{"name": "42_trench", "pos": Vector3(12, 12, 22), "yaw": 0.0, "pitch": -0.7, "hour": 15.5, "digging": true},
+	{"name": "43_layers", "pos": Vector3(-10, 0, -1.5), "yaw": 0.0, "pitch": -0.75, "hour": 14.0, "layers": true},
+	{"name": "44_detector", "pos": Vector3(0, 0, 9), "yaw": 0.4, "pitch": -0.3, "hour": 10.0, "detector": true},
+	{"name": "45_well", "pos": Vector3(-11, 0, -1.6), "yaw": 0.0, "pitch": -0.3, "hour": 10.0, "well": true},
+	{"name": "46_support", "pos": Vector3(15, 0, -1.5), "yaw": 0.0, "pitch": 0.12, "hour": 16.0, "support": true},
+	{"name": "47_pieces", "pos": Vector3(-7, 0, 25), "yaw": 0.0, "pitch": -0.08, "hour": 15.0, "pieces2": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -111,10 +116,10 @@ func _process(_d: float) -> bool:
 		if s.get("tiers", false):
 			var b = main.building
 			b.load_data([])
-			for i in 3:
-				var slot := {"kind": "edge", "cx": 2 + i, "cz": 6, "dir": 0, "level": 0}
+			for i in 4:
+				var slot := {"kind": "edge", "cx": 1 + i, "cz": 6, "dir": 0, "level": 0}
 				var k: String = b.place("wall", slot, b.evaluate("wall", slot).y, false, i)
-				b.damage(k, [60.0, 400.0, 1200.0][i])
+				b.damage(k, [60.0, 400.0, 300.0, 1200.0][i])
 			main.inventory.load_data({})
 			main.inventory.add_all({"hammer": 1, "scrap": 9})
 			main.inventory.selected = 0
@@ -136,6 +141,40 @@ func _process(_d: float) -> bool:
 			main.hud.show_hitmarker("target")
 		if s.get("digging", false):
 			_digging_sample()
+		if s.get("layers", false):
+			_layers_sample()
+		if s.get("pieces2", false):
+			_pieces2_sample()
+		if s.get("support", false):
+			var b = main.building
+			main.terrain.load_data({})
+			b.load_data([])
+			for e in b.cell_edges(6, -6, 0):
+				b.place("wall", e, b.evaluate("wall", e).y)
+			for i in 5:
+				var fs := {"kind": "cell", "cx": 6 + i, "cz": -6, "dir": 0, "level": 1}
+				b.place("floor", fs, b.evaluate("floor", fs).y)
+			b.collapse_unsupported()  # the fifth, at 15%, comes down
+		if s.get("well", false):
+			main.building.load_data([])
+			main.terrain.load_data({})
+			main.inventory.load_data({})
+			for i in 14:
+				main.dig_at(Vector3(-10.5, 0, -4.5), false, "pickaxe")
+			var b = main.building
+			var ws := {"kind": "obj", "cx": -6, "cz": -3, "dir": 0}
+			var wk: String = b.place("well", ws, b.evaluate("well", ws).y)
+			b.level_under(wk)
+			b.pieces[wk].water = 4.0
+			p.head.rotation.x = -0.3
+		if s.get("detector", false):
+			main.terrain.load_data({})
+			main.building.load_data([])
+			main.inventory.load_data({})
+			main.inventory.add("metal_detector", 1)
+			main.inventory.selected = 0
+			var c: Dictionary = main.caches.caches[0]
+			p.position = Vector3(c.x + 4.0, main.terrain.surface_height(c.x + 4.0, c.z), c.z)
 		if s.get("walker", false):
 			_walker_sample(p)
 		if s.has("gun"):
@@ -441,6 +480,11 @@ func _power_sample() -> void:
 		if o[0] == "fire_pit":
 			b.pieces[k].burn = 200.0
 	b.pieces[g].fuel = 6.0
+	# Cables from the generator through a switch (v1.8).
+	var sw: String = b.place("switch", {"kind": "obj", "cx": 1, "cz": 1, "dir": 0, "level": 0}, b.evaluate("switch", {"kind": "obj", "cx": 1, "cz": 1, "dir": 0, "level": 0}).y, true)
+	b.connect_cable(g, sw)
+	for k in b.keys_of(["floodlight", "electric_fence"]):
+		b.connect_cable(sw, k)
 	main.day_night.restore(1, 22.0)
 	main.power.tick(0.25)
 	for i in 2:
@@ -518,3 +562,54 @@ func _digging_sample() -> void:
 	var b = main.building
 	var slot := {"kind": "edge", "cx": 5, "cz": 5, "dir": 0}
 	b.place("wall", slot, b.evaluate("wall", slot).y)
+
+
+## A stepped pit 3 m deep: sand, a band of clay, then grey stone; pickaxe in hand.
+func _layers_sample() -> void:
+	main.building.load_data([])
+	main.mutants.clear()
+	main.terrain.load_data({})
+	main.inventory.load_data({})
+	main.inventory.add("pickaxe", 1)
+	main.inventory.selected = 0
+	for x in range(-13, -7):
+		for z in range(-7, -3):
+			var depth := 12 if z < -5 else (8 if z < -4 else 4)
+			for i in depth:
+				main.dig_at(Vector3(x + 0.5, 0, z + 0.5), false, "pickaxe")
+	main.inventory.load_data({})
+	main.inventory.add("pickaxe", 1)
+
+
+## The v1.6 pieces: triangle foundations, a metal door, a gun slit wall, half
+## and low walls, pillars holding a floor, and an open trapdoor.
+func _pieces2_sample() -> void:
+	var b = main.building
+	main.terrain.load_data({})
+	main.mutants.clear()
+	b.load_data([])
+	var put := func(t: String, slot: Dictionary) -> String:
+		var ev: Dictionary = b.evaluate(t, slot)
+		return b.place(t, slot, ev.y) if ev.ok else ""
+	put.call("foundation", {"kind": "cell", "cx": -5, "cz": 8, "dir": 0})
+	put.call("foundation", {"kind": "cell", "cx": -4, "cz": 8, "dir": 0})
+	put.call("tri_foundation", {"kind": "cell", "cx": -6, "cz": 8, "dir": 1})
+	put.call("tri_foundation", {"kind": "cell", "cx": -3, "cz": 8, "dir": 0})
+	put.call("metal_door", {"kind": "edge", "cx": -5, "cz": 9, "dir": 0})
+	put.call("slit_wall", {"kind": "edge", "cx": -4, "cz": 9, "dir": 0})
+	put.call("wall", {"kind": "edge", "cx": -5, "cz": 8, "dir": 0})
+	put.call("wall", {"kind": "edge", "cx": -4, "cz": 8, "dir": 0})
+	put.call("wall", {"kind": "edge", "cx": -5, "cz": 8, "dir": 1})
+	put.call("wall", {"kind": "edge", "cx": -3, "cz": 8, "dir": 1})
+	var tk: String = put.call("trapdoor", {"kind": "cell", "cx": -5, "cz": 8, "dir": 0, "level": 1})
+	put.call("floor", {"kind": "cell", "cx": -4, "cz": 8, "dir": 0, "level": 1})
+	if tk != "":
+		b.set_gate(tk, true)
+	for i in 2:
+		put.call("half_wall", {"kind": "edge", "cx": -5 + i, "cz": 9, "dir": 0, "level": 1})
+	put.call("low_wall", {"kind": "edge", "cx": -2, "cz": 11, "dir": 0})
+	put.call("low_wall", {"kind": "edge", "cx": -1, "cz": 11, "dir": 0})
+	for o in [Vector2i(-8, 9), Vector2i(-7, 9), Vector2i(-8, 10), Vector2i(-7, 10)]:
+		put.call("pillar", {"kind": "post", "cx": o.x, "cz": o.y, "dir": 0})
+	put.call("floor", {"kind": "cell", "cx": -8, "cz": 9, "dir": 0, "level": 1})
+	put.call("tri_roof", {"kind": "cell", "cx": -9, "cz": 9, "dir": 1, "level": 1})

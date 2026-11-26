@@ -28,6 +28,11 @@ const ITEMS := {
 	"medkit": {"name": "Medkit", "weight": 0.4, "stack": 5},
 	"shovel": {"name": "Shovel", "weight": 2.0, "stack": 1},
 	"sand": {"name": "Sand", "weight": 1.0, "stack": 20},
+	"pickaxe": {"name": "Pickaxe", "weight": 2.5, "stack": 1},
+	"stone": {"name": "Stone", "weight": 1.5, "stack": 20},
+	"clay": {"name": "Clay", "weight": 1.2, "stack": 20},
+	"metal_detector": {"name": "Metal detector", "weight": 1.5, "stack": 1},
+	"cable": {"name": "Cable", "weight": 0.1, "stack": 50},
 }
 
 ## What each kind of container can hold: item -> [min, max]. A negative min
@@ -36,6 +41,7 @@ const LOOT_TABLES := {
 	"glovebox": {"cloth": [0, 2], "nails": [0, 4], "canned_food": [0, 1], "water": [0, 1]},
 	"trunk": {"scrap": [2, 5], "nails": [2, 6], "cloth": [0, 2], "water": [0, 1], "ammo_9mm": [-6, 6], "shells": [-8, 4], "fuel": [-1, 2]},
 	"crate": {"wood": [2, 5], "nails": [1, 4], "canned_food": [0, 2], "water": [0, 2], "cement": [0, 1]},
+	"cache": {"scrap": [3, 8], "nails": [6, 14], "ammo_9mm": [6, 18], "cloth": [0, 3], "cement": [0, 2], "fuel": [0, 2], "shells": [-4, 6], "medkit": [-2, 1], "canned_food": [0, 2]},
 	"supply": {"wood": [4, 8], "scrap": [3, 7], "nails": [8, 16], "canned_food": [1, 3], "water": [2, 4], "cloth": [1, 3], "cement": [1, 3], "ammo_9mm": [8, 20], "pistol": [-1, 1], "shells": [2, 8], "ammo_762": [-2, 6], "shotgun": [-3, 1], "rifle": [-4, 1], "fuel": [1, 4]},
 }
 
@@ -45,6 +51,9 @@ const RECIPES := {
 	"machete": {"count": 1, "cost": {"scrap": 3, "cloth": 1, "wood": 1}, "info": "faster and harder than the pipe"},
 	"bandage": {"count": 1, "cost": {"cloth": 2}, "info": "heals 30, use with F"},
 	"shovel": {"count": 1, "cost": {"scrap": 3, "wood": 2}, "info": "LMB digs (gives sand), RMB fills"},
+	"pickaxe": {"count": 1, "cost": {"scrap": 4, "wood": 2}, "info": "breaks rocks for stone, digs through stone"},
+	"cable": {"count": 6, "cost": {"scrap": 1, "cloth": 1}, "info": "hold it: click a generator, then a light, fence, switch or turret"},
+	"metal_detector": {"count": 1, "cost": {"scrap": 6, "nails": 4, "cloth": 2}, "info": "finds caches buried near the base"},
 	"spike_barricade": {"count": 1, "cost": {"wood": 4, "nails": 4}, "info": "build it in build mode"},
 	"pistol": {"count": 1, "cost": {"scrap": 10, "wood": 2, "nails": 6}, "info": "12 rounds. RMB aims, R reloads"},
 	"ammo_9mm": {"count": 8, "cost": {"scrap": 2, "nails": 3}, "info": "for the pistol"},

@@ -22,16 +22,38 @@ const DOOR_W := 1.1
 const DOOR_H := 2.05
 
 ## Material tiers: hit points, the item used to upgrade to and repair each.
-const TIER_NAMES := ["wood", "scrap metal", "concrete"]
-const TIER_HP := [250.0, 600.0, 1500.0]
-const TIER_ITEM := ["wood", "scrap", "cement"]
+const TIER_NAMES := ["wood", "scrap metal", "stone", "concrete"]
+const TIER_HP := [250.0, 600.0, 1000.0, 1500.0]
+const TIER_ITEM := ["wood", "scrap", "stone", "cement"]
 const REFUND := 0.5          # share of what a piece cost you get back when demolished
 const UNDO_SECONDS := 60.0   # build-mode right click gives everything back this soon after building
 const ZONE_RADIUS := 26.0    # base build zone around the flag at the origin (before upgrades)
 const CHEST_SLOTS := 20      # before upgrades
+## Power: cables (laid with cable from a reel) join wired pieces; power flows from
+## running generators along them, through switches that are on. Pieces within
+## PLUG_RANGE of a running generator are plugged straight into it.
+const WIRED := ["generator", "switch", "floodlight", "electric_fence", "turret"]
+const PLUG_RANGE := 4.0
+const CABLE_MAX := 24.0      # longest single cable
+const CABLE_PER := 2.0       # metres of cable one cable item covers
+## Gates (not trapdoors) left open at night close by themselves after this long.
+const AUTO_CLOSE := 8.0
+## Structural support, counted from the ground: pieces at ground level have 100%.
+## Resting on what is below costs LOSS_UP, hanging off a floor next to it
+## LOSS_SIDE, times the piece's tier weight (heavier tiers need more support).
+## Below MIN_SUPPORT a piece comes down.
+const MIN_SUPPORT := 20.0
+const LOSS_UP := 10.0
+const LOSS_SIDE := 25.0
+const TIER_WEIGHT := [1.0, 1.15, 1.4, 1.3]
 ## A spiked pit goes in a hole at least this deep. A ladder is this tall.
 const PIT_DEPTH := 0.9
 const LADDER_H := 4.2
+## A well goes over a shaft dug this deep (down into the stone) and fills a
+## bottle of water every WELL_SECONDS, holding up to WELL_MAX.
+const WELL_DEPTH := 3.5
+const WELL_SECONDS := 75.0
+const WELL_MAX := 6.0
 ## Dig more than this out from under a piece standing on the sand and it falls
 ## (foundations take 0.4 m more).
 const UNDERMINE_GAP := 0.6
@@ -47,7 +69,7 @@ signal spilled(items: Dictionary, pos: Vector3)
 const PIECES := {
 	"foundation": {"name": "Wooden foundation", "slot": "cell", "cost": {"wood": 4, "nails": 4}, "dirs": 1},
 	"wall": {"name": "Wooden wall", "slot": "edge", "cost": {"wood": 3, "nails": 3}, "dirs": 2},
-	"doorway": {"name": "Doorway with gate", "slot": "edge", "cost": {"wood": 4, "nails": 4}, "dirs": 2},
+	"doorway": {"name": "Doorway with gate", "slot": "edge", "cost": {"wood": 4, "nails": 4}, "dirs": 2, "gate": true},
 	"window": {"name": "Wall with window", "slot": "edge", "cost": {"wood": 3, "nails": 3}, "dirs": 2},
 	"floor": {"name": "Wooden floor", "slot": "cell", "cost": {"wood": 3, "nails": 3}, "dirs": 1},
 	"stairs": {"name": "Wooden stairs", "slot": "cell", "cost": {"wood": 5, "nails": 4}, "dirs": 4, "long": true},
@@ -67,9 +89,19 @@ const PIECES := {
 	"landing_pad": {"name": "Drone landing pad", "slot": "obj", "cost": {"wood": 4, "scrap": 2, "nails": 4}, "dirs": 1, "fixed": true},
 	"sandbags": {"name": "Sandbag wall", "slot": "edge", "cost": {"sand": 6, "cloth": 2}, "dirs": 2, "fixed": true, "hp": 900.0, "blueprint": true},
 	"ladder": {"name": "Ladder", "slot": "obj", "cost": {"wood": 4, "nails": 4}, "dirs": 4, "fixed": true, "steep_ok": true, "noblock": true},
+	"half_wall": {"name": "Wooden half wall", "slot": "edge", "cost": {"wood": 2, "nails": 2}, "dirs": 2},
+	"low_wall": {"name": "Wooden low wall", "slot": "edge", "cost": {"wood": 1, "nails": 2}, "dirs": 2},
+	"slit_wall": {"name": "Wooden gun slit wall", "slot": "edge", "cost": {"wood": 3, "nails": 3}, "dirs": 2},
+	"pillar": {"name": "Wooden pillar", "slot": "post", "cost": {"wood": 2, "nails": 2}, "dirs": 1},
+	"trapdoor": {"name": "Floor with trapdoor", "slot": "cell", "cost": {"wood": 4, "nails": 4}, "dirs": 4},
+	"tri_foundation": {"name": "Wooden triangle foundation", "slot": "cell", "cost": {"wood": 2, "nails": 2}, "dirs": 4},
+	"tri_roof": {"name": "Scrap triangle roof", "slot": "cell", "cost": {"scrap": 2, "nails": 1}, "dirs": 4},
+	"metal_door": {"name": "Metal door", "slot": "edge", "cost": {"scrap": 8, "nails": 4}, "dirs": 2, "fixed": true, "hp": 1400.0, "gate": true},
+	"switch": {"name": "Power switch", "slot": "obj", "cost": {"scrap": 2, "nails": 2}, "dirs": 4, "fixed": true},
+	"well": {"name": "Water well", "slot": "obj", "cost": {"stone": 8, "wood": 4, "scrap": 2}, "dirs": 4, "fixed": true, "steep_ok": true, "pit": WELL_DEPTH, "over_pit": true},
 	"spiked_pit": {"name": "Spiked pit", "slot": "obj", "cost": {"wood": 4, "nails": 6}, "dirs": 1, "fixed": true, "trap": true, "steep_ok": true, "pit": PIT_DEPTH},
 }
-const ORDER := ["foundation", "wall", "doorway", "window", "floor", "stairs", "ramp", "roof", "chest", "workbench", "spikes", "spike_strip", "barbed_wire", "landmine", "fire_pit", "generator", "electric_fence", "floodlight", "turret", "landing_pad", "sandbags", "ladder", "spiked_pit"]
+const ORDER := ["foundation", "wall", "doorway", "window", "floor", "stairs", "ramp", "roof", "chest", "workbench", "spikes", "spike_strip", "barbed_wire", "landmine", "fire_pit", "generator", "electric_fence", "floodlight", "turret", "landing_pad", "sandbags", "ladder", "spiked_pit", "well", "half_wall", "low_wall", "slit_wall", "pillar", "trapdoor", "tri_foundation", "tri_roof", "metal_door", "switch"]
 ## Pieces marked "blueprint" must be unlocked first (blueprints come by drone).
 const TURRET_RANGE := 22.0
 const TURRET_AMMO := 240     # 9mm rounds its ammo box holds
@@ -77,13 +109,28 @@ const FENCE_H := 1.7
 const GEN_TANK := 10.0       # fuel cans a generator holds
 const FIRE_MAX := 300.0      # seconds of burning a fire pit holds
 const FIRE_PER_WOOD := 60.0
+## Collapse debris: rigid chunks on their own physics layer (6), gone after a while.
+const DEBRIS_LAYER := 32
+const DEBRIS_SECONDS := 4.0
+const MAX_DEBRIS := 72
 ## Traps don't block anyone: their bodies sit on their own physics layer (5),
 ## which only the hammer's aim ray looks at.
 const TRAP_LAYER := 16
 ## Edge pieces that hold up whatever is built above them.
-const WALLISH := ["wall", "doorway", "window"]
+const WALLISH := ["wall", "doorway", "window", "slit_wall", "metal_door"]
 ## Cell pieces you can stand on at an upper level.
-const DECKS := ["floor", "roof"]
+const DECKS := ["floor", "roof", "trapdoor", "tri_roof"]
+## Ground pieces that walls and floors stand on.
+const FOUNDATIONS := ["foundation", "tri_foundation"]
+## Prism pieces: half a square, cut corner to corner.
+const TRIS := ["tri_foundation", "tri_roof"]
+const HALF_H := 1.2   # half wall
+const LOW_H := 0.7    # low wall
+const SLIT_Y := 1.4   # gun slit: bottom and height
+const SLIT_H := 0.16
+const SLIT_W := 1.0
+const PILLAR_T := 0.3
+const HATCH := 1.0    # trapdoor opening, on the north side of its square
 
 var terrain  # Terrain
 ## type -> {key: true}, kept up to date by place() and remove(), so systems
@@ -96,10 +143,19 @@ var chest_slots := CHEST_SLOTS
 var pieces := {}
 ## every slot key a piece takes up (stairs take two) -> main slot key
 var occupied := {}
+## main slot key -> support in % (see MIN_SUPPORT), kept up to date
+var support := {}
+var _bulk := false  # loading: work out support once at the end
+## Cables: [key, key] pairs.
+var cables: Array = []
+var _cable_root: Node3D
 var _mats := {}
 
 
 func _ready() -> void:
+	_cable_root = Node3D.new()
+	_cable_root.name = "Cables"
+	add_child(_cable_root)
 	_mats.wood = LowPoly.material(Color(0.52, 0.36, 0.22))
 	_mats.wood_dark = LowPoly.material(Color(0.36, 0.24, 0.14))
 	_mats.plank = LowPoly.material(Color(0.60, 0.43, 0.27))
@@ -109,8 +165,12 @@ func _ready() -> void:
 	_mats.concrete_dark = LowPoly.material(Color(0.38, 0.37, 0.35))
 	_mats.crack = LowPoly.material(Color(0.08, 0.06, 0.05))
 	_mats.stone = LowPoly.material(Color(0.45, 0.41, 0.37))
+	_mats.stone_block = LowPoly.material(Color(0.47, 0.39, 0.31))
+	_mats.stone_dark = LowPoly.material(Color(0.33, 0.27, 0.22))
 	_mats.cloth = LowPoly.material(Color(0.7, 0.6, 0.42))
 	_mats.cloth_dark = LowPoly.material(Color(0.6, 0.51, 0.36))
+	_mats.water = LowPoly.material(Color(0.18, 0.32, 0.38), 0.1)
+	_mats.cable = LowPoly.material(Color(0.12, 0.12, 0.13))
 	_mats.live = StandardMaterial3D.new()  # electric fence wire with the power on
 	_mats.live.albedo_color = Color(0.6, 0.9, 1.0)
 	_mats.live.emission_enabled = true
@@ -133,6 +193,8 @@ func _tier_mat(tier: int, key: String) -> Material:
 	if tier == 1:
 		return _mats[{"wood": "metal", "plank": "metal", "wood_dark": "rust"}.get(key, key)]
 	if tier == 2:
+		return _mats[{"wood": "stone_block", "plank": "stone_block", "metal": "stone_block", "wood_dark": "stone_dark", "rust": "stone_dark"}.get(key, key)]
+	if tier == 3:
 		return _mats[{"wood": "concrete", "plank": "concrete", "metal": "concrete", "wood_dark": "concrete_dark", "rust": "concrete_dark"}.get(key, key)]
 	return _mats[key]
 
@@ -144,6 +206,8 @@ func _tier_mat(tier: int, key: String) -> Material:
 static func slot_for(type: String, p: Vector3, dir: int) -> Dictionary:
 	var cx := int(floor(p.x / CELL))
 	var cz := int(floor(p.z / CELL))
+	if PIECES[type].slot == "post":
+		return {"kind": "post", "cx": int(round(p.x / CELL)), "cz": int(round(p.z / CELL)), "dir": 0, "level": 0}
 	if PIECES[type].slot != "edge":
 		return {"kind": PIECES[type].slot, "cx": cx, "cz": cz, "dir": dir % PIECES[type].dirs, "level": 0}
 	if dir % 2 == 0:
@@ -177,6 +241,8 @@ static func slot_keys(type: String, slot: Dictionary) -> Array:
 
 ## Centre of a slot on the ground plane (y = 0). Long pieces: between their squares.
 static func slot_center(slot: Dictionary, type := "") -> Vector3:
+	if slot.kind == "post":
+		return Vector3(slot.cx * CELL, 0, slot.cz * CELL)
 	if slot.kind != "edge":
 		var c := Vector3((slot.cx + 0.5) * CELL, 0, (slot.cz + 0.5) * CELL)
 		if type != "" and PIECES[type].get("long", false):
@@ -194,7 +260,7 @@ static func piece_transform(type: String, slot: Dictionary, y: float) -> Transfo
 	var yaw := 0.0
 	if slot.kind == "edge":
 		yaw = 0.0 if slot.dir == 0 else PI / 2
-	elif PIECES[type].get("long", false) or slot.kind == "obj":
+	elif PIECES[type].get("long", false) or slot.kind == "obj" or type in TRIS or type == "trapdoor":
 		yaw = -slot.dir * PI / 2
 	return Transform3D(Basis(Vector3.UP, yaw), Vector3(c.x, y, c.z))
 
@@ -205,7 +271,10 @@ func _ground_samples(type: String, slot: Dictionary) -> Array:
 	var h := CELL * 0.5
 	var centers: Array = []
 	var pts: Array
-	if slot.kind != "edge":
+	if slot.kind == "post":
+		centers.append(slot_center(slot))
+		pts = [Vector2.ZERO, Vector2(0.15, 0.15), Vector2(-0.15, -0.15)]
+	elif slot.kind != "edge":
 		centers.append(slot_center(slot))
 		if PIECES[type].get("long", false):
 			var s := climb_step(slot.dir)
@@ -227,7 +296,7 @@ func piece_at(key: String) -> Dictionary:
 
 func foundation_top(cx: int, cz: int) -> float:
 	var p := piece_at(cell_key(cx, cz, 0))
-	return p.y if not p.is_empty() and p.type == "foundation" else NAN
+	return p.y if not p.is_empty() and p.type in FOUNDATIONS else NAN
 
 
 ## The two squares either side of an edge.
@@ -235,6 +304,15 @@ static func edge_cells(slot: Dictionary) -> Array:
 	if slot.dir == 0:
 		return [Vector2i(slot.cx, slot.cz - 1), Vector2i(slot.cx, slot.cz)]
 	return [Vector2i(slot.cx - 1, slot.cz), Vector2i(slot.cx, slot.cz)]
+
+
+## The four squares around a grid corner (a post slot).
+static func post_cells(slot: Dictionary) -> Array:
+	return [Vector2i(slot.cx - 1, slot.cz - 1), Vector2i(slot.cx, slot.cz - 1), Vector2i(slot.cx - 1, slot.cz), Vector2i(slot.cx, slot.cz)]
+
+
+static func post_key(cx: int, cz: int, level: int) -> String:
+	return slot_key({"kind": "post", "cx": cx, "cz": cz, "dir": 0, "level": level})
 
 
 ## The four edges around a square.
@@ -253,16 +331,29 @@ func _ground_level(type: String, slot: Dictionary) -> Dictionary:
 	var lo: float = g.min()
 	var hi: float = g.max()
 	var steep := hi - lo > MAX_SLOPE
+	if slot.kind == "obj" and PIECES[type].get("over_pit", false):
+		# Stands at the original ground level, over the shaft dug under it.
+		var c := slot_center(slot)
+		return {"y": terrain.original_height(c.x, c.z) if terrain.has_method("original_height") else hi, "steep": false}
 	if slot.kind == "obj":
 		var under := piece_at(cell_key(slot.cx, slot.cz, 0))
-		if not under.is_empty() and under.type in ["foundation", "floor"]:
+		if not under.is_empty() and under.type in FOUNDATIONS + ["floor", "trapdoor"]:
 			return {"y": under.y, "steep": false}
 		return {"y": lo, "steep": steep}
+	if slot.kind == "post":
+		var ptop := -INF
+		for c in post_cells(slot):
+			var t := foundation_top(c.x, c.y)
+			if not is_nan(t):
+				ptop = maxf(ptop, t)
+		if ptop > -INF:
+			return {"y": ptop, "steep": false}
+		return {"y": lo - 0.1, "steep": steep}
 	if slot.kind == "cell":
 		var t := foundation_top(slot.cx, slot.cz)
-		if type != "foundation" and not is_nan(t):
+		if not type in FOUNDATIONS and not is_nan(t):
 			return {"y": t, "steep": false}
-		return {"y": hi + 0.12 if type == "foundation" else lo, "steep": steep}
+		return {"y": hi + 0.12 if type in FOUNDATIONS else lo, "steep": steep}
 	var top := -INF
 	for c in edge_cells(slot):
 		var t := foundation_top(c.x, c.y)
@@ -276,6 +367,15 @@ func _ground_level(type: String, slot: Dictionary) -> Dictionary:
 ## Base height of what holds up an upper-level slot, or NAN if nothing does.
 func _support_y(slot: Dictionary) -> float:
 	var lv: int = slot.level
+	if slot.kind == "post":
+		var pb := piece_at(post_key(slot.cx, slot.cz, lv - 1))
+		if not pb.is_empty():
+			return pb.y + WALL_H
+		for c in post_cells(slot):
+			var f := piece_at(cell_key(c.x, c.y, lv))
+			if not f.is_empty() and f.type in DECKS:
+				return f.y
+		return NAN
 	if slot.kind == "obj":
 		var deck := piece_at(cell_key(slot.cx, slot.cz, lv))
 		return deck.y if not deck.is_empty() and deck.type in DECKS else NAN
@@ -285,6 +385,10 @@ func _support_y(slot: Dictionary) -> float:
 			var w := piece_at(slot_key(e))
 			if not w.is_empty() and w.type in WALLISH:
 				return w.y + WALL_H
+		for o in [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)]:
+			var pl := piece_at(post_key(slot.cx + o.x, slot.cz + o.y, lv - 1))
+			if not pl.is_empty():
+				return pl.y + WALL_H
 		for s in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
 			var f := piece_at(cell_key(slot.cx + s.x, slot.cz + s.y, lv))
 			if not f.is_empty() and f.type in DECKS:
@@ -302,7 +406,7 @@ func _support_y(slot: Dictionary) -> float:
 
 ## Which level a piece goes on when the crosshair hits height hit_y.
 func level_for(type: String, slot: Dictionary, hit_y: float) -> int:
-	if type == "foundation":
+	if type in FOUNDATIONS:
 		return 0
 	var base: float = _ground_level(type, slot).y
 	return clampi(int(round((hit_y - base) / WALL_H)), 0, MAX_LEVEL)
@@ -316,19 +420,22 @@ func evaluate(type: String, slot: Dictionary) -> Dictionary:
 	if not in_zone(type, slot):
 		return {"y": _ground_level(type, slot).y, "ok": false, "reason": "Outside the base zone (stay within %d m of the flag)" % int(zone_radius)}
 	if slot.get("level", 0) > 0:
-		if type == "foundation":
+		if type in FOUNDATIONS:
 			return {"y": 0.0, "ok": false, "reason": "Foundations go on the ground"}
 		var sy := _support_y(slot)
 		if is_nan(sy):
 			return {"y": _ground_level(type, slot).y + slot.level * WALL_H, "ok": false, "reason": "Needs a wall or floor to hold it up"}
-		return {"y": sy, "ok": true, "reason": ""}
+		var s := support_for({"type": type, "slot": slot, "tier": base_tier(type)})
+		if s < MIN_SUPPORT:
+			return {"y": sy, "ok": false, "reason": "Too far from support (%d%%): build closer to walls" % maxi(int(s), 0), "support": s}
+		return {"y": sy, "ok": true, "reason": "", "support": s}
 	var g := _ground_level(type, slot)
 	if g.steep and not PIECES[type].get("steep_ok", false):
 		return {"y": g.y, "ok": false, "reason": "Ground too steep"}
 	if PIECES[type].has("pit") and terrain and terrain.has_method("depth_at"):
 		var c := slot_center(slot)
 		if terrain.depth_at(c.x, c.z) < float(PIECES[type].pit) - 0.001:
-			return {"y": g.y, "ok": false, "reason": "Dig a pit at least 1 m deep here first (shovel)"}
+			return {"y": g.y, "ok": false, "reason": "Dig a pit at least %s m deep here first (%s)" % [str(PIECES[type].pit).trim_suffix(".0").replace("0.9", "1"), "pickaxe" if PIECES[type].pit > 2.7 else "shovel"]}
 	return {"y": g.y, "ok": true, "reason": ""}
 
 
@@ -360,6 +467,32 @@ static func piece_boxes(type: String) -> Array:
 			for i in 3:
 				out.append([Vector3(CELL - 0.02, 0.05, WALL_T + 0.02), Vector3(0, 0.6 * (i + 1), 0), "wood_dark"])
 			out.append_array(_posts())
+		"half_wall", "low_wall":
+			var h := HALF_H if type == "half_wall" else LOW_H
+			out.append([Vector3(CELL, h, WALL_T), Vector3(0, h * 0.5, 0), "wood"])
+			out.append([Vector3(CELL - 0.02, 0.06, WALL_T + 0.04), Vector3(0, h - 0.03, 0), "wood_dark"])
+		"slit_wall":
+			var side := (CELL - SLIT_W) * 0.5
+			out.append([Vector3(CELL, SLIT_Y, WALL_T), Vector3(0, SLIT_Y * 0.5, 0), "wood"])
+			out.append([Vector3(CELL, WALL_H - SLIT_Y - SLIT_H, WALL_T), Vector3(0, (WALL_H + SLIT_Y + SLIT_H) * 0.5, 0), "wood"])
+			for sx in [-1.0, 1.0]:
+				out.append([Vector3(side, SLIT_H, WALL_T), Vector3(sx * (SLIT_W + side) * 0.5, SLIT_Y + SLIT_H * 0.5, 0), "wood"])
+			out.append([Vector3(SLIT_W + 0.1, 0.04, WALL_T + 0.06), Vector3(0, SLIT_Y - 0.02, 0), "wood_dark"])
+			out.append_array(_posts())
+		"pillar":
+			out.append([Vector3(PILLAR_T, WALL_H, PILLAR_T), Vector3(0, WALL_H * 0.5, 0), "wood"])
+			out.append([Vector3(PILLAR_T + 0.06, 0.08, PILLAR_T + 0.06), Vector3(0, WALL_H - 0.04, 0), "wood_dark"])
+		"trapdoor":
+			# A floor with a HATCH x HATCH hole at its north edge (the lid is added on its own).
+			var rest := CELL - HATCH - 0.1
+			out.append([Vector3(CELL, FLOOR_T, rest), Vector3(0, -FLOOR_T * 0.5, CELL * 0.5 - rest * 0.5), "plank"])
+			for sx in [-1.0, 1.0]:
+				out.append([Vector3((CELL - HATCH) * 0.5, FLOOR_T, HATCH + 0.1), Vector3(sx * (CELL + HATCH) * 0.25, -FLOOR_T * 0.5, -CELL * 0.5 + (HATCH + 0.1) * 0.5), "plank"])
+		"metal_door":
+			var mside := (CELL - DOOR_W) * 0.5
+			for sx in [-1.0, 1.0]:
+				out.append([Vector3(mside, WALL_H, WALL_T), Vector3(sx * (DOOR_W + mside) * 0.5, WALL_H * 0.5, 0), "wood"])
+			out.append([Vector3(DOOR_W, WALL_H - DOOR_H, WALL_T), Vector3(0, (WALL_H + DOOR_H) * 0.5, 0), "wood"])
 		"doorway":
 			var side := (CELL - DOOR_W) * 0.5
 			for s in [-1.0, 1.0]:
@@ -483,6 +616,22 @@ static func piece_boxes(type: String) -> Array:
 			for i in int(LADDER_H / 0.35):
 				var h := 0.3 + i * 0.35
 				out.append([Vector3(0.56, 0.05, 0.05), Vector3(0, h, -0.8 + (h - LADDER_H * 0.5) * -tan(lean)), "wood"])
+		"switch":
+			out.append([Vector3(0.1, 1.2, 0.1), Vector3(0, 0.6, 0.1), "wood_dark"])
+			out.append([Vector3(0.28, 0.36, 0.14), Vector3(0, 1.1, 0), "metal"])
+			out.append([Vector3(0.06, 0.06, 0.01), Vector3(0.09, 1.22, -0.075), "lamp"])
+		"well":
+			# A ring of stone covering the shaft (first four boxes: also its colliders),
+			# two posts, a crank bar and a bucket.
+			for s in [-1.0, 1.0]:
+				out.append([Vector3(2.0, 0.85, 0.45), Vector3(0, 0.42, s * 0.775), "stone"])
+				out.append([Vector3(0.45, 0.85, 1.1), Vector3(s * 0.775, 0.42, 0), "stone"])
+			for s in [-1.0, 1.0]:
+				out.append([Vector3(0.1, 1.5, 0.1), Vector3(s * 0.78, 1.6, 0), "wood_dark"])
+			out.append([Vector3(1.66, 0.08, 0.08), Vector3(0, 2.3, 0), "wood"])
+			out.append([Vector3(0.02, 0.9, 0.02), Vector3(0, 1.85, 0), "cloth_dark"])
+			out.append([Vector3(0.28, 0.3, 0.28), Vector3(0, 1.3, 0), "wood"])
+			out.append([Vector3(1.1, 0.04, 1.1), Vector3(0, 0.3, 0), "water"])
 		"spiked_pit":
 			out.append([Vector3(1.9, 0.05, 1.9), Vector3(0, 0.03, 0), "wood_dark"])
 			for i in 4:
@@ -529,10 +678,10 @@ static func piece_colliders(type: String) -> Array:
 		"wall", "foundation", "floor", "roof":
 			var b: Array = piece_boxes(type)[0]
 			return [[b[0], b[1], 0.0]]
-		"doorway", "window":
+		"doorway", "window", "slit_wall", "metal_door", "half_wall", "low_wall", "trapdoor", "pillar":
 			var out: Array = []
 			for b in piece_boxes(type):
-				if b[2] == "wood":
+				if b[2] == "wood" or (type == "trapdoor" and b[2] == "plank"):
 					out.append([b[0], b[1], 0.0])
 			return out
 		"stairs", "ramp":
@@ -567,14 +716,27 @@ static func piece_colliders(type: String) -> Array:
 			return [[Vector3(0.7, LADDER_H, 0.3), Vector3(0, LADDER_H * 0.5, -0.8), 0.0]]
 		"spiked_pit":
 			return [[Vector3(1.8, 0.6, 1.8), Vector3(0, 0.3, 0), 0.0]]
+		"switch":
+			return [[Vector3(0.3, 1.3, 0.3), Vector3(0, 0.65, 0.05), 0.0]]
+		"well":
+			var out: Array = []
+			for b in piece_boxes("well").slice(0, 4):
+				out.append([b[0], b[1], 0.0])
+			return out
 	return []
 
 
 ## The box used to check that a piece has room: [size, centre].
 static func piece_bounds(type: String) -> Array:
 	match type:
-		"doorway", "window":
+		"doorway", "window", "slit_wall", "metal_door":
 			return [Vector3(CELL, WALL_H, WALL_T), Vector3(0, WALL_H * 0.5, 0)]
+		"tri_foundation":
+			return [Vector3(CELL, FOUNDATION_H, CELL), Vector3(0, -FOUNDATION_H * 0.5, 0)]
+		"tri_roof":
+			return [Vector3(CELL, FLOOR_T, CELL), Vector3(0, -FLOOR_T * 0.5, 0)]
+		"trapdoor":
+			return [Vector3(CELL, FLOOR_T, CELL), Vector3(0, -FLOOR_T * 0.5, 0)]
 		"stairs", "ramp":
 			return [Vector3(CELL, WALL_H * 0.5, CELL * 2.0), Vector3(0, WALL_H * 0.25, 0)]
 	var c: Array = piece_colliders(type)[0]
@@ -607,6 +769,8 @@ func place(type: String, slot: Dictionary, y: float, gate_open := false, tier :=
 			mi.position += Basis(Vector3.RIGHT, b[3]) * b[4]
 		mi.set_meta("mat", b[2])
 		body.add_child(mi)
+	if type in TRIS:
+		_add_prism(body, type)
 	for c in piece_colliders(type):
 		var col := CollisionShape3D.new()
 		var shape := BoxShape3D.new()
@@ -632,8 +796,10 @@ func place(type: String, slot: Dictionary, y: float, gate_open := false, tier :=
 	_by_type[type][key] = true
 	for k in slot_keys(type, slot):
 		occupied[k] = key
-	if type == "doorway":
+	if PIECES[type].get("gate", false):
 		_add_gate(rec, gate_open)
+	elif type == "trapdoor":
+		_add_hatch(rec, gate_open)
 	elif type == "chest":
 		rec.storage = Inventory.new(chest_slots)
 		body.set_meta("interact_id", "chest:" + key)
@@ -658,13 +824,86 @@ func place(type: String, slot: Dictionary, y: float, gate_open := false, tier :=
 		spot.visible = false
 		body.add_child(spot)
 		rec.light = spot
+	elif type == "switch":
+		rec.open = gate_open  # "open" holds whether the switch is on
+		body.set_meta("interact_id", "switch:" + key)
+		var lever := Node3D.new()
+		lever.position = Vector3(0, 1.1, -0.08)
+		body.add_child(lever)
+		var handle := MeshInstance3D.new()
+		handle.mesh = _box_mesh(Vector3(0.05, 0.22, 0.05))
+		handle.position = Vector3(0, 0.11, 0)
+		handle.material_override = _mats.rust
+		lever.add_child(handle)
+		rec.lever = lever
+		_set_lever(rec)
+	elif type == "well":
+		rec.water = 0.0
+		body.set_meta("interact_id", "well:" + key)
 	elif type == "turret":
 		rec.ammo = 0
 		body.set_meta("interact_id", "turret:" + key)
 		_add_turret_head(rec)
 	if type in ["floodlight", "electric_fence"]:
 		rec.powered = false
+	if not _bulk:
+		_refresh_support()
 	return key
+
+
+## Triangle pieces: a prism over half the square, cut from its north-east to
+## its south-west corner (the right angle in the north-west): its six corners.
+static func prism_points(type: String) -> PackedVector3Array:
+	var h := FOUNDATION_H if type == "tri_foundation" else FLOOR_T
+	var c := CELL * 0.5
+	var top := [Vector3(-c, 0, -c), Vector3(c, 0, -c), Vector3(-c, 0, c)]
+	var out := PackedVector3Array()
+	for v in top:
+		out.append(v)
+	for v in top:
+		out.append(v - Vector3(0, h, 0))
+	return out
+
+
+static func prism_mesh(type: String) -> ArrayMesh:
+	var p := prism_points(type)
+	var centre := Vector3.ZERO
+	for v in p:
+		centre += v / 6.0
+	var faces: Array = [[p[0], p[1], p[2]], [p[3], p[5], p[4]]]
+	for i in 3:
+		var j := (i + 1) % 3
+		faces.append([p[i], p[i + 3], p[j + 3]])
+		faces.append([p[i], p[j + 3], p[j]])
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for f in faces:
+		var a: Vector3 = f[0]
+		var b: Vector3 = f[1]
+		var cc: Vector3 = f[2]
+		var n := (cc - a).cross(b - a).normalized()
+		if n.dot((a + b + cc) / 3.0 - centre) < 0.0:
+			n = -n
+			var t := b
+			b = cc
+			cc = t
+		st.set_normal(n)
+		st.add_vertex(a)
+		st.add_vertex(b)
+		st.add_vertex(cc)
+	return st.commit()
+
+
+func _add_prism(body: StaticBody3D, type: String) -> void:
+	var mi := MeshInstance3D.new()
+	mi.mesh = prism_mesh(type)
+	mi.set_meta("mat", "wood_dark" if type == "tri_foundation" else "plank")
+	body.add_child(mi)
+	var col := CollisionShape3D.new()
+	var shape := ConvexPolygonShape3D.new()
+	shape.points = prism_points(type)
+	col.shape = shape
+	body.add_child(col)
 
 
 ## The part that turns: a swivel with a gun on it and a muzzle flash.
@@ -779,18 +1018,179 @@ func _add_gate(rec: Dictionary, open: bool) -> void:
 	set_gate(slot_key(rec.slot), open)
 
 
+## The trapdoor's hatch: a lid over the opening, hinged at its north edge.
+func _add_hatch(rec: Dictionary, open: bool) -> void:
+	var hinge := Node3D.new()
+	hinge.position = Vector3(0, 0, -CELL * 0.5 + 0.05)
+	rec.node.add_child(hinge)
+	var lid := StaticBody3D.new()
+	lid.set_meta("interact_id", "hatch:" + slot_key(rec.slot))
+	lid.position = Vector3(0, -FLOOR_T * 0.5, HATCH * 0.5)
+	hinge.add_child(lid)
+	for i in 3:
+		var mi := MeshInstance3D.new()
+		mi.mesh = _box_mesh(Vector3(HATCH - 0.04, FLOOR_T * 0.8, HATCH / 3.0 - 0.03))
+		mi.position.z = -HATCH * 0.5 + HATCH / 6.0 + i * HATCH / 3.0
+		mi.set_meta("mat", "plank" if i % 2 == 0 else "wood")
+		lid.add_child(mi)
+	var col := CollisionShape3D.new()
+	col.shape = BoxShape3D.new()
+	col.shape.size = Vector3(HATCH - 0.04, FLOOR_T * 0.8, HATCH - 0.04)
+	lid.add_child(col)
+	rec.hinge = hinge
+	_apply_tier(rec)
+	set_gate(slot_key(rec.slot), open)
+
+
 func set_gate(key: String, open: bool) -> void:
 	var rec: Dictionary = pieces.get(key, {})
 	if rec.is_empty() or not rec.has("hinge"):
 		return
 	rec.open = open
-	rec.hinge.rotation.y = -PI * 0.5 if open else 0.0
+	rec.open_t = 0.0
+	if rec.type == "trapdoor":
+		rec.hinge.rotation.x = PI * 0.5 if open else 0.0
+	else:
+		rec.hinge.rotation.y = -PI * 0.5 if open else 0.0
 
 
-## E on a gate: open it if closed, close it if open.
+## E on a gate: open it if closed, close it if open (not while it is locked).
 func toggle_gate(key: String) -> void:
-	if pieces.has(key):
+	if pieces.has(key) and not pieces[key].get("locked", false):
 		set_gate(key, not pieces[key].open)
+
+
+## R on a metal door: lock or unlock it (only when shut). A locked door takes
+## half damage and can't be opened. Returns true if it changed.
+func toggle_lock(key: String) -> bool:
+	var rec: Dictionary = pieces.get(key, {})
+	if rec.is_empty() or rec.type != "metal_door" or rec.open:
+		return false
+	rec.locked = not rec.get("locked", false)
+	return true
+
+
+## E on a switch: on or off.
+func toggle_switch(key: String) -> void:
+	var rec: Dictionary = pieces.get(key, {})
+	if rec.is_empty() or rec.type != "switch":
+		return
+	rec.open = not rec.open
+	_set_lever(rec)
+
+
+func _set_lever(rec: Dictionary) -> void:
+	if rec.has("lever"):
+		rec.lever.rotation.x = -0.6 if rec.open else 0.6
+
+
+# --- Cables ---------------------------------------------------------------------
+
+func cables_of(key: String) -> Array:
+	return cables.filter(func(c): return key in c)
+
+
+## Where a cable meets a piece.
+func cable_anchor(key: String) -> Vector3:
+	var rec: Dictionary = pieces[key]
+	var h := {"floodlight": 2.6, "turret": 0.9, "electric_fence": 1.2, "switch": 1.1}.get(rec.type, 0.8) as float
+	return rec.node.global_position + Vector3(0, h, 0)
+
+
+## Cable items a cable between two pieces takes.
+func cable_cost(a: String, b: String) -> int:
+	return maxi(1, ceili(cable_anchor(a).distance_to(cable_anchor(b)) / CABLE_PER))
+
+
+## Why two pieces can't be joined by a cable ("" if they can).
+func cable_problem(a: String, b: String) -> String:
+	if not pieces.has(a) or not pieces.has(b) or a == b:
+		return "Pick two different pieces"
+	if not pieces[a].type in WIRED or not pieces[b].type in WIRED:
+		return "Cables join generators, switches, floodlights, electric fences and turrets"
+	for c in cables:
+		if a in c and b in c:
+			return "They are already joined"
+	if cable_anchor(a).distance_to(cable_anchor(b)) > CABLE_MAX:
+		return "Too far for one cable (%d m at most): put a switch in between" % int(CABLE_MAX)
+	return ""
+
+
+## Joins two pieces with a cable (no cost check: see cable_cost). Returns true if laid.
+func connect_cable(a: String, b: String) -> bool:
+	if cable_problem(a, b) != "":
+		return false
+	cables.append([a, b])
+	_rebuild_cables()
+	return true
+
+
+## Takes up every cable on a piece. Returns how many cable items come back.
+func disconnect_all(key: String) -> int:
+	var back := 0
+	for c in cables_of(key):
+		back += cable_cost(c[0], c[1])
+	cables = cables.filter(func(c): return not key in c)
+	_rebuild_cables()
+	return back
+
+
+## Older saves: cable every floodlight and fence to each generator in the old 18 m reach.
+func auto_wire(reach: float) -> void:
+	for g in keys_of(["generator"]):
+		for k in keys_of(["floodlight", "electric_fence"]):
+			if pieces[k].node.global_position.distance_to(pieces[g].node.global_position) <= reach:
+				cables.append([g, k])
+	_rebuild_cables()
+
+
+## Every piece power reaches from these running generators: along cables, and
+## on through switches only when they are on.
+func power_network(running: Array) -> Dictionary:
+	var reached := {}
+	var todo: Array = running.duplicate()
+	for k in running:
+		reached[k] = true
+	var links := {}
+	for c in cables:
+		for i in 2:
+			if not links.has(c[i]):
+				links[c[i]] = []
+			links[c[i]].append(c[1 - i])
+	while not todo.is_empty():
+		var k: String = todo.pop_back()
+		if pieces.has(k) and pieces[k].type == "switch" and not pieces[k].open:
+			continue  # an open switch stops the power here
+		for n in links.get(k, []):
+			if not reached.has(n):
+				reached[n] = true
+				todo.append(n)
+	return reached
+
+
+## The cables as thin dark bars, sagging a little in the middle.
+func _rebuild_cables() -> void:
+	if _cable_root == null:
+		return
+	for c in _cable_root.get_children():
+		c.queue_free()
+	for c in cables:
+		if not pieces.has(c[0]) or not pieces.has(c[1]):
+			continue
+		var a := cable_anchor(c[0])
+		var b := cable_anchor(c[1])
+		var mid := (a + b) * 0.5 - Vector3(0, minf(a.distance_to(b) * 0.06, 0.8), 0)
+		for seg in [[a, mid], [mid, b]]:
+			var p0: Vector3 = seg[0]
+			var p1: Vector3 = seg[1]
+			var mi := MeshInstance3D.new()
+			mi.mesh = _box_mesh(Vector3(0.04, 0.04, maxf(p0.distance_to(p1), 0.01)))
+			mi.material_override = _mats.cable
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			_cable_root.add_child(mi)
+			mi.global_position = (p0 + p1) * 0.5
+			if p0.distance_to(p1) > 0.01:
+				mi.look_at(p1, Vector3.UP if absf((p1 - p0).normalized().y) < 0.99 else Vector3.RIGHT)
 
 
 ## Prompt text for a gate, chest or workbench interact id ("gate:<key>"...), or "".
@@ -799,7 +1199,13 @@ func prompt(id: String) -> String:
 	if not pieces.has(key):
 		return ""
 	if id.begins_with("gate:"):
-		return "[E] Close gate" if pieces[key].open else "[E] Open gate"
+		var what := "door" if pieces[key].type == "metal_door" else "gate"
+		if pieces[key].get("locked", false):
+			return "Metal door, locked   [R] Unlock"
+		var text := "[E] Close %s" % what if pieces[key].open else "[E] Open %s" % what
+		return text + ("   [R] Lock" if pieces[key].type == "metal_door" and not pieces[key].open else "")
+	if id.begins_with("hatch:"):
+		return "[E] Close trapdoor" if pieces[key].open else "[E] Open trapdoor"
 	if id.begins_with("chest:"):
 		return "[E] Open storage chest"
 	if id.begins_with("bench:"):
@@ -810,6 +1216,15 @@ func prompt(id: String) -> String:
 		return "[E] Add a fuel can   Generator %d/%d cans, %s" % [ceili(rec.fuel), int(GEN_TANK), state]
 	if id.begins_with("turret:"):
 		return "[E] Load 9mm rounds   Auto-turret %d/%d rounds%s" % [rec.ammo, TURRET_AMMO, "" if rec.ammo > 0 else ", EMPTY"]
+	if id.begins_with("switch:"):
+		return "[E] Turn %s   Power switch: %s" % ["off" if rec.open else "on", "on" if rec.open else "off"]
+	if id.begins_with("well:"):
+		var next := int(ceil((1.0 - fmod(rec.water, 1.0)) * WELL_SECONDS))
+		if rec.water >= WELL_MAX:
+			return "[E] Take water   Well: %d bottles (full)" % int(WELL_MAX)
+		if rec.water >= 1.0:
+			return "[E] Take water   Well: %d bottle%s, the next in %d s" % [int(rec.water), "" if int(rec.water) == 1 else "s", next]
+		return "Water well: filling, the first bottle in %d s" % next
 	if id.begins_with("fire:"):
 		if rec.burn <= 0.0:
 			return "[E] Light the fire (1 wood)"
@@ -834,6 +1249,10 @@ func remove(key: String, spill := true) -> String:
 	for k in slot_keys(rec.type, rec.slot):
 		occupied.erase(k)
 	pieces.erase(key)
+	support.erase(key)
+	if not cables_of(key).is_empty():
+		cables = cables.filter(func(c): return not key in c)
+		_rebuild_cables()
 	if _by_type.has(rec.type):
 		_by_type[rec.type].erase(key)
 	return rec.type
@@ -868,7 +1287,7 @@ func blocks_person(type: String, slot: Dictionary, y: float, pos: Vector3, radiu
 
 ## Roofs and ramps are made of scrap from the start.
 static func base_tier(type: String) -> int:
-	return 1 if type in ["roof", "ramp"] else 0
+	return 1 if type in ["roof", "ramp", "tri_roof", "metal_door"] else 0
 
 
 func max_hp(rec: Dictionary) -> float:
@@ -890,12 +1309,15 @@ static func _size(type: String) -> int:
 	return maxi(2, int(cost.get("wood", 0)) + int(cost.get("scrap", 0)))
 
 
-## What it costs to raise a piece one tier ({} at concrete).
+## What it costs to raise a piece one tier ({} at concrete): scrap metal and
+## nails, then stone with clay as mortar, then cement.
 func upgrade_cost(rec: Dictionary) -> Dictionary:
 	if rec.tier >= TIER_NAMES.size() - 1 or PIECES[rec.type].get("fixed", false):
 		return {}
 	if rec.tier == 0:
 		return {"scrap": _size(rec.type) + 1, "nails": 2}
+	if rec.tier == 1:
+		return {"stone": _size(rec.type) + 2, "clay": 1}
 	return {"cement": _size(rec.type), "scrap": 1}
 
 
@@ -933,6 +1355,7 @@ func upgrade(key: String) -> void:
 	rec.tier += 1
 	rec.hp = max_hp(rec)
 	_apply_tier(rec)
+	_refresh_support()
 
 
 func repair(key: String) -> void:
@@ -948,6 +1371,8 @@ func damage(key: String, amount: float) -> bool:
 	var rec: Dictionary = pieces.get(key, {})
 	if rec.is_empty():
 		return false
+	if rec.get("locked", false):
+		amount *= 0.5  # a locked metal door is barred from inside
 	rec.hp = maxf(rec.hp - amount, 0.0)
 	if rec.hp <= 0.0:
 		var type: String = rec.type
@@ -982,6 +1407,15 @@ func piece_key_of(n: Node) -> String:
 func _supporters(slot: Dictionary) -> Array:
 	var out: Array = []
 	var lv: int = slot.level
+	if slot.kind == "post":
+		var pb := piece_at(post_key(slot.cx, slot.cz, lv - 1))
+		if not pb.is_empty():
+			out.append(slot_key(pb.slot))
+		for c in post_cells(slot):
+			var f := piece_at(cell_key(c.x, c.y, lv))
+			if not f.is_empty() and f.type in DECKS:
+				out.append(slot_key(f.slot))
+		return out
 	if slot.kind == "obj":
 		var deck := piece_at(cell_key(slot.cx, slot.cz, lv))
 		if not deck.is_empty() and deck.type in DECKS:
@@ -992,6 +1426,10 @@ func _supporters(slot: Dictionary) -> Array:
 			var w := piece_at(slot_key(e))
 			if not w.is_empty() and w.type in WALLISH:
 				out.append(slot_key(w.slot))
+		for o in [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)]:
+			var pl := piece_at(post_key(slot.cx + o.x, slot.cz + o.y, lv - 1))
+			if not pl.is_empty():
+				out.append(slot_key(pl.slot))
 		for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
 			var f := piece_at(cell_key(slot.cx + d.x, slot.cz + d.y, lv))
 			if not f.is_empty() and f.type in DECKS:
@@ -1007,27 +1445,89 @@ func _supporters(slot: Dictionary) -> Array:
 	return out
 
 
-## Upstairs pieces with no chain of support down to the ground fall down
-## (two floors can't hold each other up in the air). Returns how many fell.
-func collapse_unsupported() -> int:
-	var grounded := {}
+## What resting on sup costs a piece rec, in support points.
+static func support_loss(rec: Dictionary, sup: Dictionary) -> float:
+	var w: float = 1.0 if PIECES[rec.type].get("fixed", false) else TIER_WEIGHT[clampi(int(rec.tier), 0, TIER_WEIGHT.size() - 1)]
+	if sup.slot.level < rec.slot.level:
+		return LOSS_UP * w
+	if rec.slot.kind == "cell":
+		return LOSS_SIDE * w  # a floor hanging off the one next to it
+	return LOSS_UP * 0.5 * w  # standing on a floor
+
+
+## Support every piece gets, worked out from the ground up: key -> %. With
+## tier_override {key: tier}, as if those pieces had other tiers.
+func compute_support(tier_override := {}) -> Dictionary:
+	var out := {}
 	for key in pieces:
 		if pieces[key].slot.level == 0:
-			grounded[key] = true
+			out[key] = 100.0
 	var changed := true
-	while changed:
+	var passes := 0
+	while changed and passes < 64:
 		changed = false
+		passes += 1
 		for key in pieces:
-			if grounded.has(key):
+			var rec: Dictionary = pieces[key]
+			if rec.slot.level == 0:
 				continue
-			for k in _supporters(pieces[key].slot):
-				if grounded.has(k):
-					grounded[key] = true
-					changed = true
-					break
+			if tier_override.has(key):
+				rec = rec.merged({"tier": tier_override[key]}, true)
+			var best := -INF
+			for k in _supporters(rec.slot):
+				if out.has(k):
+					best = maxf(best, out[k] - support_loss(rec, pieces[k]))
+			if best > out.get(key, -INF) + 0.001:
+				out[key] = best
+				changed = true
+	return out
+
+
+## Support a new piece {type, slot, tier} would get where it stands (-INF if none).
+func support_for(rec: Dictionary) -> float:
+	if rec.slot.get("level", 0) == 0:
+		return 100.0
+	var best := -INF
+	for k in _supporters(rec.slot):
+		if support.has(k):
+			best = maxf(best, support[k] - support_loss(rec, pieces[k]))
+	return best
+
+
+func _refresh_support() -> void:
+	support = compute_support()
+	for key in pieces:
+		pieces[key].support = support.get(key, 0.0)
+
+
+## Why upgrading a piece must wait ("" if it can go ahead): a heavier tier must
+## not bring down what it holds up, or itself.
+func upgrade_problem(key: String) -> String:
+	var rec: Dictionary = pieces.get(key, {})
+	if rec.is_empty() or upgrade_cost(rec).is_empty():
+		return ""
+	var after := compute_support({key: rec.tier + 1})
+	for k in pieces:
+		if after.get(k, 0.0) < MIN_SUPPORT:
+			return "Too heavy: a %s %s would bring %s down" % [TIER_NAMES[rec.tier + 1], PIECES[rec.type].name.replace("Wooden ", "").replace("Scrap ", "").to_lower(), "itself" if k == key else "what it holds up"]
+	return ""
+
+
+## Pieces without enough support (see MIN_SUPPORT) fall down, and then what
+## they held up, with debris. Returns how many fell.
+func collapse_unsupported() -> int:
 	var fell := 0
-	for key in pieces.keys():
-		if not grounded.has(key):
+	for round_i in 16:
+		_refresh_support()
+		var weak: Array = []
+		for key in pieces:
+			if support.get(key, 0.0) < MIN_SUPPORT:
+				weak.append(key)
+		if weak.is_empty():
+			break
+		for key in weak:
+			if not pieces.has(key):
+				continue
 			var rec: Dictionary = pieces[key]
 			_debris(rec)
 			remove(key)
@@ -1046,13 +1546,17 @@ func on_ladder(pos: Vector3) -> bool:
 
 
 ## A new foundation fills the sand under it up to its bottom (no gaps under it).
+## A new well fills its footprint up to the ground around its shaft.
 func level_under(key: String) -> void:
 	var rec: Dictionary = pieces.get(key, {})
-	if rec.is_empty() or rec.type != "foundation" or terrain == null or not terrain.has_method("raise_area"):
+	if rec.is_empty() or not rec.type in FOUNDATIONS + ["well"] or terrain == null or not terrain.has_method("raise_area"):
 		return
 	var x0: float = rec.slot.cx * CELL
 	var z0: float = rec.slot.cz * CELL
-	terrain.raise_area(Rect2(x0, z0, CELL, CELL), rec.y - FOUNDATION_H)
+	if rec.type == "well":
+		terrain.raise_area(Rect2(x0, z0, CELL, CELL), rec.y, Vector2(x0 + CELL * 0.5, z0 + CELL * 0.5))
+	else:
+		terrain.raise_area(Rect2(x0, z0, CELL, CELL), rec.y - FOUNDATION_H)
 
 
 ## The ground changed (digging): pieces standing on the sand nearby are checked.
@@ -1074,7 +1578,7 @@ func settle(area: Rect2) -> int:
 			if not near.has_point(Vector2(c.x, c.z)):
 				continue
 			var is_obj: bool = rec.slot.kind == "obj"
-			if (pass_i == 0) != (rec.type == "foundation") or (pass_i == 2) != is_obj:
+			if (pass_i == 0) != (rec.type in FOUNDATIONS) or (pass_i == 2) != is_obj:
 				continue
 			if is_obj:
 				_reseat(rec)
@@ -1096,16 +1600,20 @@ func settle(area: Rect2) -> int:
 ## under its middle, or under half of the points it stands on.
 func undermined(rec: Dictionary) -> bool:
 	var slot: Dictionary = rec.slot
-	if rec.type != "foundation":
+	if not rec.type in FOUNDATIONS:
 		if slot.kind == "cell" and not is_nan(foundation_top(slot.cx, slot.cz)):
 			return false
+		if slot.kind == "post":
+			for c in post_cells(slot):
+				if not is_nan(foundation_top(c.x, c.y)):
+					return false
 		if slot.kind == "edge":
 			for c in edge_cells(slot):
 				if not is_nan(foundation_top(c.x, c.y)):
 					return false
-	var bottom: float = rec.y - (FOUNDATION_H if rec.type == "foundation" else 0.0)
+	var bottom: float = rec.y - (FOUNDATION_H if rec.type in FOUNDATIONS else 0.0)
 	# Foundations may stand on a slope already (up to MAX_SLOPE), so they take a bit more.
-	var limit := UNDERMINE_GAP + (0.4 if rec.type == "foundation" else 0.0)
+	var limit := UNDERMINE_GAP + (0.4 if rec.type in FOUNDATIONS else 0.0)
 	var g := _ground_samples(rec.type, slot)
 	var gaps := 0
 	for h in g:
@@ -1118,12 +1626,25 @@ func undermined(rec: Dictionary) -> bool:
 ## Moves an object on the sand (not on a foundation or floor) to the ground under it.
 func _reseat(rec: Dictionary) -> void:
 	var under := piece_at(cell_key(rec.slot.cx, rec.slot.cz, 0))
-	if not under.is_empty() and under.type in ["foundation", "floor"]:
+	if not under.is_empty() and under.type in FOUNDATIONS + ["floor", "trapdoor"]:
 		return
 	var y: float = _ground_level(rec.type, rec.slot).y
 	if absf(y - rec.y) > 0.001:
 		rec.y = y
 		rec.node.position.y = y
+
+
+var _debris_check := 0.0
+
+func _physics_process(delta: float) -> void:
+	_debris_check -= delta
+	if _debris_check > 0.0 or terrain == null:
+		return
+	_debris_check = 0.5
+	# Safety net: a chunk that somehow got under the sand is removed, not left falling.
+	for c in get_tree().get_nodes_in_group("debris"):
+		if not c.is_queued_for_deletion() and c.global_position.y < terrain.surface_height(c.global_position.x, c.global_position.z) - 1.0:
+			c.queue_free()
 
 
 ## Broken boards and chunks tumble to the ground in a puff of dust, with a crash.
@@ -1136,25 +1657,43 @@ func _debris(rec: Dictionary) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(slot_key(rec.slot)) + Time.get_ticks_msec()
 	var mat: Material = _tier_mat(rec.tier, "plank")
-	var ground: float = terrain.surface_height(xf.origin.x, xf.origin.z) if terrain else xf.origin.y
+	# Rigid chunks that tumble, bounce, settle and then shrink away. They sit on
+	# their own layer (6), so nobody trips over them, and only hit the world.
 	for i in 9:
+		var chunk := RigidBody3D.new()
+		chunk.collision_layer = DEBRIS_LAYER
+		chunk.collision_mask = 1  # not each other: they start out overlapping
+		chunk.add_collision_exception_with(rec.node)
+		chunk.mass = 4.0
+		chunk.continuous_cd = true  # thin chunks falling from upstairs mustn't pass through the sand
+		var csize := Vector3(rng.randf_range(0.2, 0.7), rng.randf_range(0.12, 0.3), rng.randf_range(0.14, 0.3))
 		var mi := MeshInstance3D.new()
-		mi.mesh = _box_mesh(Vector3(rng.randf_range(0.2, 0.7), rng.randf_range(0.08, 0.3), rng.randf_range(0.1, 0.3)))
+		mi.mesh = _box_mesh(csize)
 		mi.material_override = mat
-		add_child(mi)
+		chunk.add_child(mi)
+		var col := CollisionShape3D.new()
+		col.shape = BoxShape3D.new()
+		col.shape.size = csize
+		chunk.add_child(col)
+		add_child(chunk)
+		chunk.add_to_group("debris")
 		var local: Vector3 = b[1] + Vector3(rng.randf_range(-0.5, 0.5) * size.x, rng.randf_range(-0.4, 0.4) * size.y, rng.randf_range(-0.5, 0.5) * size.z)
-		mi.global_position = xf * local
-		mi.rotation = Vector3(rng.randf() * TAU, rng.randf() * TAU, 0)
-		var land := mi.global_position + Vector3(rng.randf_range(-1.2, 1.2), 0, rng.randf_range(-1.2, 1.2))
-		land.y = maxf(ground, xf.origin.y) + 0.1
-		var t := rng.randf_range(0.45, 0.8)
-		var tw := mi.create_tween()
-		tw.set_parallel(true)
-		tw.tween_property(mi, "global_position", land, t).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
-		tw.tween_property(mi, "rotation", mi.rotation + Vector3(rng.randf_range(-3, 3), rng.randf_range(-3, 3), 0), t)
-		tw.chain().tween_interval(2.0)
-		tw.chain().tween_property(mi, "scale", Vector3.ONE * 0.01, 0.6)
-		tw.chain().tween_callback(mi.queue_free)
+		var at: Vector3 = xf * local
+		if terrain:
+			# Never start inside the sand (foundations reach below it), or it drops through.
+			at.y = maxf(at.y, terrain.surface_height(at.x, at.z) + 0.45)
+		chunk.global_position = at
+		chunk.rotation = Vector3(rng.randf() * TAU, rng.randf() * TAU, 0)
+		chunk.linear_velocity = Vector3(rng.randf_range(-2.0, 2.0), rng.randf_range(0.5, 2.5), rng.randf_range(-2.0, 2.0))
+		chunk.angular_velocity = Vector3(rng.randf_range(-6, 6), rng.randf_range(-6, 6), rng.randf_range(-6, 6))
+		var tw := chunk.create_tween()
+		tw.tween_interval(DEBRIS_SECONDS + rng.randf_range(0.0, 1.0))
+		tw.tween_property(mi, "scale", Vector3.ONE * 0.01, 0.6)
+		tw.tween_callback(chunk.queue_free)
+	# Too many at once (a big collapse): the oldest go first.
+	var all := get_tree().get_nodes_in_group("debris")
+	for j in maxi(all.size() - MAX_DEBRIS, 0):
+		all[j].queue_free()
 	var dust := CPUParticles3D.new()
 	dust.one_shot = true
 	dust.emitting = true
@@ -1284,32 +1823,82 @@ func _update_cracks(rec: Dictionary) -> void:
 		rec.cracks.get_child(i).visible = i < shown
 
 
+## One piece as plain data (for saves, and for carrying it to a new spot).
+func piece_data(key: String) -> Dictionary:
+	var p: Dictionary = pieces[key]
+	var d := {"type": p.type, "kind": p.slot.kind, "cx": p.slot.cx, "cz": p.slot.cz, "dir": p.slot.dir, "level": p.slot.level, "y": p.y, "open": p.open, "tier": p.tier, "hp": p.hp}
+	if p.has("storage"):
+		d.items = p.storage.save_data()
+	for k in ["fuel", "burn", "ammo", "water", "locked"]:
+		if p.has(k):
+			d[k] = p[k]
+	return d
+
+
+## Builds a piece back from piece_data(), at its own slot or at another one.
+## Returns its key ("" for an unknown type).
+func restore_piece(p: Dictionary, slot := {}, y := NAN, old_tiers := false) -> String:
+	if not PIECES.has(p.get("type", "")):
+		return ""
+	if slot.is_empty():
+		slot = {"kind": str(p.kind), "cx": int(p.cx), "cz": int(p.cz), "dir": int(p.dir), "level": int(p.get("level", 0))}
+	if is_nan(y):
+		y = float(p.y)
+	var tier := int(p.get("tier", -1))
+	if old_tiers and tier >= 2:
+		tier += 1
+	var key := place(p.type, slot, y, bool(p.get("open", false)), tier, float(p.get("hp", -1.0)))
+	var rec: Dictionary = pieces[key]
+	if rec.has("storage") and p.has("items"):
+		rec.storage.load_data(p.items)
+	if rec.has("fuel"):
+		rec.fuel = clampf(float(p.get("fuel", 0.0)), 0.0, GEN_TANK)
+	if rec.has("ammo"):
+		rec.ammo = clampi(int(p.get("ammo", 0)), 0, TURRET_AMMO)
+	if rec.has("water"):
+		rec.water = clampf(float(p.get("water", 0.0)), 0.0, WELL_MAX)
+	if rec.has("burn"):
+		rec.burn = clampf(float(p.get("burn", 0.0)), 0.0, FIRE_MAX)
+	if p.get("locked", false) and rec.type == "metal_door":
+		rec.locked = true
+	return key
+
+
+## Why a piece can't be picked up and moved ("" if it can): foundations stay,
+## and so does anything that holds another piece up.
+func move_problem(key: String) -> String:
+	var rec: Dictionary = pieces.get(key, {})
+	if rec.is_empty():
+		return "Nothing to move"
+	if rec.type in FOUNDATIONS:
+		return "Foundations can't be moved"
+	if PIECES[rec.type].get("long", false) or rec.type == "well":
+		return "This can't be moved"
+	for k in pieces:
+		if k != key and key in _supporters(pieces[k].slot):
+			return "Something rests on it"
+	if rec.slot.level == 0:
+		# What stands on a foundation or floor square (walls on its edges, objects on it).
+		if rec.slot.kind == "cell":
+			for k in pieces:
+				var o: Dictionary = pieces[k]
+				if o.slot.level == 0 and o.slot.kind == "obj" and o.slot.cx == rec.slot.cx and o.slot.cz == rec.slot.cz:
+					return "Something rests on it"
+	return ""
+
+
 func save_data() -> Array:
 	var out: Array = []
 	for key in pieces:
-		var p: Dictionary = pieces[key]
-		var d := {"type": p.type, "kind": p.slot.kind, "cx": p.slot.cx, "cz": p.slot.cz, "dir": p.slot.dir, "level": p.slot.level, "y": p.y, "open": p.open, "tier": p.tier, "hp": p.hp}
-		if p.has("storage"):
-			d.items = p.storage.save_data()
-		for k in ["fuel", "burn", "ammo"]:
-			if p.has(k):
-				d[k] = p[k]
-		out.append(d)
+		out.append(piece_data(key))
 	return out
 
 
-func load_data(data: Array) -> void:
+func load_data(data: Array, old_tiers := false) -> void:
+	_bulk = true
 	for key in pieces.keys():
 		remove(key, false)
 	for p in data:
-		if PIECES.has(p.get("type", "")):
-			var slot := {"kind": str(p.kind), "cx": int(p.cx), "cz": int(p.cz), "dir": int(p.dir), "level": int(p.get("level", 0))}
-			var key := place(p.type, slot, float(p.y), bool(p.get("open", false)), int(p.get("tier", -1)), float(p.get("hp", -1.0)))
-			if pieces[key].has("storage") and p.has("items"):
-				pieces[key].storage.load_data(p.items)
-			if pieces[key].has("fuel"):
-				pieces[key].fuel = clampf(float(p.get("fuel", 0.0)), 0.0, GEN_TANK)
-			if pieces[key].has("ammo"):
-				pieces[key].ammo = clampi(int(p.get("ammo", 0)), 0, TURRET_AMMO)
-			if pieces[key].has("burn"):
-				pieces[key].burn = clampf(float(p.get("burn", 0.0)), 0.0, FIRE_MAX)
+		restore_piece(p, {}, NAN, old_tiers)
+	_bulk = false
+	_refresh_support()

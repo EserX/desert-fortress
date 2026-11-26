@@ -331,13 +331,16 @@ func _test_tiers() -> void:
 	check(main.holding_hammer(), "holding the hammer")
 	main.hammer_use(key)
 	check(rec.hp == 150.0, "no wood, no repair")
-	inv.add_all({"wood": 5, "scrap": 20, "nails": 10, "cement": 10})
+	inv.add_all({"wood": 5, "scrap": 20, "nails": 10, "cement": 10, "stone": 6, "clay": 2})
 	main.hammer_use(key)
 	check(rec.hp == 250.0 and inv.count_of("wood") == 3, "hammer repairs for 2 wood")
 	main.hammer_use(key)
 	check(rec.tier == 1 and rec.hp == 600.0 and inv.count_of("scrap") == 16, "hammer upgrades wood to scrap metal (4 scrap)")
 	main.hammer_use(key)
-	check(rec.tier == 2 and rec.hp == 1500.0 and inv.count_of("cement") == 7, "and scrap metal to concrete (3 cement)")
+	check(rec.tier == 2 and rec.hp == 1000.0 and inv.count_of("stone") == 1 and inv.count_of("clay") == 1, "then scrap metal to stone (5 stone, 1 clay)")
+	check(b.describe(rec) == "Stone wall", "a stone wall: " + b.describe(rec))
+	main.hammer_use(key)
+	check(rec.tier == 3 and rec.hp == 1500.0 and inv.count_of("cement") == 7, "and stone to concrete (3 cement)")
 	check(b.upgrade_cost(rec).is_empty(), "concrete is the top tier")
 	check(main.hammer_prompt(key).contains("Fully upgraded"), "prompt: " + main.hammer_prompt(key).replace("\n", " | "))
 	# Saved with tier and hit points.
@@ -345,7 +348,22 @@ func _test_tiers() -> void:
 	var data: Array = JSON.parse_string(JSON.stringify(b.save_data()))
 	b.load_data(data)
 	rec = b.pieces[key]
-	check(rec.tier == 2 and rec.hp == 1100.0, "tier and hit points are saved")
+	check(rec.tier == 3 and rec.hp == 1100.0, "tier and hit points are saved")
+	# Saves from before the stone tier: their concrete (tier 2) stays concrete.
+	var old: Array = data.duplicate(true)
+	old[0].tier = 2
+	b.load_data(old, true)
+	check(b.pieces[key].tier == 3, "an older save's concrete wall is still concrete")
+	var full: Dictionary = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	check(int(full.get("tiers", 0)) == 4, "saves say how many tiers there are")
+	full.erase("tiers")
+	full.buildings[0].tier = 1
+	main.apply_save_data(full)
+	check(b.pieces[key].tier == 1, "older saves keep scrap metal as scrap metal")
+	full.buildings[0].tier = 2
+	main.apply_save_data(full)
+	check(b.pieces[key].tier == 3, "and concrete as concrete")
+	rec = b.pieces[key]
 	# Too late to undo in build mode; the hammer demolishes for half back.
 	rec.built_at -= 61000
 	main.build_mode.active = true
@@ -353,7 +371,7 @@ func _test_tiers() -> void:
 	check(main.build_mode.try_remove() == "old", "build-mode undo only right after building")
 	main.build_mode.active = false
 	var refund: Dictionary = b.refund(rec)
-	check(refund == {"wood": 1, "nails": 2, "scrap": 2, "cement": 1}, "demolish refunds half %s" % str(refund))
+	check(refund == {"wood": 1, "nails": 2, "scrap": 2, "cement": 1, "stone": 2}, "demolish refunds half %s" % str(refund))
 	check(not main.hammer_demolish(key) and b.pieces.has(key), "first right click only arms demolish")
 	check(main.hammer_demolish(key) and not b.pieces.has(key), "second right click demolishes")
 	# Breaking a piece.
@@ -981,10 +999,12 @@ func _test_power() -> void:
 	main.day_night.restore(main.day_night.day, 12.0)
 	pw.tick(0.25)
 	check(not b.pieces[gk].running and not b.pieces[near].powered, "by day the generator stays off")
+	# Power goes by cable (v1.8).
+	check(b.connect_cable(gk, near) and b.connect_cable(gk, fk), "cables from the generator to a floodlight and the fence")
 	main.day_night.restore(main.day_night.day, 22.0)
 	pw.tick(0.25)
-	check(b.pieces[gk].running and b.pieces[near].powered and b.pieces[near].light.visible, "at night it runs and a floodlight nearby lights up")
-	check(not b.pieces[far].powered, "a floodlight %d m away is out of range" % int(b.pieces[far].node.global_position.distance_to(b.pieces[gk].node.global_position)))
+	check(b.pieces[gk].running and b.pieces[near].powered and b.pieces[near].light.visible, "at night it runs and a floodlight cabled to it lights up")
+	check(not b.pieces[far].powered, "a floodlight %d m away without a cable stays dark" % int(b.pieces[far].node.global_position.distance_to(b.pieces[gk].node.global_position)))
 	check(b.pieces[fk].powered, "the electric fence is live")
 	var before: float = b.pieces[gk].fuel
 	pw.tick(pw.FUEL_SECONDS)
@@ -1411,12 +1431,12 @@ func _test_digging() -> void:
 	check(absf(t.surface_height(p.x, p.z) - (h0 - 0.75)) < 0.001, "and raises the cell back up")
 	inv.remove("sand", 3)
 	check(main.dig_at(p, true) != "", "no filling without sand")
-	# Bedrock.
+	# Bedrock (solid stone above it needs the pickaxe).
 	for i in 30:
-		main.dig_at(p)
+		main.dig_at(p, false, "pickaxe")
 	var sand_at_bottom: int = inv.count_of("sand")
 	check(t.at_bedrock(p.x, p.z) and absf(t.cell_depth(t.dig_cell(p.x, p.z)) - t.BEDROCK) < 0.001, "bedrock stops the shovel %.0f m down" % t.BEDROCK)
-	check(main.dig_at(p).begins_with("Bedrock") and inv.count_of("sand") == sand_at_bottom, "no sand from bedrock")
+	check(main.dig_at(p, false, "pickaxe").begins_with("Bedrock") and inv.count_of("sand") == sand_at_bottom, "no sand from bedrock")
 	# A row of single digs makes a level trench.
 	t.load_data({})
 	for x in [8.5, 9.5, 10.5]:
@@ -1639,6 +1659,489 @@ func _check_ladder() -> void:
 	p.position = p.spawn_point
 
 
+## v1.3: layers under the sand, the pickaxe and rocks, buried caches and the metal detector.
+func _test_mining() -> void:
+	var t = main.terrain
+	var inv = main.inventory
+	var Items = load("res://scripts/items.gd")
+	t.load_data({})
+	main.building.load_data([])
+	inv.load_data({})
+	check(Items.RECIPES.has("pickaxe") and Items.RECIPES.has("metal_detector"), "the workbench makes a pickaxe and a metal detector")
+	main.open_test_box()
+	check(main.test_storage.count_of("pickaxe") == 1 and main.test_storage.count_of("metal_detector") == 1 and main.test_storage.count_of("stone") == 20, "the test box has them, and stone and clay")
+	main.inventory_ui.close()
+	# Sand, then clay, then stone that only the pickaxe gets through.
+	var p := Vector3(-10.5, 0, -6.5)
+	check(t.next_layer(p.x, p.z) == "sand", "digging starts in sand")
+	for i in 6:
+		main.dig_at(p)
+	check(t.next_layer(p.x, p.z) == "clay" and inv.count_of("sand") == 6, "below 1.5 m comes clay")
+	for i in 5:
+		main.dig_at(p)
+	check(inv.count_of("clay") == 5 and t.next_layer(p.x, p.z) == "stone", "below 2.75 m, solid stone")
+	check(main.dig_at(p).begins_with("Solid stone") and inv.count_of("stone") == 0, "the shovel can't dig stone")
+	check(main.dig_at(p, false, "pickaxe") == "" and inv.count_of("stone") == 1, "the pickaxe can, and gives stone")
+	inv.add("shovel", 1)
+	for i in inv.slots.size():
+		if not inv.slots[i].is_empty() and inv.slots[i].item == "shovel" and i < 9:
+			inv.selected = i
+	var player = main.player
+	player.position = Vector3(-10.5, t.surface_height(-10.5, -4.0), -4.0)
+	player.rotation.y = 0.0
+	player.head.rotation.x = -1.2
+	player.head.position.y = player.EYE_HEIGHT
+	var prompt: String = main.ground_prompt(p, "shovel")
+	check("pickaxe" in prompt and prompt.begins_with("Stone"), "the shovel prompt says stone needs a pickaxe: " + prompt.replace("\n", " / "))
+	# Rocks.
+	var props = main.props
+	check(props.rocks.size() > 100, "rocks can be broken (%d)" % props.rocks.size())
+	var id := 0
+	var rock: Node3D = props.rocks[id].node
+	var r: float = rock.get_child(1).shape.radius
+	var cam_y: float = player.EYE_HEIGHT
+	var away := Vector3(1, 0, 0)
+	player.position = rock.global_position + away * (r + 1.3)
+	player.position.y = t.surface_height(player.position.x, player.position.z)
+	player.rotation.y = atan2(away.x, away.z)
+	var dy: float = rock.global_position.y - (player.position.y + cam_y)
+	player.head.rotation.x = atan2(dy, r + 1.3)
+	inv.load_data({})
+	inv.add("pickaxe", 1)
+	inv.selected = 0
+	check(main.dig_tool() == "pickaxe" and main.rock_under_crosshair() == id, "the pickaxe finds the rock under the crosshair (%d)" % main.rock_under_crosshair())
+	check(main.shovel_prompt().begins_with("Rock"), "rock prompt: " + main.shovel_prompt().replace("\n", " / "))
+	var hits: int = props.rocks[id].hits
+	main.mine_rock(id)
+	check(inv.count_of("stone") == 1 and main.rock_hits_left(id) == hits - 1 or hits == 1, "a hit gives a stone")
+	var data: Dictionary = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	for i in hits:
+		main.mine_rock(id)
+	check(inv.count_of("stone") == hits and main.broken_rocks.has(id) and not rock.visible and rock.collision_layer == 0, "the rock breaks after %d hits, a stone each" % hits)
+	check(main.mine_rock(id) == 0, "a broken rock gives nothing")
+	var data2: Dictionary = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	main.apply_save_data(data)
+	check(rock.visible and (hits == 1 or main.rock_hits_left(id) == hits - 1), "loading brings back the rock as it was, hits included")
+	main.apply_save_data(data2)
+	check(not rock.visible and main.broken_rocks.has(id), "broken rocks are saved")
+	data2.erase("mining")
+	main.apply_save_data(data2)
+	check(rock.visible, "older saves have every rock")
+	# Caches and the metal detector.
+	var c = main.caches
+	t.load_data({})
+	check(c.caches.size() >= 6, "caches are buried near the base (%d)" % c.caches.size())
+	var cache: Dictionary = {}
+	for e in c.caches:
+		if not e.found:
+			cache = e
+			break
+	inv.load_data({})
+	inv.add("metal_detector", 1)
+	inv.selected = 0
+	player.position = Vector3(cache.x, t.surface_height(cache.x, cache.z), cache.z)
+	var close_text: String = main.detector_text()
+	check(main.holding("metal_detector") and close_text.contains("steady tone"), "right over a cache: " + close_text)
+	player.position = Vector3(cache.x + 300.0, 0, cache.z)
+	check(main.detector_text().contains("no signal"), "far away: no signal")
+	var hidden: int = c.hidden_count()
+	var bags: int = main.loot.drops.size()
+	for i in 3:
+		main.dig_at(Vector3(cache.x, 0, cache.z))
+	check(not cache.found, "not found until 1 m down")
+	main.dig_at(Vector3(cache.x, 0, cache.z))
+	check(cache.found and c.hidden_count() == hidden - 1 and main.loot.drops.size() == bags + 1, "dug 1 m down, the cache comes up in a bag")
+	data = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	cache.found = false
+	main.apply_save_data(data)
+	check(c.hidden_count() == hidden - 1, "found caches are saved")
+	data.erase("caches")
+	main.apply_save_data(data)
+	check(c.caches.size() == 6 and c.hidden_count() == 6, "older saves get a fresh set of caches")
+	for id2 in main.loot.drops.keys():
+		main.loot.set_drop_items(id2, {})
+	t.load_data({})
+	inv.load_data({})
+
+
+## v1.4: the water well over a 3.5 m shaft, stamina for hard work.
+func _test_well() -> void:
+	var t = main.terrain
+	var b = main.building
+	var inv = main.inventory
+	t.load_data({})
+	b.load_data([])
+	inv.load_data({})
+	var ws := {"kind": "obj", "cx": -6, "cz": -3, "dir": 0}  # x -12..-10, z -6..-4, centre (-11, -5)
+	var ev: Dictionary = b.evaluate("well", ws)
+	check(not ev.ok and ev.reason.begins_with("Dig a pit at least 3.5 m"), "a well needs a deep shaft: " + ev.reason)
+	for i in 14:
+		main.dig_at(Vector3(-10.5, 0, -4.5), false, "pickaxe")
+	check(t.depth_at(-11.0, -5.0) >= 3.5 - 0.001, "a 1 m shaft 3.5 m deep, into the stone")
+	# Looking steeply down into the shaft reaches its bottom.
+	var player = main.player
+	player.position = Vector3(-10.5, t.surface_height(-10.5, -3.6), -3.6)
+	player.rotation.y = 0.0
+	player.head.rotation.x = -1.35
+	player.head.position.y = player.EYE_HEIGHT
+	var dp = main.dig_point()
+	check(dp != null and dp.y < t.BASE_HEIGHT - 3.0, "looking down a shaft, the shovel reaches the bottom (%s)" % str(dp))
+	player.head.rotation.x = 0.0
+	ev = b.evaluate("well", ws)
+	check(ev.ok and absf(ev.y - t.BASE_HEIGHT) < 0.01, "then a well stands over it at ground level (%s %.2f)" % [ev.reason, ev.y])
+	var wk: String = b.place("well", ws, ev.y)
+	b.level_under(wk)
+	check(t.depth_at(-11.0, -5.0) >= 3.5 - 0.001 and t.depth_at(-10.0, -4.0) < 0.01, "its footprint is filled in round the shaft")
+	check(b.prompt("well:" + wk).begins_with("Water well: filling"), "well prompt: " + b.prompt("well:" + wk))
+	main.power.tick(b.WELL_SECONDS)
+	check(b.prompt("well:" + wk).begins_with("[E] Take water"), "a bottle every %.0f s: %s" % [b.WELL_SECONDS, b.prompt("well:" + wk)])
+	check(main.take_water(wk) == 1 and inv.count_of("water") == 1, "E takes the water")
+	check(main.take_water(wk) == 0, "then it fills again")
+	main.power.tick(b.WELL_SECONDS * 20.0)
+	check(is_equal_approx(b.pieces[wk].water, b.WELL_MAX), "it holds up to %d bottles" % int(b.WELL_MAX))
+	main.dig_at(Vector3(-9.5, 0, -4.5))
+	check(absf(b.pieces[wk].y - ev.y) < 0.001, "digging next to it doesn't drop it into its shaft")
+	var data: Dictionary = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	b.pieces[wk].water = 0.0
+	main.apply_save_data(data)
+	check(is_equal_approx(b.pieces[wk].water, b.WELL_MAX), "the water in a well is saved")
+	# Stamina.
+	player.stamina = 5.0
+	check(not main.use_stamina(main.STAMINA_DIG) and is_equal_approx(player.stamina, 5.0), "too tired to dig with 5 stamina")
+	player.stamina = 50.0
+	check(main.use_stamina(main.STAMINA_DIG) and is_equal_approx(player.stamina, 50.0 - main.STAMINA_DIG), "a dig costs %.0f stamina" % main.STAMINA_DIG)
+	player.stamina = player.STAMINA_MAX
+	b.load_data([])
+	t.load_data({})
+	inv.load_data({})
+
+
+## v1.5: structural support: overhangs, heavier tiers, collapse with rigid debris.
+func _test_stability() -> void:
+	var b = main.building
+	main.terrain.load_data({})
+	b.load_data([])
+	for e in b.cell_edges(6, -6, 0):
+		b.place("wall", e, b.evaluate("wall", e).y)
+	var keys := []
+	for i in 4:
+		var s := {"kind": "cell", "cx": 6 + i, "cz": -6, "dir": 0, "level": 1}
+		var ev: Dictionary = b.evaluate("floor", s)
+		check(ev.ok, "floor %d out can be built (%s)" % [i, ev.reason])
+		keys.append(b.place("floor", s, ev.y))
+	var sup: Array = keys.map(func(k): return b.support[k])
+	check(is_equal_approx(sup[0], 90.0) and is_equal_approx(sup[1], 90.0) and is_equal_approx(sup[2], 65.0) and is_equal_approx(sup[3], 40.0), "support: 90%% on walls, then 65%% and 40%% further out (%s)" % str(sup))
+	var far := {"kind": "cell", "cx": 10, "cz": -6, "dir": 0, "level": 1}
+	var ev5: Dictionary = b.evaluate("floor", far)
+	check(not ev5.ok and ev5.reason.begins_with("Too far from support (15%)"), "the next floor out is too far: " + ev5.reason)
+	var up := {"kind": "edge", "cx": 6, "cz": -6, "dir": 0, "level": 1}
+	check(is_equal_approx(b.evaluate("wall", up).support, 90.0), "a wall on a wall: 90%")
+	check(main.hammer_prompt(keys[2]).contains("support 65%"), "the hammer shows support: " + main.hammer_prompt(keys[2]).replace("\n", " | "))
+	# Heavier tiers need more support.
+	for i in 2:
+		b.upgrade(keys[1])
+		b.upgrade(keys[2])
+	b.upgrade(keys[3])
+	keys = keys.slice(1)
+	sup = keys.map(func(k): return b.support[k])
+	check(is_equal_approx(sup[0], 86.0) and is_equal_approx(sup[1], 51.0) and is_equal_approx(sup[2], 22.25), "stone floors weigh more: 86%%, 51%%, 22%% (%s)" % str(sup))
+	var problem: String = b.upgrade_problem(keys[2])
+	check(problem.begins_with("Too heavy"), "a stone floor that far out would fall: " + problem)
+	var inv = main.inventory
+	inv.load_data({})
+	inv.add_all({"hammer": 1, "stone": 20, "clay": 5})
+	inv.selected = 0
+	main.hammer_use(keys[2])
+	check(b.pieces[keys[2]].tier == 1 and inv.count_of("stone") == 20, "so the hammer won't upgrade it, and takes nothing")
+	check(b.upgrade_problem(keys[0]) == "", "the stone floor on the walls can go up to concrete")
+	# Take a wall down: the floors still stand on the other three... until they don't.
+	var walls: Array = b.keys_of(["wall"])
+	var collapsed := []
+	b.piece_collapsed.connect(func(k, _t): collapsed.append(k))
+	for k in walls:
+		b.damage(k, 99999.0)
+	check(b.pieces.is_empty() and collapsed.size() == 4, "with the walls gone, all four floors come down (%d)" % collapsed.size())
+	var chunks: Array = main.get_tree().get_nodes_in_group("debris")
+	check(chunks.size() > 0 and chunks[0] is RigidBody3D, "collapses throw rigid debris (%d chunks)" % chunks.size())
+	check(chunks.size() <= b.MAX_DEBRIS, "but never more than %d at once" % b.MAX_DEBRIS)
+	inv.load_data({})
+
+
+## A few seconds later: the debris has landed on the ground and lies still.
+func _check_debris() -> void:
+	var chunks: Array = main.get_tree().get_nodes_in_group("debris").filter(func(c): return not c.is_queued_for_deletion())
+	var worst := 0.0
+	var fastest := 0.0
+	for c in chunks:
+		worst = maxf(worst, main.terrain.surface_height(c.global_position.x, c.global_position.z) - c.global_position.y)
+		fastest = maxf(fastest, c.linear_velocity.length())
+	check(chunks.size() > 0 and worst < 0.3 and fastest < 1.5, "debris settles on the sand (%d chunks, deepest %.2f m under, fastest %.2f m/s)" % [chunks.size(), worst, fastest])
+
+
+## True if a point (in a piece's local space) is inside one of its colliders.
+func _inside_collider(type: String, p: Vector3) -> bool:
+	var b = main.building
+	for c in b.piece_colliders(type):
+		var half: Vector3 = c[0] * 0.5
+		var d: Vector3 = (p - c[1]).abs()
+		if d.x <= half.x and d.y <= half.y and d.z <= half.z:
+			return true
+	return false
+
+
+## v1.6: more pieces.
+func _test_more_pieces_2() -> void:
+	var b = main.building
+	main.terrain.load_data({})
+	b.load_data([])
+	for t in ["half_wall", "low_wall", "slit_wall", "pillar", "trapdoor", "tri_foundation", "tri_roof", "metal_door"]:
+		check(b.PIECES.has(t) and t in b.ORDER, "%s is in the build list" % t)
+	# Half and low walls: you can shoot over them, they hold nothing up.
+	var hs := {"kind": "edge", "cx": -8, "cz": 7, "dir": 0, "level": 0}
+	var hk: String = b.place("half_wall", hs, b.evaluate("half_wall", hs).y)
+	check(_inside_collider("half_wall", Vector3(0, 1.0, 0)) and not _inside_collider("half_wall", Vector3(0, 1.3, 0)), "a half wall is %.1f m high, below your eyes (%.2f)" % [b.HALF_H, main.player.EYE_HEIGHT])
+	check(not _inside_collider("low_wall", Vector3(0, 0.8, 0)) and _inside_collider("low_wall", Vector3(0, 0.5, 0)), "a low wall is %.1f m high" % b.LOW_H)
+	check(not b.evaluate("floor", {"kind": "cell", "cx": -8, "cz": 7, "dir": 0, "level": 1}).ok, "a half wall can't hold a floor up")
+	check(b.describe(b.pieces[hk]) == "Wood half wall" and not b.upgrade_cost(b.pieces[hk]).is_empty(), "half walls have tiers: " + b.describe(b.pieces[hk]))
+	# Gun slit: a gap at eye height to shoot through, otherwise a full wall.
+	var sy: float = b.SLIT_Y + b.SLIT_H * 0.5
+	check(not _inside_collider("slit_wall", Vector3(0, sy, 0)) and _inside_collider("slit_wall", Vector3(0.8, sy, 0)) and _inside_collider("slit_wall", Vector3(0, 1.0, 0)) and _inside_collider("slit_wall", Vector3(0, 2.0, 0)), "a gun slit wall has a slot at %.2f m" % sy)
+	b.load_data([])
+	# Pillars stand on grid corners and hold up floors.
+	var ps: Dictionary = b.slot_for("pillar", Vector3(-11.8, 0, 16.3), 0)
+	check(ps.kind == "post" and ps.cx == -6 and ps.cz == 8, "a pillar snaps to the nearest grid corner (%s)" % str(ps))
+	var pk: Array = []
+	for o in [Vector2i(0, 0), Vector2i(1, 0)]:
+		var s := {"kind": "post", "cx": -6 + o.x, "cz": 8 + o.y, "dir": 0, "level": 0}
+		var ev: Dictionary = b.evaluate("pillar", s)
+		check(ev.ok, "a pillar on the sand (%s)" % ev.reason)
+		pk.append(b.place("pillar", s, ev.y))
+	var fs := {"kind": "cell", "cx": -6, "cz": 8, "dir": 0, "level": 1}  # its north-west corner is pillar 0
+	var fev: Dictionary = b.evaluate("floor", fs)
+	check(fev.ok and is_equal_approx(fev.support, 90.0) and absf(fev.y - (b.pieces[pk[0]].y + b.WALL_H)) < 0.001, "pillars hold a floor up (%s, %s)" % [fev.reason, str(fev.get("support"))])
+	var fk: String = b.place("floor", fs, fev.y)
+	var up := {"kind": "post", "cx": -6, "cz": 8, "dir": 0, "level": 1}
+	check(b.evaluate("pillar", up).ok, "pillars stack")
+	var save: Array = JSON.parse_string(JSON.stringify(b.save_data()))
+	b.load_data(save)
+	check(b.pieces.has(pk[0]) and b.pieces.has(fk), "pillars are saved")
+	b.damage(pk[0], 99999.0)
+	check(b.pieces.has(fk), "one pillar is enough")
+	b.damage(pk[1], 99999.0)
+	check(not b.pieces.has(fk), "with both gone the floor falls")
+	b.load_data([])
+	# Trapdoor: a floor with a hatch that opens.
+	for e in b.cell_edges(-6, 8, 0):
+		b.place("wall", e, b.evaluate("wall", e).y)
+	var ts := {"kind": "cell", "cx": -6, "cz": 8, "dir": 0, "level": 1}
+	var tev: Dictionary = b.evaluate("trapdoor", ts)
+	check(tev.ok, "a trapdoor goes upstairs like a floor (%s)" % tev.reason)
+	var tk: String = b.place("trapdoor", ts, tev.y)
+	check(b.evaluate("floor", {"kind": "cell", "cx": -5, "cz": 8, "dir": 0, "level": 1}).ok, "it holds up a floor next to it")
+	check(not _inside_collider("trapdoor", Vector3(0, -0.07, -0.45)) and _inside_collider("trapdoor", Vector3(0, -0.07, 0.6)), "its frame has a hole for the hatch")
+	var hid: String = "hatch:" + tk
+	check(main._prompt_for(hid) == "[E] Open trapdoor", "trapdoor prompt")
+	main.interact(hid)
+	check(b.pieces[tk].open and absf(b.pieces[tk].hinge.rotation.x) > 1.0, "E opens the hatch")
+	save = JSON.parse_string(JSON.stringify(b.save_data()))
+	b.load_data(save)
+	check(b.pieces[tk].open, "an open trapdoor is saved open")
+	b.load_data([])
+	# Triangle foundation and roof.
+	var tf := {"kind": "cell", "cx": -8, "cz": 8, "dir": 1}
+	var tfev: Dictionary = b.evaluate("tri_foundation", tf)
+	check(tfev.ok and absf(tfev.y - (main.terrain.BASE_HEIGHT + 0.12)) < 0.01, "a triangle foundation sits like a foundation (%s)" % tfev.reason)
+	var tfk: String = b.place("tri_foundation", tf, tfev.y)
+	var shape = b.pieces[tfk].node.get_children().filter(func(n): return n is CollisionShape3D)[0].shape
+	check(shape is ConvexPolygonShape3D and shape.points.size() == 6, "it has a triangular collider")
+	var we := {"kind": "edge", "cx": -8, "cz": 8, "dir": 0}
+	check(absf(b.evaluate("wall", we).y - tfev.y) < 0.001, "walls stand on it")
+	var wk: String = b.place("wall", we, b.evaluate("wall", we).y)
+	var tr := {"kind": "cell", "cx": -8, "cz": 8, "dir": 1, "level": 1}
+	check(b.evaluate("tri_roof", tr).ok, "a triangle roof goes on top")
+	main.build_mode._rebuild_ghost("tri_roof")
+	check(main.build_mode._ghost.get_child_count() >= 1, "build mode shows the triangle")
+	b.load_data([])
+	# Metal door.
+	var ds := {"kind": "edge", "cx": -6, "cz": 8, "dir": 0}
+	var dk: String = b.place("metal_door", ds, b.evaluate("metal_door", ds).y)
+	var drec: Dictionary = b.pieces[dk]
+	check(drec.hp == 1400.0 and b.describe(drec) == "Metal door" and b.upgrade_cost(drec).is_empty(), "a metal door: 1400 hp, no tiers")
+	check(main._prompt_for("gate:" + dk).begins_with("[E] Open door"), "door prompt: " + main._prompt_for("gate:" + dk))
+	main.interact("gate:" + dk)
+	check(drec.open, "E opens it")
+	check(b.evaluate("floor", {"kind": "cell", "cx": -6, "cz": 8, "dir": 0, "level": 1}).ok, "it holds up a floor like a wall")
+	b.load_data([])
+
+
+## v1.7: lines of pieces, area repair and upgrade, moving pieces.
+func _test_fast_building() -> void:
+	var b = main.building
+	var bm = main.build_mode
+	var inv = main.inventory
+	var player = main.player
+	main.terrain.load_data({})
+	b.load_data([])
+	inv.load_data({})
+	player.position = Vector3(-14, main.terrain.surface_height(-14, 12), 12)
+	player.stamina = player.STAMINA_MAX
+	# Line geometry.
+	var a := {"kind": "edge", "cx": -8, "cz": 2, "dir": 0, "level": 0}
+	var e := {"kind": "edge", "cx": -4, "cz": 2, "dir": 0, "level": 0}
+	var line: Array = bm.line_slots("wall", a, e)
+	check(line.size() == 5 and line[4].cx == -4 and line[2].cz == 2, "a dragged wall line covers every edge between (5)")
+	var c1 := {"kind": "cell", "cx": -8, "cz": 0, "dir": 0, "level": 0}
+	var c2 := {"kind": "cell", "cx": -6, "cz": -5, "dir": 0, "level": 0}
+	line = bm.line_slots("foundation", c1, c2)
+	check(line.size() == 6 and line.all(func(s): return s.cx == -8), "squares go along the longer way (%d)" % line.size())
+	check(bm.line_slots("wall", a, {"kind": "edge", "cx": 40, "cz": 2, "dir": 0, "level": 0}).size() == bm.LINE_MAX, "at most %d in a line" % bm.LINE_MAX)
+	check(bm.line_slots("chest", c1, c2).size() == 1, "objects don't make lines")
+	# Building a line: paid piece by piece, stops when the materials run out.
+	bm.toggle()
+	bm.select(Building_index("wall"))
+	inv.add_all({"wood": 9, "nails": 9})
+	bm.drag_start = a
+	bm.slot = e
+	var built: int = bm.end_drag()
+	check(built == 3 and inv.count_of("wood") == 0, "a line of 5 walls with wood for 3 builds 3 (%d)" % built)
+	check(b.pieces.has(b.slot_key(a)) and b.pieces.has(b.slot_key({"kind": "edge", "cx": -6, "cz": 2, "dir": 0, "level": 0})), "starting at the first one")
+	# Area repair, paid from a chest within reach.
+	var walls: Array = b.keys_of(["wall"])
+	for k in walls:
+		b.damage(k, 120.0)
+	var cs := {"kind": "obj", "cx": -7, "cz": 5, "dir": 0, "level": 0}
+	var ck: String = b.place("chest", cs, b.evaluate("chest", cs).y)
+	b.storage_of(ck).add("wood", 20)
+	player.position = Vector3(-13, main.terrain.surface_height(-13, 9), 9)
+	check(main.has_near({"wood": 20}) and not main.has_near({"wood": 21}), "chests within reach count as yours for the hammer")
+	bm.toggle()
+	var fixed: int = main.area_repair(player.global_position)
+	check(fixed == 3 and walls.all(func(k): return b.pieces[k].hp == b.max_hp(b.pieces[k])), "R with the hammer repairs all 3 walls (%d)" % fixed)
+	check(b.storage_of(ck).count_of("wood") == 14, "paid with wood from the chest (%d left)" % b.storage_of(ck).count_of("wood"))
+	# Area upgrade.
+	inv.add_all({"scrap": 8, "nails": 4})
+	var up: int = main.area_upgrade(walls[0])
+	check(up == 2 and inv.count_of("scrap") == 0, "G upgrades every wood wall near it while the scrap lasts (%d)" % up)
+	check(main.area_upgrade(walls[0]) == 0, "and nothing without materials")
+	# Moving a piece: a chest keeps what is in it, and it costs nothing.
+	b.storage_of(ck).add("nails", 7)
+	bm.toggle()
+	inv.load_data({})
+	check(bm.pick_up(ck) == "" and not b.pieces.has(ck) and bm.current_type() == "chest", "G picks up the chest")
+	check(bm.status_text().begins_with("MOVING"), "build mode says so")
+	var to := {"kind": "obj", "cx": -9, "cz": 5, "dir": 0, "level": 0}
+	bm.slot = to
+	bm.base_y = b.evaluate("chest", to).y
+	bm.can_build = true
+	check(bm.try_place() and bm.carrying.is_empty(), "left click puts it down")
+	var nk: String = b.slot_key(to)
+	check(b.pieces.has(nk) and b.storage_of(nk).count_of("nails") == 7 and b.storage_of(nk).count_of("wood") == 14, "with everything still in it, for free")
+	# A wall holding up a floor stays; a carried piece goes back when you stop.
+	var f1 := {"kind": "cell", "cx": -8, "cz": 2, "dir": 0, "level": 1}
+	b.place("floor", f1, b.evaluate("floor", f1).y)
+	check(bm.pick_up(b.slot_key(a)) == "Something rests on it", "a wall holding up a floor can't be moved")
+	check(bm.pick_up(nk) == "", "picked up the chest again")
+	bm.toggle()
+	check(b.pieces.has(nk) and b.storage_of(nk).count_of("nails") == 7, "leaving build mode puts it back")
+	b.load_data([])
+	inv.load_data({})
+	player.stamina = player.STAMINA_MAX
+
+
+func Building_index(t: String) -> int:
+	return main.building.ORDER.find(t)
+
+
+## v1.8: cables and switches, powered turrets, gates closing at night, the lock.
+func _test_wiring() -> void:
+	var b = main.building
+	var pw = main.power
+	var inv = main.inventory
+	var player = main.player
+	main.terrain.load_data({})
+	b.load_data([])
+	inv.load_data({})
+	var put := func(t: String, slot: Dictionary) -> String:
+		return b.place(t, slot, b.evaluate(t, slot).y)
+	var gk: String = put.call("generator", {"kind": "obj", "cx": -9, "cz": 2, "dir": 0})
+	var sk: String = put.call("switch", {"kind": "obj", "cx": -9, "cz": 5, "dir": 0})
+	var lk: String = put.call("floodlight", {"kind": "obj", "cx": -9, "cz": 8, "dir": 0})
+	var plug: String = put.call("floodlight", {"kind": "obj", "cx": -8, "cz": 2, "dir": 0})
+	var tk: String = put.call("turret", {"kind": "obj", "cx": -5, "cz": 5, "dir": 0})
+	var ck: String = put.call("chest", {"kind": "obj", "cx": -7, "cz": 5, "dir": 0})
+	b.pieces[gk].fuel = 5.0
+	main.day_night.restore(main.day_night.day, 22.0)
+	pw.tick(0.25)
+	check(b.pieces[plug].powered, "a floodlight right next to a generator is plugged in")
+	check(not b.pieces[lk].powered, "one further away needs a cable")
+	# Laying cable by hand.
+	inv.add("cable", 40)
+	inv.selected = 0
+	check(main.holding("cable"), "holding the cable")
+	check(main.cable_click(ck) != "", "chests can't be cabled")
+	check(main.cable_click(gk) == "" and main.cable_from == gk, "click the generator to start a cable")
+	var cost: int = b.cable_cost(gk, sk)
+	check(main.cable_click(sk) == "" and b.cables.size() == 1 and inv.count_of("cable") == 40 - cost, "then the switch to connect it (%d cable)" % cost)
+	main.cable_click(sk)
+	main.cable_click(lk)
+	main.cable_click(sk)
+	main.cable_click(tk)
+	check(b.cables.size() == 3, "switch to floodlight and switch to turret (%d cables)" % b.cables.size())
+	check(main.cable_prompt(lk).begins_with("Floodlight"), "cable prompt: " + main.cable_prompt(lk).replace("\n", " / "))
+	pw.tick(0.25)
+	check(not b.pieces[lk].powered and not b.pieces[tk].powered, "with the switch off, no power gets past it")
+	check(main._prompt_for("switch:" + sk).begins_with("[E] Turn on"), "switch prompt: " + main._prompt_for("switch:" + sk))
+	main.interact("switch:" + sk)
+	check(b.pieces[sk].open and b.pieces[lk].powered and b.pieces[lk].light.visible and b.pieces[tk].powered, "switched on, the floodlight lights and the turret has power")
+	var far := {"kind": "obj", "cx": -9, "cz": 22, "dir": 0}
+	var fk2: String = put.call("floodlight", far)
+	check(b.cable_problem(lk, fk2).begins_with("Too far"), "a cable can only be so long: " + b.cable_problem(lk, fk2))
+	# Saved, and older saves get cables in the old reach.
+	var data: Dictionary = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	check(data.cables.size() == 3, "cables are saved")
+	main.apply_save_data(data)
+	check(b.cables.size() == 3 and b.pieces[sk].open, "and loaded, switch still on")
+	data.erase("cables")
+	main.apply_save_data(data)
+	check(b.cables.size() == 2 and b.cables.all(func(c): return gk in c), "older saves: the generator is cabled to both lights within 18 m (%d)" % b.cables.size())
+	# Taking cables up gives the cable back.
+	var had: int = inv.count_of("cable")
+	check(main.cable_click(gk, true) == "" and b.cables_of(gk).is_empty() and inv.count_of("cable") > had, "right click takes up a piece's cables and gives them back")
+	b.load_data([])
+	# Gates close by themselves at night; the metal door locks.
+	var gate := {"kind": "edge", "cx": -9, "cz": 4, "dir": 0}
+	var dk: String = put.call("doorway", gate)
+	b.set_gate(dk, true)
+	player.position = Vector3(-30, main.terrain.surface_height(-30, 30), 30)
+	main.day_night.restore(main.day_night.day, 12.0)
+	pw.tick(b.AUTO_CLOSE + 1.0)
+	check(b.pieces[dk].open, "by day an open gate stays open")
+	main.day_night.restore(main.day_night.day, 22.0)
+	player.global_position = b.pieces[dk].node.global_position
+	pw.tick(1.0)
+	check(b.pieces[dk].open, "at night it waits while you stand in it")
+	player.position = Vector3(-30, main.terrain.surface_height(-30, 30), 30)
+	pw.tick(1.0)
+	check(not b.pieces[dk].open, "and closes by itself once you have gone")
+	var md := {"kind": "edge", "cx": -7, "cz": 4, "dir": 0}
+	var mk: String = put.call("metal_door", md)
+	check(main.lock_door("gate:" + mk) and b.pieces[mk].locked, "R locks a shut metal door")
+	main.interact("gate:" + mk)
+	check(not b.pieces[mk].open and main._prompt_for("gate:" + mk).contains("locked"), "a locked door won't open")
+	b.damage(mk, 200.0)
+	check(is_equal_approx(b.pieces[mk].hp, 1300.0), "and takes half damage (%.0f)" % b.pieces[mk].hp)
+	var bsave: Array = JSON.parse_string(JSON.stringify(b.save_data()))
+	b.load_data(bsave)
+	check(b.pieces[mk].get("locked", false), "the lock is saved")
+	main.lock_door("gate:" + mk)
+	main.interact("gate:" + mk)
+	check(not b.pieces[mk].locked and b.pieces[mk].open, "unlocked, it opens")
+	check(not main.lock_door("gate:" + mk) or b.pieces[mk].get("locked", false) == false, "an open door can't be locked")
+	b.load_data([])
+	inv.load_data({})
+	main.day_night.restore(main.day_night.day, 12.0)
+
+
 func _process(_delta: float) -> bool:
 	frame += 1
 	var player = main.player
@@ -1852,8 +2355,15 @@ func _process(_delta: float) -> bool:
 			_check_pits()
 		3135:
 			_test_trench_pieces()
+			_test_mining()
+			_test_well()
+			_test_stability()
+			_test_more_pieces_2()
+			_test_fast_building()
+			_test_wiring()
 			_start_ladder()
 		3300:
+			_check_debris()
 			_check_ladder()
 		3310:
 			if failures.is_empty():

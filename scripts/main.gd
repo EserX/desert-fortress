@@ -32,6 +32,7 @@ const ShopUI = preload("res://scripts/shop_ui.gd")
 const Drone = preload("res://scripts/drone.gd")
 const Hints = preload("res://scripts/hints.gd")
 const LowPoly = preload("res://scripts/lowpoly.gd")
+const Caches = preload("res://scripts/caches.gd")
 
 ## Testing aid (temporary): a green box by the spawn point that holds a full
 ## stack of every item and tops your cash up to $2000 each time you open it.
@@ -45,6 +46,13 @@ const SUPPLY_CHANCE := 0.5
 const HAMMER_REACH := 3.5
 const SHOVEL_REACH := 4.0
 const SHOVEL_COOLDOWN := 0.45  # seconds between digs
+const PICK_REACH := 3.0
+## Stamina for hard work: a dig, a pickaxe hit, building a piece, a hammer job.
+const STAMINA_DIG := 7.0
+const STAMINA_PICK := 9.0
+const STAMINA_BUILD := 6.0
+const STAMINA_HAMMER := 5.0
+const AREA_R := 8.0  # hammer R / G: repair or upgrade everything this close
 const CHEST_REACH := 4.0  # walk further than this from an open chest or bench and it closes
 
 ## When true the world is only a backdrop for the title screen:
@@ -91,6 +99,14 @@ var places: Array = []
 ## Keys of places you have been near.
 var discovered := {}
 var _shovel_ready_at := 0
+## Cable in hand: the piece a cable is being run from ("" when none).
+var cable_from := ""
+## Rocks broken with the pickaxe (id -> true) and hits left on started ones.
+var broken_rocks := {}
+var rock_hits := {}
+var caches: Caches
+var _beep: AudioStreamPlayer
+var _beep_t := 0.0
 var _dig_marker: MeshInstance3D
 var _dig_marker_key := []
 var _demolish_armed := ""
@@ -226,6 +242,7 @@ func _ready() -> void:
 	power.name = "Power"
 	power.building = building
 	power.day_night = day_night
+	power.player = player
 	add_child(power)
 
 	waves = Waves.new()
@@ -265,6 +282,7 @@ func _ready() -> void:
 	build_mode.inventory = inventory
 	build_mode.player = player
 	build_mode.shop = shop
+	build_mode.pay_stamina = func() -> bool: return use_stamina(STAMINA_BUILD)
 	add_child(build_mode)
 
 	survival = Survival.new()
@@ -320,6 +338,20 @@ func _ready() -> void:
 
 	survival.died.connect(_on_died)
 	terrain.ground_changed.connect(_on_ground_changed)
+	caches = Caches.new()
+	caches.name = "Caches"
+	caches.terrain = terrain
+	caches.world_seed = world_seed
+	add_child(caches)
+	caches.setup()
+	caches.found.connect(func(pos, items):
+		loot.spawn_drop(items, pos)
+		hud.show_banner("You dug up a buried cache! It is in a bag in the hole."))
+	day_night.day_started.connect(caches.on_morning)
+	_beep = AudioStreamPlayer.new()
+	_beep.stream = _beep_sound()
+	_beep.volume_db = -10.0
+	add_child(_beep)
 	_dig_marker = MeshInstance3D.new()
 	_dig_marker.name = "DigMarker"
 	var marker_mat := StandardMaterial3D.new()
@@ -391,7 +423,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 	elif holding_hammer() and _hammer_input(event):
 		get_viewport().set_input_as_handled()
-	elif holding_shovel() and _shovel_input(event):
+	elif dig_tool() != "" and _shovel_input(event):
+		get_viewport().set_input_as_handled()
+	elif holding("cable") and _cable_input(event):
+		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("rotate") and lock_door(player.interact_target()):
 		get_viewport().set_input_as_handled()
 	elif guns.item != "" and _gun_input(event):
 		get_viewport().set_input_as_handled()
@@ -428,8 +464,12 @@ func _process(delta: float) -> void:
 			text = _prompt_for(player.interact_target())
 			if text == "" and holding_hammer():
 				text = hammer_prompt(piece_under_crosshair())
-			elif text == "" and holding_shovel():
+			elif text == "" and dig_tool() != "":
 				text = shovel_prompt()
+			elif text == "" and holding("metal_detector"):
+				text = detector_text()
+			elif text == "" and holding("cable"):
+				text = cable_prompt(piece_under_crosshair())
 		hud.set_prompt(text)
 		_update_dig_marker()
 		for i in Inventory.HOTBAR:
@@ -448,9 +488,12 @@ func _process(delta: float) -> void:
 			hints.show_hint("hammer")
 		elif hand == "shovel":
 			hints.show_hint("shovel")
+		elif hand == "metal_detector":
+			hints.show_hint("detector")
 		elif Guns.is_gun(hand):
 			hints.show_hint("gun")
 		melee.set_item(hand)
+		_detector_beep(delta, hand == "metal_detector")
 		guns.set_item(hand)
 		if inventory_ui.is_open() or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 			guns.set_ads(false)
@@ -495,42 +538,80 @@ func holding_hammer() -> bool:
 
 
 func holding_shovel() -> bool:
+	return dig_tool() == "shovel"
+
+
+## "shovel" or "pickaxe" when one is in your hands, otherwise "".
+func dig_tool() -> String:
 	var s := inventory.selected_stack()
-	return not s.is_empty() and s.item == "shovel" and not build_mode.active and not survival.dead
+	if s.is_empty() or build_mode.active or survival.dead or not s.item in ["shovel", "pickaxe"]:
+		return ""
+	return s.item
 
 
-## Where the shovel would dig: a point on the ground under the crosshair, or null.
+func holding(item: String) -> bool:
+	var s := inventory.selected_stack()
+	return not s.is_empty() and s.item == item and not build_mode.active and not survival.dead
+
+
+## Where a digging tool would dig: a point on the ground under the crosshair, or null.
 func dig_point() -> Variant:
-	var hit := player.look_hit(SHOVEL_REACH)
+	# Looking down into a hole reaches further (about the same distance out).
+	var reach := minf(SHOVEL_REACH / maxf(cos(player.head.rotation.x), 0.01), SHOVEL_REACH * 1.6)
+	var hit := player.look_hit(reach)
 	if hit.is_empty() or hit.collider != terrain:
 		return null
 	return hit.position
 
 
-## "Sand, dug 0.50 m deep\n[LMB] Dig   [RMB] Fill (3 sand)", or why you can't.
+## Id of the rock under the crosshair (within reach), or -1.
+func rock_under_crosshair() -> int:
+	var hit := player.look_hit(PICK_REACH)
+	if hit.is_empty() or not hit.collider.has_meta("rock_id"):
+		return -1
+	return int(hit.collider.get_meta("rock_id"))
+
+
+## "Clay, dug 1.75 m deep\n[LMB] Dig   [RMB] Fill (3 sand)", or why you can't.
 func shovel_prompt() -> String:
+	var tool := dig_tool()
+	if tool == "pickaxe":
+		var r := rock_under_crosshair()
+		if r >= 0:
+			return "Rock\n[LMB] Break it for stone (%d hits)" % rock_hits_left(r)
 	var p = dig_point()
 	if p == null:
 		return ""
+	return ground_prompt(p, tool)
+
+
+## What a digging tool would do to the ground at p.
+func ground_prompt(p: Vector3, tool: String) -> String:
 	var why := terrain.dig_blocked(p.x, p.z)
 	if why != "":
 		return why
 	var depth := terrain.cell_depth(terrain.dig_cell(p.x, p.z))
-	var text := "Sand"
+	var layer := terrain.next_layer(p.x, p.z)
+	var text: String = layer.capitalize() if layer != "" else "Bedrock"
 	if depth > 0.05:
 		text += ", dug %.2f m deep" % depth
 	elif depth < -0.05:
 		text += ", piled %.2f m high" % -depth
-	if terrain.at_bedrock(p.x, p.z):
-		text += " (bedrock)\n[LMB] Can't dig deeper"
+	if layer == "":
+		text += "\n[LMB] Can't dig deeper"
+	elif layer == "stone" and tool != "pickaxe":
+		text += "\n[LMB] Too hard: you need a pickaxe"
 	else:
 		text += "\n[LMB] Dig"
-	return text + "   [RMB] Fill (%d sand)" % inventory.count_of("sand")
+	if tool == "shovel":
+		text += "   [RMB] Fill (%d sand)" % inventory.count_of("sand")
+	return text
 
 
-## Digs (or fills) the cell at p: digging gives a bag of sand, filling uses one.
+## Digs (or fills) the cell at p: a dig gives a bag of what comes up (sand, clay
+## or stone, deeper down), a fill uses a bag of sand. Solid stone needs the pickaxe.
 ## Returns "" if the ground moved, or the reason it didn't.
-func dig_at(p: Vector3, filling := false) -> String:
+func dig_at(p: Vector3, filling := false, tool := "shovel") -> String:
 	var why := terrain.dig_blocked(p.x, p.z)
 	if why != "":
 		return why
@@ -541,30 +622,67 @@ func dig_at(p: Vector3, filling := false) -> String:
 			return "You can't pile the sand any higher here"
 		inventory.remove("sand", 1)
 		return ""
-	if terrain.at_bedrock(p.x, p.z):
+	var layer := terrain.next_layer(p.x, p.z)
+	if layer == "":
 		return "Bedrock: you can't dig any deeper here"
-	if inventory.add("sand", 1) > 0:
-		return "No room in your bag for the sand"
+	if layer == "stone" and tool != "pickaxe":
+		return "Solid stone: you need a pickaxe to dig deeper"
+	if inventory.add(layer, 1) > 0:
+		return "No room in your bag for the %s" % layer
 	if not terrain.dig(p.x, p.z):
-		inventory.remove("sand", 1)
+		inventory.remove(layer, 1)
 		return "Bedrock: you can't dig any deeper here"
 	return ""
 
 
-## Shovel: left click digs, right click fills.
+## Pickaxe hits left before a rock breaks.
+func rock_hits_left(id: int) -> int:
+	return int(rock_hits.get(id, props.rocks[id].hits))
+
+
+## One pickaxe hit on a rock: a stone each hit, and it breaks after its last.
+## Returns how much stone it gave (0 if your bag is full or the rock is gone).
+func mine_rock(id: int) -> int:
+	if id < 0 or id >= props.rocks.size() or broken_rocks.has(id):
+		return 0
+	if inventory.add("stone", 1) > 0:
+		hud.show_banner("No room in your bag for the stone")
+		return 0
+	var left := rock_hits_left(id) - 1
+	if left <= 0:
+		rock_hits.erase(id)
+		broken_rocks[id] = true
+		props.set_rock_broken(id, true)
+		hud.show_pickup(["The rock breaks apart"])
+	else:
+		rock_hits[id] = left
+	return 1
+
+
+## Shovel: left click digs, right click fills. Pickaxe: left click breaks rocks or digs.
 func _shovel_input(event: InputEvent) -> bool:
 	if not (event is InputEventMouseButton and event.pressed) or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		return false
-	if event.button_index != MOUSE_BUTTON_LEFT and event.button_index != MOUSE_BUTTON_RIGHT:
+	var tool := dig_tool()
+	if event.button_index != MOUSE_BUTTON_LEFT and not (event.button_index == MOUSE_BUTTON_RIGHT and tool == "shovel"):
 		return false
+	var rock := rock_under_crosshair() if tool == "pickaxe" else -1
 	var p = dig_point()
-	if p == null:
+	if p == null and rock < 0:
 		return false
 	if Time.get_ticks_msec() < _shovel_ready_at:
 		return true
-	_shovel_ready_at = Time.get_ticks_msec() + int(SHOVEL_COOLDOWN * 1000.0)
-	melee.play_swing(SHOVEL_COOLDOWN)
-	var why := dig_at(p, event.button_index == MOUSE_BUTTON_RIGHT)
+	var cool := SHOVEL_COOLDOWN * (1.4 if tool == "pickaxe" else 1.0)
+	_shovel_ready_at = Time.get_ticks_msec() + int(cool * 1000.0)
+	var filling: bool = event.button_index == MOUSE_BUTTON_RIGHT
+	if not use_stamina(STAMINA_PICK if tool == "pickaxe" else (STAMINA_DIG * 0.5 if filling else STAMINA_DIG)):
+		return true
+	melee.play_swing(cool)
+	if rock >= 0:
+		if mine_rock(rock) > 0:
+			hud.show_pickup(["+1 Stone"])
+		return true
+	var why := dig_at(p, filling, tool)
 	if why != "":
 		hud.show_banner(why)
 	return true
@@ -572,7 +690,7 @@ func _shovel_input(event: InputEvent) -> bool:
 
 ## A see-through square on the cell the shovel would dig.
 func _update_dig_marker() -> void:
-	var p = dig_point() if holding_shovel() else null
+	var p = dig_point() if dig_tool() != "" else null
 	if p == null or terrain.dig_blocked(p.x, p.z) != "":
 		_dig_marker.visible = false
 		return
@@ -596,9 +714,55 @@ func _update_dig_marker() -> void:
 	_dig_marker.mesh = m
 
 
+## Metal detector: how close the nearest buried cache is, in beeps.
+func detector_text() -> String:
+	var d := caches.nearest(player.global_position)
+	if d > Caches.RANGE:
+		return "Metal detector: no signal (caches are buried near the base)"
+	if d > 12.0:
+		return "Metal detector: a faint beep now and then"
+	if d > 6.0:
+		return "Metal detector: beep... beep... (getting closer)"
+	if d > 2.0:
+		return "Metal detector: fast beeping (very close)"
+	return "Metal detector: a steady tone. Dig right here, 1 m down!"
+
+
+## Beeps faster the closer the nearest cache is.
+func _detector_beep(delta: float, on: bool) -> void:
+	if not on:
+		_beep_t = 0.0
+		return
+	var d := caches.nearest(player.global_position)
+	if d > Caches.RANGE:
+		return
+	_beep_t -= delta
+	if _beep_t <= 0.0:
+		_beep_t = clampf(d / 10.0, 0.12, 2.0)
+		_beep.pitch_scale = 1.0 + clampf((Caches.RANGE - d) / Caches.RANGE, 0.0, 1.0) * 0.5
+		_beep.play()
+
+
+func _beep_sound() -> AudioStreamWAV:
+	var rate := 22050
+	var n := int(rate * 0.07)
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	for i in n:
+		var t := float(i) / rate
+		var env := minf(t / 0.005, 1.0) * minf((0.07 - t) / 0.01, 1.0)
+		data.encode_s16(i * 2, int(sin(TAU * 1250.0 * t) * env * 12000.0))
+	var wav := AudioStreamWAV.new()
+	wav.format = AudioStreamWAV.FORMAT_16_BITS
+	wav.mix_rate = rate
+	wav.data = data
+	return wav
+
+
 ## The ground was dug or filled: pieces settle or fall, and nobody ends up inside the sand.
 func _on_ground_changed(area: Rect2) -> void:
 	building.settle(area)
+	caches.check(area)
 	var near := area.grow(0.6)
 	var bodies: Array = [player]
 	bodies.append_array(mutants.get_children())
@@ -641,6 +805,8 @@ func hammer_prompt(key: String) -> String:
 	if rec.is_empty():
 		return ""
 	var text := "%s  %d/%d" % [building.describe(rec), rec.hp, building.max_hp(rec)]
+	if rec.slot.level > 0:
+		text += "   support %d%%" % int(building.support.get(key, 0.0))
 	var rep := building.repair_cost(rec)
 	var up := building.upgrade_cost(rec)
 	if not rep.is_empty():
@@ -678,6 +844,10 @@ func hammer_use(key: String) -> void:
 			building.repair(key)
 			hud.show_pickup(["Repaired " + building.describe(rec).to_lower()])
 	elif not building.upgrade_cost(rec).is_empty():
+		var problem := building.upgrade_problem(key)
+		if problem != "":
+			hud.show_banner(problem)
+			return
 		if _pay(building.upgrade_cost(rec)):
 			building.upgrade(key)
 			hud.show_pickup(["Upgraded to " + building.describe(rec).to_lower()])
@@ -701,6 +871,18 @@ func hammer_demolish(key: String) -> bool:
 
 
 func _hammer_input(event: InputEvent) -> bool:
+	if event.is_action_pressed("rotate"):
+		var n := area_repair(player.global_position)
+		hud.show_pickup(["Repaired %d pieces" % n] if n > 0 else ["Nothing nearby needs repairing (or you lack materials)"])
+		return true
+	if event.is_action_pressed("move_piece"):
+		var key := piece_under_crosshair()
+		if key == "":
+			hud.show_banner("Look at a piece: G upgrades everything like it nearby")
+			return true
+		var n := area_upgrade(key)
+		hud.show_pickup(["Upgraded %d pieces" % n] if n > 0 else ["Nothing nearby to upgrade (or you lack materials)"])
+		return true
 	if not (event is InputEventMouseButton and event.pressed) or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		return false
 	if event.button_index != MOUSE_BUTTON_LEFT and event.button_index != MOUSE_BUTTON_RIGHT:
@@ -709,6 +891,10 @@ func _hammer_input(event: InputEvent) -> bool:
 	if key == "":
 		return false
 	if event.button_index == MOUSE_BUTTON_LEFT:
+		var rec: Dictionary = building.pieces[key]
+		if not building.repair_cost(rec).is_empty() or not building.upgrade_cost(rec).is_empty():
+			if not use_stamina(STAMINA_HAMMER):
+				return true
 		hammer_use(key)
 	else:
 		hammer_demolish(key)
@@ -736,7 +922,7 @@ func _prompt_for(id: String) -> String:
 		return "[E] Use the shop terminal   ($%d)" % shop.cash
 	if id == "testbox":
 		return "[E] Open the TEST box (every item, cash to $%d)" % TEST_CASH
-	for prefix in ["gate:", "chest:", "bench:", "gen:", "fire:", "turret:"]:
+	for prefix in ["gate:", "hatch:", "chest:", "bench:", "gen:", "fire:", "turret:", "well:", "switch:"]:
 		if id.begins_with(prefix):
 			return building.prompt(id)
 	return loot.prompt(id)
@@ -747,11 +933,27 @@ func _build_input(event: InputEvent) -> bool:
 	if event.is_action_pressed("rotate"):
 		build_mode.rotate_piece()
 		return true
+	if event.is_action_pressed("move_piece"):
+		if not build_mode.carrying.is_empty():
+			build_mode.cancel_carry()
+			hud.show_pickup(["Put it back"])
+		else:
+			var why: String = build_mode.pick_up(build_mode.piece_under_crosshair())
+			if why != "":
+				hud.show_banner(why)
+			else:
+				hud.show_pickup(["Picked up " + Building.PIECES[build_mode.carrying.type].name.to_lower()])
+		return true
+	if event is InputEventMouseButton and not event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		var n: int = build_mode.end_drag()
+		if n > 1:
+			hud.show_pickup(["Built %d pieces" % n])
+		return true
 	if not (event is InputEventMouseButton and event.pressed) or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		return false
 	match event.button_index:
 		MOUSE_BUTTON_LEFT:
-			build_mode.try_place()
+			build_mode.begin_drag()
 		MOUSE_BUTTON_RIGHT:
 			var t := build_mode.try_remove()
 			if t == "old":
@@ -777,8 +979,15 @@ func interact(id: String) -> void:
 	if id == "testbox":
 		open_test_box()
 		return
-	if id.begins_with("gate:"):
-		building.toggle_gate(id.trim_prefix("gate:"))
+	if id.begins_with("gate:") or id.begins_with("hatch:"):
+		var gk := id.substr(id.find(":") + 1)
+		if building.pieces.get(gk, {}).get("locked", false):
+			hud.show_banner("The door is locked (R unlocks it)")
+		building.toggle_gate(gk)
+		return
+	if id.begins_with("switch:"):
+		building.toggle_switch(id.trim_prefix("switch:"))
+		power.tick(0.0)
 		return
 	if id.begins_with("chest:"):
 		var storage = building.storage_of(id.trim_prefix("chest:"))
@@ -799,6 +1008,14 @@ func interact(id: String) -> void:
 			hud.show_pickup(["Loaded %d rounds into the turret" % n])
 		else:
 			hud.show_banner("The turret is full" if inventory.count_of("ammo_9mm") > 0 else "You have no 9mm rounds to load")
+		return
+	if id.begins_with("well:"):
+		var n := take_water(id.trim_prefix("well:"))
+		if n > 0:
+			hud.show_pickup(["+%d Water bottle" % n])
+		else:
+			var w: Dictionary = building.pieces.get(id.trim_prefix("well:"), {})
+			hud.show_banner("No room in your bag" if w.get("water", 0.0) >= 1.0 else "The well is still filling")
 		return
 	if id.begins_with("fire:"):
 		if not power.add_wood(id.trim_prefix("fire:"), inventory):
@@ -843,6 +1060,188 @@ func apply_upgrades() -> void:
 	building.set_chest_slots(shop.upgrade_value("storage", Building.CHEST_SLOTS))
 	inventory_ui.bench_tier = shop.upgrade_value("bench", 1)
 	inventory_ui.refresh()
+
+
+## R on a metal door: lock or unlock it. Returns true if the key was used.
+func lock_door(id: String) -> bool:
+	if not id.begins_with("gate:"):
+		return false
+	var key := id.trim_prefix("gate:")
+	var rec: Dictionary = building.pieces.get(key, {})
+	if rec.is_empty() or rec.type != "metal_door":
+		return false
+	if building.toggle_lock(key):
+		hud.show_pickup(["Locked the metal door" if rec.locked else "Unlocked the metal door"])
+	else:
+		hud.show_banner("Close the door first")
+	return true
+
+
+## What the cable does on the piece under the crosshair.
+func cable_prompt(key: String) -> String:
+	var rec: Dictionary = building.pieces.get(key, {})
+	if rec.is_empty() or not rec.type in Building.WIRED:
+		return "Cable: look at a generator, switch, floodlight, fence or turret" if cable_from != "" else ""
+	var name: String = Building.PIECES[rec.type].name
+	var n := building.cables_of(key).size()
+	var take := ("   [RMB] Take up its %d cable%s" % [n, "" if n == 1 else "s"]) if n > 0 else ""
+	if cable_from == "" or not building.pieces.has(cable_from):
+		return "%s
+[LMB] Start a cable here (%d cable)%s" % [name, inventory.count_of("cable"), take]
+	if cable_from == key:
+		return "%s
+[LMB] Cancel this cable" % name
+	var why := building.cable_problem(cable_from, key)
+	if why != "":
+		return "%s
+%s" % [name, why]
+	return "%s
+[LMB] Connect (%d cable of your %d)%s" % [name, building.cable_cost(cable_from, key), inventory.count_of("cable"), take]
+
+
+## Cable in hand: left click a piece to start a cable, then another to connect
+## (paid in cable); right click takes up a piece's cables. Returns "" or why not.
+func cable_click(key: String, take_up := false) -> String:
+	if not building.pieces.has(key) or not building.pieces[key].type in Building.WIRED:
+		return "Cables join generators, switches, floodlights, electric fences and turrets"
+	if take_up:
+		var back := building.disconnect_all(key)
+		inventory.add("cable", back)
+		return ""
+	if cable_from == "" or not building.pieces.has(cable_from) or cable_from == key:
+		cable_from = "" if cable_from == key else key
+		return ""
+	var why := building.cable_problem(cable_from, key)
+	if why != "":
+		return why
+	var cost := building.cable_cost(cable_from, key)
+	if inventory.count_of("cable") < cost:
+		return "Not enough cable: this needs %d" % cost
+	inventory.remove("cable", cost)
+	building.connect_cable(cable_from, key)
+	cable_from = ""
+	power.tick(0.0)
+	return ""
+
+
+func _cable_input(event: InputEvent) -> bool:
+	if not (event is InputEventMouseButton and event.pressed) or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+		return false
+	if event.button_index != MOUSE_BUTTON_LEFT and event.button_index != MOUSE_BUTTON_RIGHT:
+		return false
+	var key := piece_under_crosshair()
+	if key == "":
+		return false
+	var why := cable_click(key, event.button_index == MOUSE_BUTTON_RIGHT)
+	if why != "":
+		hud.show_banner(why)
+	return true
+
+
+## Storage of every chest within reach (hammer work can be paid from them).
+func _nearby_storages() -> Array:
+	var out: Array = []
+	for key in building.keys_of(["chest"]):
+		var rec: Dictionary = building.pieces[key]
+		if rec.node.global_position.distance_to(player.global_position) <= CHEST_REACH + 2.0:
+			out.append(rec.storage)
+	return out
+
+
+## True if your pockets and the chests within reach hold all of cost.
+func has_near(cost: Dictionary) -> bool:
+	var stores: Array = [inventory] + _nearby_storages()
+	for item in cost:
+		var n := 0
+		for st in stores:
+			n += st.count_of(item)
+		if n < cost[item]:
+			return false
+	return true
+
+
+## Takes cost from your pockets first, then from the chests within reach.
+func pay_near(cost: Dictionary) -> bool:
+	if not has_near(cost):
+		return false
+	var stores: Array = [inventory] + _nearby_storages()
+	for item in cost:
+		var left: int = cost[item]
+		for st in stores:
+			left -= st.remove(item, left)
+			if left <= 0:
+				break
+	return true
+
+
+## Pieces within AREA_R of a point, nearest first.
+func _pieces_near(center: Vector3) -> Array:
+	var keys: Array = building.pieces.keys().filter(func(k): return building.pieces[k].node.global_position.distance_to(center) <= AREA_R)
+	keys.sort_custom(func(a, b): return building.pieces[a].node.global_position.distance_to(center) < building.pieces[b].node.global_position.distance_to(center))
+	return keys
+
+
+## Hammer R: repairs every damaged piece nearby, nearest first, until the
+## materials (pockets and chests in reach) or your stamina run out. Returns how many.
+func area_repair(center: Vector3) -> int:
+	var n := 0
+	for key in _pieces_near(center):
+		var cost := building.repair_cost(building.pieces[key])
+		if cost.is_empty() or not has_near(cost):
+			continue
+		if not use_stamina(STAMINA_HAMMER):
+			break
+		pay_near(cost)
+		building.repair(key)
+		n += 1
+	if n > 0:
+		melee.play_swing(0.45)
+	return n
+
+
+## Hammer G: upgrades every piece near the one you look at that has its tier,
+## nearest first, while you can pay. Returns how many.
+func area_upgrade(key: String) -> int:
+	var rec: Dictionary = building.pieces.get(key, {})
+	if rec.is_empty():
+		return 0
+	var tier: int = rec.tier
+	var n := 0
+	for k in _pieces_near(rec.node.global_position):
+		var r: Dictionary = building.pieces[k]
+		var cost := building.upgrade_cost(r)
+		if r.tier != tier or cost.is_empty() or not building.repair_cost(r).is_empty() or building.upgrade_problem(k) != "" or not has_near(cost):
+			continue
+		if not use_stamina(STAMINA_HAMMER):
+			break
+		pay_near(cost)
+		building.upgrade(k)
+		n += 1
+	if n > 0:
+		melee.play_swing(0.45)
+	return n
+
+
+## Takes the full bottles out of a well. Returns how many you got.
+func take_water(key: String) -> int:
+	var rec: Dictionary = building.pieces.get(key, {})
+	if rec.is_empty() or not rec.has("water"):
+		return 0
+	var full := int(floor(rec.water))
+	if full <= 0:
+		return 0
+	var n := full - inventory.add("water", full)
+	rec.water -= n
+	return n
+
+
+## Pays stamina for hard work. Too tired: says so and returns false.
+func use_stamina(cost: float) -> bool:
+	if player.stamina < cost:
+		hud.show_banner("Too tired: catch your breath")
+		return false
+	player.stamina -= cost
+	return true
 
 
 ## Moves your 9mm rounds into a turret's ammo box. Returns how many went in.
@@ -1059,6 +1458,7 @@ func _drop_spot() -> Vector3:
 # --- Save / load ---------------------------------------------------------------
 
 func collect_save_data() -> Dictionary:
+	build_mode.cancel_carry()  # a piece being moved goes back in its place first
 	return {
 		"player": {
 			"position": [player.position.x, player.position.y, player.position.z],
@@ -1081,6 +1481,10 @@ func collect_save_data() -> Dictionary:
 		"shop": shop.save_data(),
 		"drone": drone.save_data(),
 		"terrain": terrain.save_data(),
+		"caches": caches.save_data(),
+		"mining": {"broken": broken_rocks.keys(), "hits": rock_hits.keys().map(func(k): return [k, rock_hits[k]])},
+		"tiers": Building.TIER_NAMES.size(),
+		"cables": building.cables.duplicate(true),
 	}
 
 
@@ -1088,6 +1492,17 @@ func apply_save_data(data: Dictionary) -> void:
 	# Dug ground first, so everything else is restored on top of it. Older saves: flat.
 	terrain.load_data(data.get("terrain", {}))
 	base_zone.rebuild()
+	caches.load_data(data.get("caches", {}))
+	for id in broken_rocks:
+		props.set_rock_broken(id, false)
+	broken_rocks = {}
+	rock_hits = {}
+	var mining: Dictionary = data.get("mining", {})
+	for id in mining.get("broken", []):
+		broken_rocks[int(id)] = true
+		props.set_rock_broken(int(id), true)
+	for e in mining.get("hits", []):
+		rock_hits[int(e[0])] = int(e[1])
 	var w: Dictionary = data.get("world", {})
 	day_night.restore(int(w.get("day", 1)), float(w.get("hour", 9.0)))
 	# Upgrades first: chests must be big enough before their contents load.
@@ -1096,7 +1511,16 @@ func apply_save_data(data: Dictionary) -> void:
 	apply_upgrades()
 	loot.load_data(data.get("loot", {}))
 	survival.load_data(data.get("survival", {}))
-	building.load_data(data.get("buildings", []))
+	# Saves from before the stone tier (3 tiers): concrete was tier 2, now 3.
+	building.load_data(data.get("buildings", []), int(data.get("tiers", 3)) < 4)
+	building.cables = []
+	if data.has("cables"):
+		for c in data.cables:
+			if c is Array and c.size() == 2 and building.pieces.has(str(c[0])) and building.pieces.has(str(c[1])):
+				building.cables.append([str(c[0]), str(c[1])])
+		building._rebuild_cables()
+	else:
+		building.auto_wire(power.POWER_RANGE)  # older saves: power reached 18 m without cables
 	waves.load_data(data.get("waves", {"wave": maxi(day_night.day - 1, 0)}))
 	guns.load_data(data.get("guns", {}))
 	# Older saves: a little starting cash plus pay for the nights already survived.

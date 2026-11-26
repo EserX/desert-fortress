@@ -8,6 +8,7 @@ const RATE := 0.22          # seconds between shots
 const DAMAGE := 16.0
 const SPREAD := 0.025       # radians
 const TURN := 5.0           # radians per second
+const POWER_BOOST := 1.4    # on power (by cable) it turns and fires this much faster
 const AIM_OK := 0.08        # fires once the gun points this close to the target
 const RETARGET := 0.3
 const MIX_RATE := 22050.0
@@ -52,11 +53,12 @@ func update_turret(key: String, rec: Dictionary, delta: float) -> void:
 	var local: Vector3 = rec.node.global_transform.basis.inverse() * (aim - rec.head.global_position)
 	var want_yaw := atan2(-local.x, -local.z)
 	var want_pitch := atan2(local.y, Vector2(local.x, local.z).length())
-	rec.head.rotation.y = rotate_toward(rec.head.rotation.y, want_yaw, TURN * delta)
-	rec.gun.rotation.x = move_toward(rec.gun.rotation.x, want_pitch, TURN * delta)
+	var boost := POWER_BOOST if rec.get("powered", false) else 1.0
+	rec.head.rotation.y = rotate_toward(rec.head.rotation.y, want_yaw, TURN * boost * delta)
+	rec.gun.rotation.x = move_toward(rec.gun.rotation.x, want_pitch, TURN * boost * delta)
 	var off := absf(angle_difference(rec.head.rotation.y, want_yaw)) + absf(rec.gun.rotation.x - want_pitch)
 	if off < AIM_OK and st.cd <= 0.0 and rec.ammo > 0:
-		st.cd = RATE
+		st.cd = RATE / boost
 		shoot(rec, st)
 
 

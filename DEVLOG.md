@@ -2,6 +2,81 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v1.8.0 (2026-11-26): Doors, switches and wiring (M8 done)
+- **Cables instead of the 18 m reach:** floodlights and electric fences now get power along **cables** from a running generator. Anything within **4 m** of a generator plugs straight in. Make **cable** at the workbench (1 scrap + 1 cloth = 6). Hold it and left click a generator, then the floodlight, fence, switch or turret to join them; it costs one cable per 2 m (24 m at most for one cable, so put a switch in between for longer runs). The prompt shows the cost before you click. Right click takes up all of a piece's cables and gives the cable back. Cables hang as thin dark lines with a little sag, and power runs on from piece to piece.
+- **Power switch** (2 scrap, 2 nails, last in the build list): power only passes through it when it is on; **E** flips it. Put one between the generator and the floodlights to keep them dark until you want them.
+- **Powered turrets:** a turret cabled to a running generator turns and fires **40% faster**. Without power it works as before.
+- **Gates close by themselves at night:** a gate or metal door left open closes 8 seconds after nightfall, or 8 seconds after you open it at night, but never while you stand in it. By day they stay as you leave them.
+- **Lockable metal door:** **R** on a shut metal door locks it ("Metal door, locked   [R] Unlock"). Locked, it won't open and takes **half damage**. The lock is saved.
+- **Older saves keep their power:** each generator gets free cables to every floodlight and fence that was within its old 18 m reach. The soak test lays its cables the same way.
+- Fix: debris could still now and then fall through the ground, when the ground's collision was rebuilt under it (loading a save rebuilt every ground chunk). Loading now only rebuilds chunks that changed, and as a safety net a chunk found more than 1 m under the sand is removed. In 5 test runs in a row the debris settled every time; once, the safety net took one stray chunk away, so the cause isn't fully gone, just harmless.
+- That finishes **M8, building capabilities**.
+- **Tests (27 new, 2 changed):** plugging in next to a generator, needing a cable further away, chests refusing cables, starting and finishing a cable (and paying for it), a switch blocking power when off and passing it when on (the floodlight lights, the turret gets power), the switch prompt, the length limit, cables saved and loaded, older saves getting cables in the old reach, taking cables up, gates staying open by day, waiting while you stand in them and closing once you leave at night, and the metal door (locking, staying shut, half damage, the lock saved, unlocking, no locking while open). The v0.20 power test now lays its cables; the door prompt test allows the new "[R] Lock". The `29_power` screenshot shows cables and a switch.
+
+**Try:** run a cable from your generator to a switch by the gate, and from there to the floodlights and the turrets.
+**Next:** M9, v1.9 mutant navigation: a navigation mesh rebuilt when the base or the ground changes, so mutants go round to an open gate or the weakest wall.
+
+## v1.7.0 (2026-11-26): Faster building
+- **Lines:** in build mode, hold left click and let go somewhere else to build a straight **line** (up to 12) of the piece: squares (foundations, floors, roofs) along the longer direction, walls and fences along their own edge, and pillars from corner to corner. Each piece is checked and paid on its own (and costs its stamina), so the line simply stops when the materials or your breath run out, skipping spots that are blocked. A plain click still builds one piece. While dragging, the build line shows "Line: 5 pieces (let go to build)".
+- **Area hammer:** with the hammer, **R** repairs every damaged piece within 8 m, nearest first, and **G** upgrades every piece within 8 m that has the same tier as the one you look at (except damaged ones and upgrades that would bring something down). Both are paid from your pockets **and any chest within reach**, and cost 5 stamina a piece.
+- **Moving pieces:** in build mode, **G** picks up the piece you look at (traps and ladders too). A chest keeps everything in it, a turret its ammo, a generator its fuel, a well its water, and damage stays. Left click puts it down anywhere it fits, for free. G again, leaving build mode or saving puts it back where it was. Foundations, stairs, ramps, wells and anything that holds up another piece can't be moved ("Something rests on it").
+- New key **G** (on the controls page and in the README).
+- Fix: a debris chunk could now and then start inside the sand (from the bottom of a wall or a foundation) and drop through the ground; chunks now start at least 45 cm above it (the debris test passed 3 runs in a row after).
+- **Code:** `building.piece_data()` / `restore_piece()` (saves use them too), `move_problem()`; build mode `begin_drag()` / `end_drag()` / `line_slots()` / `place_line()` / `pick_up()` / `cancel_carry()`; `main.area_repair()` / `area_upgrade()` / `has_near()` / `pay_near()`.
+- **Tests (18 new):** line geometry (walls, squares along the longer way, the 12 limit, objects not making lines), a line stopping when the wood runs out, chests counting as yours for the hammer, area repair paid from a chest, area upgrade while the scrap lasts, picking up a chest and putting it down elsewhere with its contents, a wall holding a floor refusing to move, and a carried piece going back when you leave build mode.
+
+**Try:** drag out a ring of foundations, then a ring of walls on top. When the night has battered them, stand in the middle with the hammer and press R.
+**Next:** v1.8, doors, switches and wiring: gates that close by themselves at night, a lockable metal gate, and cables carrying power from the generator.
+
+## v1.6.0 (2026-11-26): More pieces
+Eight new pieces at the end of the build list (scroll the mouse wheel in build mode). All take material tiers unless said otherwise.
+- **Half wall** (2 wood, 2 nails): 1.2 m high, under your eyes (1.65 m), so you can shoot over it. **Low wall** (1 wood, 2 nails): 0.7 m. Neither holds anything up.
+- **Gun slit wall** (3 wood, 3 nails): a full wall with a 1 m wide, 16 cm slot at 1.4 m to shoot through. It holds up floors like a wall.
+- **Pillar** (2 wood, 2 nails): a new kind of slot on the **corners** of the grid. Pillars stand on the sand or on any of the four foundations around their corner, stack, and **hold up floors** (one pillar under any corner of a square is enough, at the same 10-point support cost as a wall). Now you can put a floor in the open without walls.
+- **Floor with trapdoor** (4 wood, 4 nails): a floor (it holds up floors next to it) with a 1 m hatch on one side. **E** opens and closes it; the state is saved. Put a ladder under it to climb up.
+- **Triangle foundation** (2 wood, 2 nails) and **triangle roof** (2 scrap, 1 nail): half a square, cut corner to corner, turned with R. They have triangle colliders and work like a foundation and a roof (walls stand on a triangle foundation, a triangle roof holds up floors next to it), for rounder towers.
+- **Metal door** (8 scrap, 4 nails): a doorway with a metal leaf, **1400 hit points**, no tiers. E opens and closes it ("[E] Open door"). It holds up floors like a wall.
+- The pit ladder from v1.2 works against walls too, so it is the ladder for upper floors.
+- **Code:** a new slot kind `post` (grid corners) with `post_cells()`/`post_key()`, `FOUNDATIONS`, `TRIS` with `prism_points()`/`prism_mesh()`, the trapdoor hatch (`_add_hatch`, "hatch:" interact ids), and pieces flagged `"gate"` get a gate.
+- **Tests (36 new):** every new piece in the build list, the heights of the half and low walls, half walls not holding floors and having tiers, the gun slit, a pillar snapping to the nearest corner, pillars on sand holding a floor at 90%, stacking, saving, one pillar being enough and the floor falling with both gone, the trapdoor (upstairs, holding a neighbour, the hole, the prompt, opening, saved open), the triangle foundation's height and collider, a wall on it and a triangle roof above, the build-mode ghost, and the metal door (hp, no tiers, prompt, opening, holding a floor). New screenshot view `47_pieces`.
+
+**Try:** build a lookout: four pillars, a floor on top with a trapdoor and a ladder under it, and half walls round the edge to shoot over.
+**Next:** v1.7, faster building: drag to lay a line of walls or foundations, repair or upgrade an area at once, and pick a piece up to put it down elsewhere.
+
+## v1.5.0 (2026-11-26): Structural stability
+- **Support:** every piece now has a support value counted from the ground. Ground-level pieces have **100%**. Resting on what is below (a floor on walls, a wall on a wall, a stair on a floor) costs **10 points**, a floor hanging off the floor next to it **25**, and anything standing on a floor 5. Heavier tiers cost more: scrap metal ×1.15, stone ×1.4, concrete ×1.3 (reinforced). Below **20%** a piece can't stand.
+  - With wooden floors: 90% on the walls, then 65%, 40%, and a fourth square out (15%) is refused with "Too far from support (15%): build closer to walls".
+  - Build mode shows "Support here: 65%" for an upstairs piece, and the hammer prompt shows the support of built ones.
+  - The hammer refuses an upgrade that would bring something down ("Too heavy: a stone floor would bring itself down") and takes nothing for it.
+  - When a wall breaks, or a piece is demolished or undone in build mode, everything left below 20% collapses, then whatever that held, and so on. Undoing a piece in build mode now brings down what it held too (before, it could leave floors in the air).
+- **Physics debris:** collapsing and broken pieces throw **rigid chunks** that tumble, bounce, settle on the sand and shrink away after about 4 seconds. They are on their own physics layer (you and mutants walk through them), use continuous collision so they never fall through the ground, and at most 72 are around at once.
+- **Code:** `building.compute_support()`, `support_for()`, `support_loss()`, `upgrade_problem()` and a rewritten `collapse_unsupported()`. Support is kept up to date in `building.support` (worked out once after loading a save).
+- **Tests (16 new):** the 90/90/65/40% chain, the too-far floor refused, a wall on a wall, the hammer showing support, stone floors weighing more (86/51/22%), the refused upgrade that takes nothing, an upgrade that is fine, all four floors falling when the walls go, rigid debris (and its limit), and the debris settled on the sand a few seconds later. New screenshot view `46_support`.
+
+**Try:** build a balcony off your walls and see how far it reaches, then try it in stone.
+**Next:** v1.6, more pieces: half and low walls, a gun slit wall, a corner pillar, a ladder piece for walls, a trapdoor, triangle foundations and roofs, and a metal door.
+
+## v1.4.0 (2026-11-26): The water well (M7 done)
+- **Water well** (8 stone, 4 wood, 2 scrap, last in the build list): dig a shaft at least **3.5 m** deep (a single 1 m square is enough; the last metre is stone, so it takes the pickaxe), then build the well on the 2 m square whose middle is a corner of the shaft. It stands at the original ground level with a stone ring, posts, a crank bar and a bucket, and fills the sand round the shaft inside its footprint. It fills **a bottle of water every 75 s, up to 6**. **E** takes them ("Well: 3 bottles, the next in 40 s"). Water in a well is saved. Digging next to it doesn't drop it into its own shaft.
+- **Reaching down holes:** looking steeply down, the shovel and pickaxe reach further (about 4 m out, up to 6.4 m along the line of sight), so you can dig a shaft from its edge.
+- **Stamina for hard work:** a dig costs 7 (a fill 3.5), a pickaxe hit 9, building a piece 6, a hammer repair or upgrade 5. With too little: "Too tired: catch your breath".
+- That finishes **M7, digging and terrain**.
+- **Tests (14 new):** a well needing a deep shaft (the reason says 3.5 m and the pickaxe), the shaft depth, reaching its bottom looking down, the well standing at ground level, the footprint filled round the shaft, the filling prompt, a bottle every 75 s, taking it, the 6-bottle limit, the well staying put when you dig next to it, water saved, and stamina for digging. New screenshot view `45_well`.
+
+**Try:** dig a shaft with the pickaxe next to your base, build a well over it, and stop hauling water bottles in from the wrecks.
+**Next:** M8, v1.5 structural stability: a support value for each piece counted from the ground, overhangs and tall towers that collapse, and debris.
+
+## v1.3.0 (2026-11-26): Mining
+- **Layers:** sand down to 1.5 m, then **clay** down to 2.75 m (reddish brown in the hole), then solid **stone** (grey) down to bedrock at 4 m. A dig gives a bag of whatever it brings up, and the prompt says what the next dig brings ("Clay, dug 1.75 m deep"). The shovel can't cut stone ("Solid stone: you need a pickaxe to dig deeper").
+- **Pickaxe** (workbench: 4 scrap, 2 wood): digs through every layer, and left click on a **rock** out in the desert chips a **stone** off it each hit. Rocks take 1 to 12 hits depending on their size, then break apart and are gone for good (saved). Hitting is a little slower than digging.
+- **Stone building tier** between scrap metal and concrete: **1000 hit points**, upgraded with the hammer for stone plus 1 clay as mortar (a wall: 5 stone, 1 clay), repaired with stone. Stone pieces are a warm grey-brown. **Older saves keep their concrete as concrete** (saves now record how many tiers there are).
+- **Metal detector** (workbench: 6 scrap, 4 nails, 2 cloth) and **buried caches:** six caches are buried around the base (at least 8 m from the flag and 8 m apart) and one more most mornings, up to six hidden at a time. Hold the detector: it beeps faster the closer you are ("no signal", "a faint beep", "beep... beep...", "fast beeping", then "a steady tone. Dig right here, 1 m down!"). Dig that square 1 m down and the cache comes up in a bag: scrap, nails, 9mm rounds, sometimes shells, cement, fuel, food or a medkit. Saved; older saves get a fresh set.
+- The pickaxe, metal detector, stone and clay are in the test box too (it fills from every item).
+- **Tests (31 new):** the recipes and test box, sand then clay then stone, the shovel stopped by stone and the pickaxe not, the prompt, aiming at a rock, hits giving stone, a rock breaking, rocks saved and restored (and older saves having every rock), caches buried, the detector over a cache and far away, a cache coming up only 1 m down, found caches saved, older saves getting fresh caches, the stone tier upgrade and its cost, refunds, and older saves keeping scrap metal and concrete. New screenshot views `43_layers` and `44_detector`; `14_tiers` shows four walls.
+
+**Try:** take the pickaxe and detector from the test box, break a few rocks, follow the beeps to a cache, then upgrade a wall to stone.
+**Next:** v1.4, the water well: dig down at the base to strike water for a slow, endless supply, and digging and building cost stamina.
+
 ## v1.2.0 (2026-11-26): Trenches and pits
 - **Mutants and pits:** mutants walk or fall into holes, and climb a steep sand wall slowly: walkers and spitters at 0.35 m/s, runners at 0.55, brutes at 0.22. A wall **2 m high or more holds them** (they can't climb it, and pushing no longer slides them up the sand). In the soak test (wave 8, walls only, you away all night), a 2.25 m deep trench ring 14 m out caught **15 of 23** mutants and only 1 wall was lost; without the trench, 20 of 24 walls were torn down.
 - **Spiked pit** (4 wood, 6 nails, build mode): goes in a hole at least 1 m deep ("Dig a pit at least 1 m deep here first"). Its stakes bite a mutant in it for 30 every second and slow it to 30% (climbing out too), and they wear out.

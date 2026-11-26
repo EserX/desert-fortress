@@ -19,6 +19,12 @@ const ROCK := Color(0.55, 0.36, 0.25)
 const ROCK_HIGH := Color(0.68, 0.50, 0.36)
 const DAMP_SAND := Color(0.50, 0.32, 0.19)
 const BEDROCK_COL := Color(0.42, 0.36, 0.33)
+const CLAY_COL := Color(0.58, 0.30, 0.19)
+const STONE_COL := Color(0.46, 0.43, 0.40)
+## Layers under the sand: clay from SAND_DEPTH down, solid stone from CLAY_DEPTH
+## (only a pickaxe gets through it) down to bedrock.
+const SAND_DEPTH := 1.5
+const CLAY_DEPTH := 2.75
 
 ## Diggable ground: a square of 1 m cells from -DIG_HALF to +DIG_HALF on x and z.
 const DIG_HALF := 48.0
@@ -286,6 +292,15 @@ func fill(x: float, z: float) -> bool:
 	return _shape_cell(c, func(base: float, d: float) -> float: return minf(maxf(base + d, target) - base, MAX_RAISE))
 
 
+## The ground height at world (x, z) before any digging (nearest grid corner).
+func original_height(x: float, z: float) -> float:
+	var ix := roundi(x + DIG_HALF)
+	var iz := roundi(z + DIG_HALF)
+	if ix < 0 or iz < 0 or ix > DIG_CELLS or iz > DIG_CELLS:
+		return surface_height(x, z)
+	return fine_base[iz * (DIG_CELLS + 1) + ix]
+
+
 ## How deep the ground is dug at world (x, z), at the nearest grid corner (0 outside).
 func depth_at(x: float, z: float) -> float:
 	var ix := roundi(x + DIG_HALF)
@@ -296,13 +311,16 @@ func depth_at(x: float, z: float) -> float:
 
 
 ## Raises every grid corner inside area (x, z, edges included) that is lower than
-## height h up to h (foundations do this). Returns true if anything moved.
-func raise_area(area: Rect2, h: float) -> bool:
+## height h up to h (foundations and wells do this), except the corner nearest
+## keep (a well's shaft). Returns true if anything moved.
+func raise_area(area: Rect2, h: float, keep := Vector2(INF, INF)) -> bool:
 	var n := DIG_CELLS + 1
 	var moved := false
 	var cells: Array = []
 	for iz in range(maxi(ceili(area.position.y + DIG_HALF), 0), mini(floori(area.end.y + DIG_HALF), DIG_CELLS) + 1):
 		for ix in range(maxi(ceili(area.position.x + DIG_HALF), 0), mini(floori(area.end.x + DIG_HALF), DIG_CELLS) + 1):
+			if absf(ix - DIG_HALF - keep.x) < 0.5 and absf(iz - DIG_HALF - keep.y) < 0.5:
+				continue
 			var i := iz * n + ix
 			var d := minf(h - fine_base[i], MAX_RAISE)
 			if d > delta[i] + 0.0005:
@@ -319,6 +337,28 @@ func raise_area(area: Rect2, h: float) -> bool:
 			_rebuild_around(c)
 	ground_changed.emit(area.grow(1.0))
 	return true
+
+
+## What a dig at world (x, z) brings up next: "sand", "clay" or "stone" ("" at bedrock).
+func next_layer(x: float, z: float) -> String:
+	var c := dig_cell(x, z)
+	if c.x < 0 or at_bedrock(x, z):
+		return ""
+	return layer_at(cell_dug_max(c) + DIG_STEP * 0.5)
+
+
+## The layer at a depth below the original ground.
+static func layer_at(depth: float) -> String:
+	if depth > CLAY_DEPTH:
+		return "stone"
+	if depth > SAND_DEPTH:
+		return "clay"
+	return "sand"
+
+
+## How deep the least dug corner of a cell is (a dig takes that corner down next).
+func cell_dug_max(c: Vector2i) -> float:
+	return -maxf(maxf(vertex_delta(c.x, c.y), vertex_delta(c.x + 1, c.y)), maxf(vertex_delta(c.x, c.y + 1), vertex_delta(c.x + 1, c.y + 1)))
 
 
 ## True if the cell can't go any deeper.
@@ -391,8 +431,12 @@ func _rebuild_chunk(k: Vector2i) -> void:
 				nrm = nrm.normalized()
 				var col := _color_for(a, b, cc, nrm, rng)
 				if dug < -0.02:
-					col = col.lerp(DAMP_SAND, clampf(-dug / 0.5, 0.3, 1.0)).darkened(0.12 * (1.0 - nrm.y) + 0.06)
-					col = col.lerp(BEDROCK_COL, clampf((-dug - BEDROCK * 0.6) / (BEDROCK * 0.4), 0.0, 1.0))
+					var layer_col: Color = DAMP_SAND
+					if -dug > CLAY_DEPTH:
+						layer_col = STONE_COL.lerp(BEDROCK_COL, clampf((-dug - CLAY_DEPTH) / (BEDROCK - CLAY_DEPTH), 0.0, 1.0))
+					elif -dug > SAND_DEPTH:
+						layer_col = CLAY_COL
+					col = col.lerp(layer_col, clampf(-dug / 0.5, 0.3, 1.0)).darkened(0.12 * (1.0 - nrm.y) + 0.06)
 				elif dug > 0.02:
 					col = col.lightened(0.06)
 				for v in [a, b, cc]:
@@ -425,6 +469,7 @@ func save_data() -> Dictionary:
 ## Restores dug ground. Anything missing (older saves) is untouched, flat ground.
 ## Doesn't emit ground_changed: what stands on it is loaded as saved.
 func load_data(data: Dictionary) -> void:
+	var old := delta.duplicate()
 	delta.fill(0.0)
 	var d: Array = data.get("deltas", [])
 	var n := DIG_CELLS + 1
@@ -433,7 +478,17 @@ func load_data(data: Dictionary) -> void:
 		var iz := int(d[j + 1])
 		if ix >= 0 and iz >= 0 and ix < n and iz < n:
 			delta[iz * n + ix] = clampf(float(d[j + 2]), -BEDROCK, MAX_RAISE)
-	for k in _chunks:
+	# Only the chunks whose corners changed (rebuilding a shape under things resting on it is not free).
+	var dirty := {}
+	for i in delta.size():
+		if absf(delta[i] - old[i]) > 0.0001:
+			var ix := i % n
+			var iz := i / n
+			for o in [Vector2i(0, 0), Vector2i(-1, 0), Vector2i(0, -1), Vector2i(-1, -1)]:
+				var cx := clampi((ix + o.x) / CHUNK, 0, DIG_CELLS / CHUNK - 1)
+				var cz := clampi((iz + o.y) / CHUNK, 0, DIG_CELLS / CHUNK - 1)
+				dirty[Vector2i(cx, cz)] = true
+	for k in dirty:
 		_rebuild_chunk(k)
 
 

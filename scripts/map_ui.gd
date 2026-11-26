@@ -97,6 +97,12 @@ func _draw_map() -> void:
 		var col := Color(0.25, 0.4, 0.1) if not main.loot.is_opened(id) else Color(0.25, 0.4, 0.1, 0.35)
 		_canvas.draw_rect(Rect2(sp - Vector2(7, 7), Vector2(14, 14)), col)
 		_canvas.draw_string(font, sp + Vector2(10, 5), "Supply", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, INK)
+	# During a wave: the mutants coming (the radio picks them up), and a ring
+	# for the build zone.
+	_canvas.draw_arc(b, main.building.zone_radius * RADIUS_PX / main.terrain.PLAY_RADIUS, 0.0, TAU, 48, Color(0.8, 0.15, 0.1, 0.5), 1.5)
+	if main.waves and main.waves.active:
+		for m in main.waves.hunters():
+			_canvas.draw_circle(to_map(m.global_position), 4.0 if m.type != "brute" else 6.0, Color(0.85, 0.1, 0.05))
 	# Player arrow.
 	var pp := to_map(main.player.global_position)
 	var fwd3: Vector3 = -main.player.global_transform.basis.z
@@ -105,6 +111,6 @@ func _draw_map() -> void:
 	_canvas.draw_colored_polygon(PackedVector2Array([pp + f * 12, pp - f * 7 + s * 7, pp - f * 3, pp - f * 7 - s * 7]), Color(0.1, 0.3, 0.9))
 	# Legend.
 	var y := 120.0
-	for line in ["MAP", "Brown block: wreck", "Grey corner: ruin", "Green dot: still has loot", "Green square: supply crate", "Blue arrow: you", "", "M or Esc closes"]:
+	for line in ["MAP", "Brown block: wreck", "Grey corner: ruin", "Green dot: still has loot", "Green square: supply crate", "Red dots: tonight's wave", "Blue arrow: you", "", "M or Esc closes"]:
 		_canvas.draw_string(font, Vector2(30, y), line, HORIZONTAL_ALIGNMENT_LEFT, -1, 22 if line == "MAP" else 16, Color(1, 0.95, 0.85))
 		y += 26.0

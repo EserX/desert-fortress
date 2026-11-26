@@ -23,6 +23,13 @@ func _init(size := SIZE) -> void:
 		slots[i] = {}
 
 
+## Grows to n slots (never shrinks, so nothing is lost).
+func resize(n: int) -> void:
+	while slots.size() < n:
+		slots.append({})
+	changed.emit()
+
+
 ## Adds items, topping up stacks first, then empty slots (hotbar first).
 ## Returns how many did not fit.
 func add(item: String, count: int) -> int:

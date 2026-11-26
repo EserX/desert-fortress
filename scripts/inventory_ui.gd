@@ -27,6 +27,9 @@ var bench_key := ""  # set when opened at a workbench
 var _root: Control
 var _buttons: Array[Button] = []
 var _chest_buttons: Array[Button] = []
+const MAX_CHEST := 40      # biggest chest after storage upgrades
+## Workbench tier (base upgrades): recipes above it are shown but locked.
+var bench_tier := 1
 var _chest_box: VBoxContainer
 var _bench_box: VBoxContainer
 var _recipe_buttons := {}
@@ -64,16 +67,27 @@ func _ready() -> void:
 	cgrid.add_theme_constant_override("h_separation", 6)
 	cgrid.add_theme_constant_override("v_separation", 6)
 	_chest_box.add_child(cgrid)
-	for i in Building.CHEST_SLOTS:
-		_chest_buttons.append(_slot_button(cgrid, _on_chest_input.bind(i)))
+	for i in MAX_CHEST:
+		var cb := _slot_button(cgrid, _on_chest_input.bind(i))
+		cb.custom_minimum_size.y = 50  # flatter, so a 40-slot chest still fits on screen
+		_chest_buttons.append(cb)
 
 	_bench_box = VBoxContainer.new()
 	_bench_box.add_theme_constant_override("separation", 6)
 	col.add_child(_bench_box)
 	UI.title(_bench_box, "Workbench", 22)
+	var rgrid := GridContainer.new()
+	rgrid.columns = 3
+	rgrid.add_theme_constant_override("h_separation", 5)
+	rgrid.add_theme_constant_override("v_separation", 5)
+	_bench_box.add_child(rgrid)
 	for id in Items.RECIPES:
-		var b := UI.button(_bench_box, "", craft.bind(id))
-		b.add_theme_font_size_override("font_size", 15)
+		var b := UI.button(rgrid, "", craft.bind(id))
+		b.add_theme_font_size_override("font_size", 12)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.custom_minimum_size = Vector2(280, 40)
+		b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		b.tooltip_text = Items.RECIPES[id].info
 		_recipe_buttons[id] = b
 
 	_help = UI.note(col, "")
@@ -200,6 +214,8 @@ func click(i: int, in_chest := false) -> void:
 
 ## Makes one of a recipe at the workbench.
 func craft(id: String) -> void:
+	if Items.recipe_tier(id) > bench_tier:
+		return
 	var left = Items.craft(id, inventory)
 	if left != null:
 		crafted.emit(id, left)
@@ -223,6 +239,9 @@ func refresh() -> void:
 	var w := inventory.weight()
 	if chest:
 		for i in _chest_buttons.size():
+			_chest_buttons[i].visible = i < chest.slots.size()
+			if i >= chest.slots.size():
+				continue
 			var s: Dictionary = chest.slots[i]
 			_chest_buttons[i].text = "" if s.is_empty() else "%s\nx%d" % [Items.display_name(s.item), s.count]
 			_chest_buttons[i].modulate = Color(1.4, 1.2, 0.6) if (i == held and held_in_chest) else Color(0.9, 1.0, 0.9)
@@ -231,8 +250,13 @@ func refresh() -> void:
 			var r: Dictionary = Items.RECIPES[id]
 			var parts: Array = []
 			for item in r.cost:
-				parts.append("%d %s (%d)" % [r.cost[item], Items.display_name(item).to_lower(), inventory.count_of(item)])
+				parts.append("%d %s (%d)" % [r.cost[item], Items.display_name(item).to_lower().replace("scrap metal", "scrap"), inventory.count_of(item)])
 			var b: Button = _recipe_buttons[id]
-			b.text = "Make %s:  %s   — %s" % [Items.display_name(id).to_lower(), ", ".join(parts), r.info]
-			b.disabled = not Items.can_craft(id, inventory)
+			var made: String = Items.display_name(id) if r.count == 1 else "%d %s" % [r.count, Items.display_name(id).to_lower()]
+			if Items.recipe_tier(id) > bench_tier:
+				b.text = "%s\nneeds workbench tier %d" % [made, Items.recipe_tier(id)]
+				b.disabled = true
+			else:
+				b.text = "Make %s\n%s" % [made, ", ".join(parts)]
+				b.disabled = not Items.can_craft(id, inventory)
 	_weight.text = "Weight %.1f / %.0f kg%s" % [w, Inventory.MAX_WEIGHT, "   TOO HEAVY: no sprinting" if inventory.overloaded() else ""]

@@ -64,6 +64,7 @@ func _ready() -> void:
 
 	floor_max_angle = deg_to_rad(50.0)
 	floor_snap_length = 0.5
+	collision_mask = 1 | 8  # the world and mutants
 	if DisplayServer.get_name() != "headless":
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
@@ -184,7 +185,7 @@ func interact_target() -> String:
 func look_hit(reach: float) -> Dictionary:
 	var from := camera.global_position
 	var to := from - camera.global_transform.basis.z * reach
-	var q := PhysicsRayQueryParameters3D.create(from, to, 1, [get_rid()])
+	var q := PhysicsRayQueryParameters3D.create(from, to, 1 | 16, [get_rid()])  # world and traps
 	return get_world_3d().direct_space_state.intersect_ray(q)
 
 

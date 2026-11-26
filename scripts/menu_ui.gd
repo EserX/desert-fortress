@@ -69,11 +69,38 @@ static func settings_page(col: VBoxContainer) -> void:
 	_slider(col, "Mouse sensitivity: %.2fx", "mouse_sensitivity", 0.25, 3.0, 0.05, 1.0)
 	_slider(col, "Field of view: %d°", "fov", 60.0, 100.0, 1.0, 1.0)
 	_slider(col, "Volume: %d%%", "volume", 0.0, 1.0, 0.05, 100.0)
+	var ql := Label.new()
+	ql.text = "Graphics quality"
+	col.add_child(ql)
+	var qrow := HBoxContainer.new()
+	qrow.add_theme_constant_override("separation", 8)
+	col.add_child(qrow)
+	var qbuttons: Array = []
+	for i in [0, 1, 2]:
+		var qb := Button.new()
+		qb.text = Settings.QUALITY[i].name
+		qb.toggle_mode = true
+		qb.button_pressed = Settings.quality == i
+		qb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		qrow.add_child(qb)
+		qbuttons.append(qb)
+		qb.pressed.connect(func():
+			Settings.set_value("quality", i)
+			for j in qbuttons.size():
+				qbuttons[j].set_pressed_no_signal(j == i))
 	var fs := CheckButton.new()
 	fs.text = "Fullscreen (F11)"
 	fs.button_pressed = Settings.fullscreen
 	fs.toggled.connect(func(on: bool): Settings.set_value("fullscreen", on))
 	col.add_child(fs)
+	var hints := CheckButton.new()
+	hints.text = "First-time hints (turning them on shows them all again)"
+	hints.button_pressed = Settings.hints
+	hints.toggled.connect(func(on: bool):
+		if on:
+			Settings.hints_seen = []
+		Settings.set_value("hints", on))
+	col.add_child(hints)
 
 
 static func _slider(col: VBoxContainer, fmt: String, key: String, lo: float, hi: float, step: float, shown_scale: float) -> void:

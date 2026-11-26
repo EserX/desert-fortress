@@ -12,8 +12,21 @@ const SAVE_DIR := "user://saves/"
 const SAVE_VERSION := 1
 const SLOTS := ["auto", "quick", "1", "2", "3"]
 const DEFAULT_SEED := 1337
+## How hard the nights are: wave size, mutant health and damage, the pay,
+## and how fast you get hungry and thirsty.
+const DIFFICULTIES := {
+	"easy": {"name": "Easy", "waves": 0.7, "health": 0.8, "damage": 0.6, "cash": 1.25, "needs": 0.7,
+		"info": "Smaller waves, weaker mutants, more pay, slower hunger and thirst."},
+	"normal": {"name": "Normal", "waves": 1.0, "health": 1.0, "damage": 1.0, "cash": 1.0, "needs": 1.0,
+		"info": "The game as designed."},
+	"hard": {"name": "Hard", "waves": 1.4, "health": 1.25, "damage": 1.4, "cash": 0.9, "needs": 1.3,
+		"info": "Bigger waves, tougher mutants that hit harder, less pay, hungrier days."},
+}
 
 var world_seed := DEFAULT_SEED
+var difficulty := "normal"
+## True right after New game (not when loading), for the welcome hint.
+var fresh_game := false
 var playtime := 0.0
 var pending_load: Dictionary = {}  # save data to apply when the world is built
 var in_game := false
@@ -40,7 +53,14 @@ func _notification(what: int) -> void:
 
 # --- Flow --------------------------------------------------------------------
 
-func new_game() -> void:
+## One of the difficulty values ("waves", "health", "damage", "cash", "needs").
+func diff(key: String) -> float:
+	return float(DIFFICULTIES.get(difficulty, DIFFICULTIES.normal)[key])
+
+
+func new_game(level := "normal") -> void:
+	difficulty = level if DIFFICULTIES.has(level) else "normal"
+	fresh_game = true
 	pending_load = {}
 	world_seed = randi() % 1000000
 	playtime = 0.0
@@ -52,6 +72,10 @@ func load_game(slot: String) -> bool:
 	if data.is_empty():
 		return false
 	pending_load = data
+	fresh_game = false
+	difficulty = str(data.get("difficulty", "normal"))
+	if not DIFFICULTIES.has(difficulty):
+		difficulty = "normal"
 	world_seed = int(data.get("seed", DEFAULT_SEED))
 	playtime = float(data.get("playtime", 0.0))
 	_start_world("Loading...")
@@ -161,6 +185,7 @@ func save_game(slot: String, thumbnail: Image = null) -> bool:
 	data["saved_at"] = Time.get_unix_time_from_system()
 	data["seed"] = world_seed
 	data["playtime"] = playtime
+	data["difficulty"] = difficulty
 	var f := FileAccess.open(slot_path(slot), FileAccess.WRITE)
 	if f == null:
 		push_error("Could not write save %s" % slot_path(slot))

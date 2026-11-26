@@ -21,6 +21,23 @@ const BuildMode = preload("res://scripts/build_mode.gd")
 const BaseZone = preload("res://scripts/base_zone.gd")
 const Melee = preload("res://scripts/melee.gd")
 const Dummy = preload("res://scripts/dummy.gd")
+const Mutants = preload("res://scripts/mutants.gd")
+const Waves = preload("res://scripts/waves.gd")
+const Guns = preload("res://scripts/guns.gd")
+const Traps = preload("res://scripts/traps.gd")
+const Power = preload("res://scripts/power.gd")
+const Turrets = preload("res://scripts/turrets.gd")
+const Shop = preload("res://scripts/shop.gd")
+const ShopUI = preload("res://scripts/shop_ui.gd")
+const Drone = preload("res://scripts/drone.gd")
+const Hints = preload("res://scripts/hints.gd")
+const LowPoly = preload("res://scripts/lowpoly.gd")
+
+## Testing aid (temporary): a green box by the spawn point that holds a full
+## stack of every item and tops your cash up to $2000 each time you open it.
+## Set to false to remove it from the game.
+const TEST_BOX := true
+const TEST_CASH := 2000
 
 const DISCOVER_RANGE := 45.0
 const REFILLS_PER_MORNING := 4
@@ -55,6 +72,18 @@ var build_mode: BuildMode
 var base_zone: BaseZone
 var melee: Melee
 var dummy: Dummy
+var mutants: Mutants
+var waves: Waves
+var guns: Guns
+var traps: Traps
+var power: Power
+var turrets: Turrets
+var shop: Shop
+var shop_ui: ShopUI
+var drone: Drone
+var hints: Hints
+var test_box: StaticBody3D
+var test_storage: Inventory
 ## Wrecks and ruins: {"key": "w3", "kind": "wreck", "pos": Vector3}.
 var places: Array = []
 ## Keys of places you have been near.
@@ -97,6 +126,21 @@ func _ready() -> void:
 	base_zone.terrain = terrain
 	add_child(base_zone)
 
+	shop = Shop.new()
+	shop.name = "ShopTerminal"
+	shop.position = Vector3(-2.2, terrain.surface_height(-2.2, 1.6), 1.6)
+	shop.rotation.y = PI + 0.5  # screen towards the spawn point
+	add_child(shop)
+
+	if TEST_BOX:
+		_make_test_box()
+
+	drone = Drone.new()
+	drone.name = "Drone"
+	drone.building = building
+	add_child(drone)
+	shop.drone = drone
+
 	dummy = Dummy.new()
 	dummy.name = "TrainingDummy"
 	dummy.position = Vector3(-3.0, terrain.surface_height(-3.0, 4.0), 4.0)
@@ -114,6 +158,8 @@ func _ready() -> void:
 	day_night.name = "DayNight"
 	add_child(day_night)
 	day_night.setup(sun, moon, env, sky_mat)
+	_apply_quality()
+	Settings.changed.connect(_apply_quality)
 
 	if menu_mode:
 		_setup_orbit_camera()
@@ -128,12 +174,60 @@ func _ready() -> void:
 	player.spawn_point = spawn
 	player.play_radius = terrain.PLAY_RADIUS
 	add_child(player)
+	_apply_quality()
 
 	ambience = Ambience.new()
 	ambience.name = "Ambience"
 	ambience.player = player
 	ambience.day_night = day_night
 	add_child(ambience)
+
+	mutants = Mutants.new()
+	mutants.name = "Mutants"
+	mutants.terrain = terrain
+	mutants.building = building
+	mutants.player = player
+	mutants.world_seed = world_seed
+	mutants.player_dead = func(): return survival == null or survival.dead
+	add_child(mutants)
+	mutants.health_mult = Game.diff("health")
+	mutants.top_up(day_night.day)
+
+	traps = Traps.new()
+	traps.name = "Traps"
+	traps.building = building
+	traps.mutants = mutants
+	traps.player = player
+	add_child(traps)
+	traps.exploded.connect(func(pos): mutants.alert(pos, 60.0))
+
+	turrets = Turrets.new()
+	turrets.name = "Turrets"
+	turrets.building = building
+	turrets.mutants = mutants
+	add_child(turrets)
+	turrets.fired.connect(mutants.alert)
+
+	power = Power.new()
+	power.name = "Power"
+	power.building = building
+	power.day_night = day_night
+	add_child(power)
+
+	waves = Waves.new()
+	waves.name = "Waves"
+	waves.mutants = mutants
+	waves.world_seed = world_seed
+	waves.size_mult = Game.diff("waves")
+	waves.cash_mult = Game.diff("cash")
+	add_child(waves)
+	power.waves = waves
+	day_night.dusk_started.connect(waves.on_dusk)
+	day_night.night_started.connect(func(_d): waves.start_wave())
+	day_night.day_started.connect(waves.on_dawn)
+	mutants.mutant_killed.connect(waves.note_kill)
+	building.piece_destroyed.connect(func(_k, _t): waves.note_lost())
+	building.piece_collapsed.connect(func(_k, _t): waves.note_lost())
 
 	inventory = Inventory.new()
 	inventory.changed.connect(func(): player.overloaded = inventory.overloaded())
@@ -145,17 +239,25 @@ func _ready() -> void:
 	melee.player = player
 	player.camera.add_child(melee)
 
+	guns = Guns.new()
+	guns.name = "Guns"
+	guns.player = player
+	guns.inventory = inventory
+	player.camera.add_child(guns)
+
 	build_mode = BuildMode.new()
 	build_mode.name = "BuildMode"
 	build_mode.building = building
 	build_mode.inventory = inventory
 	build_mode.player = player
+	build_mode.shop = shop
 	add_child(build_mode)
 
 	survival = Survival.new()
 	survival.name = "Survival"
 	add_child(survival)
 	player.landed.connect(survival.fall)
+	survival.need_mult = Game.diff("needs")
 
 	hud = Hud.new()
 	hud.survival = survival
@@ -163,6 +265,7 @@ func _ready() -> void:
 	hud.name = "HUD"
 	hud.player = player
 	hud.day_night = day_night
+	hud.waves = waves
 	add_child(hud)
 
 	pause_menu = PauseMenu.new()
@@ -178,6 +281,20 @@ func _ready() -> void:
 	building.spilled.connect(func(items, pos): loot.spawn_drop(items, Vector3(pos.x, terrain.surface_height(pos.x, pos.z), pos.z)))
 	add_child(inventory_ui)
 
+	shop_ui = ShopUI.new()
+	shop_ui.name = "ShopUI"
+	shop_ui.shop = shop
+	shop_ui.inventory = inventory
+	shop_ui.bought.connect(func(i, left):
+		hud.show_pickup(["Bought " + Shop.CATALOG[i].name.to_lower()])
+		if not left.is_empty():
+			loot.spawn_drop(left, _drop_spot())
+			hud.show_banner("Inventory full: the rest is in a bag at your feet"))
+	shop_ui.upgrade_bought.connect(func(id): hud.show_pickup(["Base upgrade: " + Shop.UPGRADES[id].name.to_lower()]))
+	shop_ui.ordered.connect(func(i): hud.show_pickup(["Ordered " + Shop.DRONE[i].name.to_lower() + " by drone"]))
+	add_child(shop_ui)
+	drone.delivered.connect(_on_delivery)
+
 	death_screen = DeathScreen.new()
 	death_screen.name = "DeathScreen"
 	death_screen.respawn_pressed.connect(respawn)
@@ -188,10 +305,46 @@ func _ready() -> void:
 	add_child(map_ui)
 
 	survival.died.connect(_on_died)
+	hints = Hints.new()
+	hints.name = "Hints"
+	hints.hud = hud
+	add_child(hints)
+	_connect_hints()
+	survival.died.connect(waves.note_death)
+	waves.wave_started.connect(func(n, size):
+		if shop.upgrades.radio > 0:
+			hud.show_banner("Wave %d is coming: %s. Defend the base!" % [n, Waves.mix_text(waves.queue)])
+		else:
+			hud.show_banner("Wave %d: %d mutants are coming. Defend the base!" % [n, size]))
+	waves.wave_ended.connect(func(s):
+		shop.add_cash(int(s.get("cash", 0)))
+		hud.show_summary(Waves.summary_lines(s)))
+	waves.wave_started.connect(func(_n, _size): waves.stats.pieces = building.pieces.size())
+	hud.shop = shop
+	waves.siren.connect(func():
+		if shop.upgrades.radio > 0:
+			hud.show_banner("Radio: wave %d tonight, %s." % [waves.wave + 1, Waves.mix_text(waves.preview_next())])
+		else:
+			hud.show_banner("Siren! Mutants come at nightfall. Get back to the base."))
+	shop.upgraded.connect(func(_id): apply_upgrades())
+	mutants.player_hit.connect(_on_player_hit)
+	mutants.piece_hit.connect(_on_piece_attacked)
+	traps.player_hurt.connect(func(dmg, from, cause):
+		if survival.dead:
+			return
+		survival.damage(dmg, cause)
+		var local: Vector3 = player.global_transform.basis.inverse() * (from - player.global_position)
+		hud.show_damage(atan2(local.x, -local.z)))
+	building.piece_destroyed.connect(func(_k, t): hud.show_pickup(["%s was destroyed!" % Building.PIECES[t].name]))
+	building.piece_collapsed.connect(func(_k, t): hud.show_pickup(["%s collapsed" % Building.PIECES[t].name]))
 	melee.hit_landed.connect(hud.show_hitmarker)
+	guns.hit_landed.connect(hud.show_hitmarker)
+	guns.fired.connect(mutants.alert)
+	hud.guns = guns
 	survival.warning.connect(hud.show_banner)
 
 	day_night.day_started.connect(_on_morning)
+	day_night.day_started.connect(mutants.top_up)
 	# Autosave every morning (after the morning loot is in place).
 	day_night.day_started.connect(func(_d): Game.save_game("auto", _screenshot()))
 	Game.saved.connect(func(slot): hud.show_banner("Game saved (%s)" % Game.slot_label(slot)))
@@ -203,7 +356,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event.is_action_pressed("quick_save"):
 		Game.save_game("quick", _screenshot())
-	elif inventory_ui.is_open():
+	elif inventory_ui.is_open() or shop_ui.is_open():
 		return
 	elif event.is_action_pressed("build"):
 		build_mode.toggle()
@@ -211,6 +364,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif build_mode.active and _build_input(event):
 		get_viewport().set_input_as_handled()
 	elif holding_hammer() and _hammer_input(event):
+		get_viewport().set_input_as_handled()
+	elif guns.item != "" and _gun_input(event):
 		get_viewport().set_input_as_handled()
 	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT \
 			and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and Melee.is_weapon(melee.item):
@@ -238,9 +393,10 @@ func _process(delta: float) -> void:
 			in_shade = _check_shade()
 			_discover_nearby()
 		survival.tick(delta, day_night.hour, player.sprinting, in_shade)
+		mutants.night = day_night.is_night()
 	if hud and not get_tree().paused:
 		var text := ""
-		if not inventory_ui.is_open():
+		if not inventory_ui.is_open() and not shop_ui.is_open():
 			text = _prompt_for(player.interact_target())
 			if text == "" and holding_hammer():
 				text = hammer_prompt(piece_under_crosshair())
@@ -254,7 +410,17 @@ func _process(delta: float) -> void:
 		hud.build_label.text = build_mode.status_text() if build_mode.active else ""
 		base_zone.set_highlight(build_mode.active)
 		var held: Dictionary = inventory.selected_stack()
-		melee.set_item("" if build_mode.active or survival.dead or held.is_empty() else held.item)
+		var hand: String = "" if build_mode.active or survival.dead or held.is_empty() else held.item
+		if build_mode.active:
+			hints.show_hint("build")
+		elif hand == "hammer":
+			hints.show_hint("hammer")
+		elif Guns.is_gun(hand):
+			hints.show_hint("gun")
+		melee.set_item(hand)
+		guns.set_item(hand)
+		if inventory_ui.is_open() or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+			guns.set_ads(false)
 		_check_station_reach()
 	if _orbit_camera:
 		_orbit_angle += delta * 0.04
@@ -370,6 +536,7 @@ func hammer_demolish(key: String) -> bool:
 	_demolish_armed = ""
 	var back: Dictionary = building.refund(building.pieces[key])
 	building.remove(key)
+	building.collapse_unsupported()  # whatever it held up comes down too
 	var left := inventory.add_all(back)
 	if not left.is_empty():
 		loot.spawn_drop(left, _drop_spot())
@@ -392,9 +559,30 @@ func _hammer_input(event: InputEvent) -> bool:
 	return true
 
 
+## Left click fires, right click (held) aims, R reloads. Returns true if used.
+func _gun_input(event: InputEvent) -> bool:
+	if event.is_action_pressed("rotate"):
+		guns.start_reload()
+		return true
+	if not event is InputEventMouseButton or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+		return false
+	if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+		guns.try_fire()
+		return true
+	if event.button_index == MOUSE_BUTTON_RIGHT:
+		guns.set_ads(event.pressed)
+		return true
+	return false
+
+
 func _prompt_for(id: String) -> String:
-	if id.begins_with("gate:") or id.begins_with("chest:") or id.begins_with("bench:"):
-		return building.prompt(id)
+	if id == "shop":
+		return "[E] Use the shop terminal   ($%d)" % shop.cash
+	if id == "testbox":
+		return "[E] Open the TEST box (every item, cash to $%d)" % TEST_CASH
+	for prefix in ["gate:", "chest:", "bench:", "gen:", "fire:", "turret:"]:
+		if id.begins_with(prefix):
+			return building.prompt(id)
 	return loot.prompt(id)
 
 
@@ -427,6 +615,12 @@ func _build_input(event: InputEvent) -> bool:
 func interact(id: String) -> void:
 	if id == "":
 		return
+	if id == "shop":
+		shop_ui.open()
+		return
+	if id == "testbox":
+		open_test_box()
+		return
 	if id.begins_with("gate:"):
 		building.toggle_gate(id.trim_prefix("gate:"))
 		return
@@ -438,6 +632,21 @@ func interact(id: String) -> void:
 	if id.begins_with("bench:"):
 		if building.pieces.has(id.trim_prefix("bench:")):
 			inventory_ui.open_bench(id.trim_prefix("bench:"))
+		return
+	if id.begins_with("gen:"):
+		if not power.add_fuel(id.trim_prefix("gen:"), inventory):
+			hud.show_banner("The tank is full" if inventory.count_of("fuel") > 0 else "You have no fuel cans. Search car trunks.")
+		return
+	if id.begins_with("turret:"):
+		var n := load_turret(id.trim_prefix("turret:"))
+		if n > 0:
+			hud.show_pickup(["Loaded %d rounds into the turret" % n])
+		else:
+			hud.show_banner("The turret is full" if inventory.count_of("ammo_9mm") > 0 else "You have no 9mm rounds to load")
+		return
+	if id.begins_with("fire:"):
+		if not power.add_wood(id.trim_prefix("fire:"), inventory):
+			hud.show_banner("The fire pit is full" if inventory.count_of("wood") > 0 else "You need wood for the fire")
 		return
 	var items: Dictionary
 	if loot.drops.has(id):
@@ -459,6 +668,35 @@ func interact(id: String) -> void:
 		loot.spawn_drop(left, _drop_spot())
 	if not left.is_empty():
 		hud.show_banner("Inventory full")
+
+
+## The drone lowered a parcel: blueprints are learned on the spot, the rest is in a bag on the pad.
+func _on_delivery(items: Dictionary, pos: Vector3) -> void:
+	var learned: Array = shop.learn_blueprints(items)
+	for t in learned:
+		hud.show_pickup(["Blueprint learned: " + Building.PIECES[t].name])
+	if not items.is_empty():
+		loot.spawn_drop(items, pos)
+	hud.show_banner("Drone delivery on the landing pad" + (": new builds unlocked" if not learned.is_empty() else ""))
+
+
+## Makes the bought base upgrades take effect: zone size, chest size, bench tier.
+func apply_upgrades() -> void:
+	building.zone_radius = shop.upgrade_value("zone", Building.ZONE_RADIUS)
+	base_zone.set_radius(building.zone_radius)
+	building.set_chest_slots(shop.upgrade_value("storage", Building.CHEST_SLOTS))
+	inventory_ui.bench_tier = shop.upgrade_value("bench", 1)
+	inventory_ui.refresh()
+
+
+## Moves your 9mm rounds into a turret's ammo box. Returns how many went in.
+func load_turret(key: String) -> int:
+	var rec: Dictionary = building.pieces.get(key, {})
+	if rec.is_empty():
+		return 0
+	var n := inventory.remove("ammo_9mm", Building.TURRET_AMMO - rec.ammo)
+	rec.ammo += n
+	return n
 
 
 ## Closes the chest or workbench screen when you walk off or it is taken down.
@@ -545,13 +783,99 @@ func _on_morning(d: int) -> void:
 
 func _on_died() -> void:
 	var cause := "You fell too far."
-	if survival.water <= 0.0:
+	if survival.cause != "":
+		cause = survival.cause
+	elif survival.water <= 0.0:
 		cause = "You died of thirst."
 	elif survival.food <= 0.0:
 		cause = "You starved."
 	if inventory_ui.is_open():
 		inventory_ui.close()
+	if shop_ui.is_open():
+		shop_ui.close()
 	death_screen.open(cause)
+
+
+## A mutant clawed you: lose health, red flash on the side it came from.
+func _on_player_hit(dmg: float, from: Vector3, kind := "walker") -> void:
+	if survival.dead:
+		return
+	var who: String = Mutants.Mutant.TYPES.get(kind, {}).get("name", "mutant").to_lower()
+	dmg *= Game.diff("damage")
+	survival.damage(dmg, ("Acid from a spitter got you." if kind == "spitter" and dmg > 10.0 else "A %s got you." % who))
+	waves.note_damage(dmg)
+	var to: Vector3 = from - player.global_position
+	var local: Vector3 = player.global_transform.basis.inverse() * to
+	hud.show_damage(atan2(local.x, -local.z))
+
+
+var _attack_warned_at := -100000
+
+## The temporary test box: a green crate with a white cross on the lid.
+func _make_test_box() -> void:
+	test_box = StaticBody3D.new()
+	test_box.name = "TestBox"
+	test_box.set_meta("interact_id", "testbox")
+	test_box.position = Vector3(3.0, terrain.surface_height(3.0, 7.0), 7.0)
+	add_child(test_box)
+	for b in [[Vector3(1.0, 0.7, 0.7), Vector3(0, 0.35, 0), Color(0.2, 0.55, 0.25)],
+			[Vector3(0.7, 0.02, 0.15), Vector3(0, 0.71, 0), Color(0.95, 0.95, 0.9)],
+			[Vector3(0.15, 0.02, 0.5), Vector3(0, 0.71, 0), Color(0.95, 0.95, 0.9)]]:
+		var mi := MeshInstance3D.new()
+		var m := BoxMesh.new()
+		m.size = b[0]
+		mi.mesh = m
+		mi.position = b[1]
+		mi.material_override = LowPoly.material(b[2])
+		test_box.add_child(mi)
+	var col := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(1.0, 0.72, 0.7)
+	col.shape = shape
+	col.position.y = 0.36
+	test_box.add_child(col)
+	test_storage = Inventory.new(40)
+
+
+## Refills the test box with a full stack of every item and opens it like a chest.
+func open_test_box() -> void:
+	test_storage.load_data({})
+	for item in Items.ITEMS:
+		if not item.begins_with("bp_"):
+			test_storage.add(item, int(Items.ITEMS[item].stack))
+	if shop.cash < TEST_CASH:
+		shop.add_cash(TEST_CASH - shop.cash)
+	inventory_ui.open_chest("", test_storage)
+
+
+## When each first-time hint shows.
+func _connect_hints() -> void:
+	inventory.changed.connect(func():
+		if inventory.weight() > 2.6:  # more than the starting tools
+			hints.show_hint("loot"))
+	day_night.dusk_started.connect(func(_d): hints.show_hint("dusk"))
+	waves.wave_ended.connect(func(_s): hints.show_hint("cash"))
+	survival.warning.connect(func(_t): hints.show_hint("hurt"))
+	for m in mutants.get_children():
+		if m.has_signal("spotted"):
+			m.spotted.connect(func(_m): hints.show_hint("mutant"))
+	mutants.child_entered_tree.connect(func(m):
+		if m.has_signal("spotted"):
+			m.spotted.connect(func(_m): hints.show_hint("mutant")))
+	if Game.fresh_game:
+		get_tree().create_timer(2.0).timeout.connect(func(): hints.show_hint("welcome"))
+
+
+## Mutants clawing at the base: a warning now and then, saying which way.
+func _on_piece_attacked(key: String) -> void:
+	if Time.get_ticks_msec() - _attack_warned_at < 20000 or not building.pieces.has(key):
+		return
+	_attack_warned_at = Time.get_ticks_msec()
+	var rec: Dictionary = building.pieces[key]
+	var p: Vector3 = rec.node.global_position
+	var deg := fposmod(rad_to_deg(atan2(p.x, -p.z)), 360.0)
+	var side: String = Hud.DIRS[int(round(deg / 45.0)) % 8]
+	hud.show_banner("Mutants are breaking in! (%s side of the base)" % side)
 
 
 ## Back at the base flag with your items.
@@ -595,15 +919,39 @@ func collect_save_data() -> Dictionary:
 		"survival": survival.save_data(),
 		"map": {"discovered": discovered.keys()},
 		"buildings": building.save_data(),
+		"mutants": mutants.save_data(),
+		"waves": waves.save_data(),
+		"guns": guns.save_data(),
+		"shop": shop.save_data(),
+		"drone": drone.save_data(),
 	}
 
 
 func apply_save_data(data: Dictionary) -> void:
 	var w: Dictionary = data.get("world", {})
 	day_night.restore(int(w.get("day", 1)), float(w.get("hour", 9.0)))
+	# Upgrades first: chests must be big enough before their contents load.
+	shop.load_data(data.get("shop", {}))
+	building.chest_slots = Building.CHEST_SLOTS
+	apply_upgrades()
 	loot.load_data(data.get("loot", {}))
 	survival.load_data(data.get("survival", {}))
 	building.load_data(data.get("buildings", []))
+	waves.load_data(data.get("waves", {"wave": maxi(day_night.day - 1, 0)}))
+	guns.load_data(data.get("guns", {}))
+	# Older saves: a little starting cash plus pay for the nights already survived.
+	if not data.has("shop"):
+		shop.cash = Shop.START_CASH + 40 * waves.wave
+	if not data.get("shop", {}).has("unlocked"):
+		# Saves from before blueprints keep every build they had.
+		for t in Building.PIECES:
+			if Building.PIECES[t].get("blueprint", false):
+				shop.unlocked[t] = true
+	drone.load_data(data.get("drone", {}))
+	if waves.active and not day_night.is_night():
+		waves.active = false  # never carry a wave into the day
+	if data.has("mutants"):
+		mutants.load_data(data.mutants)  # older saves keep the freshly spawned walkers
 	discovered = {}
 	for key in data.get("map", {}).get("discovered", []):
 		discovered[str(key)] = true
@@ -630,6 +978,15 @@ func apply_save_data(data: Dictionary) -> void:
 	player.head.rotation.x = float(p.get("pitch", 0.0))
 	player.stamina = float(p.get("stamina", player.STAMINA_MAX))
 	player.velocity = Vector3.ZERO
+
+
+## Graphics quality: sun shadows and how far you can see.
+func _apply_quality() -> void:
+	var q: Dictionary = Settings.QUALITY[Settings.quality]
+	sun.shadow_enabled = q.shadows
+	sun.directional_shadow_max_distance = maxf(q.shadow_dist, 1.0)
+	if player:
+		player.camera.far = q.far
 
 
 func _setup_environment() -> void:

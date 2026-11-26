@@ -261,6 +261,7 @@ func _test_building() -> void:
 	_test_tiers()
 	_test_base()
 	_test_melee()
+	_test_mutants()
 	b.load_data([])
 	bm.toggle()
 	inv.load_data({})
@@ -367,6 +368,13 @@ func _test_tiers() -> void:
 
 ## Ramp: walk up it for real.
 var ramp_top := 0.0
+var chase_walker: Node
+var march_walker: Node
+var break_wall := ""
+var spit_seen := false
+var turret_key := ""
+var turret_near: Node
+var turret_far: Node
 var ramp_base := 0.0
 ## v0.11: base zone, storage chest, workbench crafting, bandages, spike barricade.
 func _test_base() -> void:
@@ -499,6 +507,857 @@ func _test_melee() -> void:
 	check(inv.count_of("pipe") == 1, "older saves get a rusty pipe")
 
 
+## v0.13: the Walker. Sight, hearing, hits, death, saving, spawning.
+func _test_mutants() -> void:
+	var ms = main.mutants
+	var player = main.player
+	check(ms.alive().size() == ms.WANDERERS, "a new game has %d walkers roaming (%d)" % [ms.WANDERERS, ms.alive().size()])
+	check(ms.alive().all(func(m): return Vector2(m.position.x, m.position.z).length() >= ms.MIN_BASE_DIST - 0.1), "walkers start far from the base")
+	var data: Dictionary = main.collect_save_data()
+	ms.clear()
+	var py: float = main.terrain.surface_height(8, -8)
+	player.position = Vector3(8, py, -8)
+	player.velocity = Vector3.ZERO
+	player.rotation.y = 0.0
+	player.head.rotation.x = 0.0
+	var w = ms.spawn("walker", Vector3(8, 0, -20))
+	w.rotation.y = PI  # facing the player (+Z)
+	check(w.notices_target(false), "a walker 12 m away sees you in daylight")
+	w.rotation.y = 0.0
+	check(not w.notices_target(false), "it doesn't see you behind its back")
+	w.position = Vector3(8, py, -14)
+	check(w.notices_target(false), "but it hears you when you are close")
+	player.crouching = true
+	check(not w.notices_target(false), "crouching keeps you quiet")
+	player.crouching = false
+	w.position = Vector3(8, py, -34)
+	w.rotation.y = PI
+	check(not w.notices_target(false), "26 m away it doesn't notice you")
+	check(w.notices_target(false) == false and not w.notices_target(true), "at night it sees less far")
+	# Saving.
+	ms.clear()
+	var a = ms.spawn("walker", Vector3(100, 0, 40), 60.0)
+	var saved: Dictionary = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	ms.clear()
+	main.apply_save_data(saved)
+	var back: Array = ms.alive()
+	check(back.size() == 1 and back[0].position.distance_to(a.position) < 0.2 and is_equal_approx(back[0].health, 60.0), "walkers are saved with position and health")
+	saved.erase("mutants")
+	main.apply_save_data(saved)
+	check(ms.alive().size() == 1, "older saves keep the walkers already there")
+	ms.clear()
+	check(ms.top_up(2) == ms.WANDERERS and ms.alive().size() == ms.WANDERERS, "each morning the walkers are topped up")
+	# Death by walker.
+	main.survival.health = 5.0
+	main._on_player_hit(12.0, player.global_position + Vector3(0, 0, -2))
+	check(main.survival.dead and main.death_screen.is_open(), "a walker can kill you")
+	check(main.death_screen._cause.text.contains("walker"), "the death screen says what got you: " + main.death_screen._cause.text)
+	main.respawn()
+	main.apply_save_data(data)
+	ms.clear()
+
+
+## Melee on the walker that just chased you down.
+func _test_walker_hits() -> void:
+	var ms = main.mutants
+	var player = main.player
+	var w = chase_walker
+	var py: float = player.position.y
+	w.health = 100.0
+	player.rotation.y = 0.0
+	player.head.rotation.x = -0.1
+	# Hits from the pipe.
+	main.melee.set_item("pipe")
+	player.rotation.y = 0.0  # looking at -Z, at the walker
+	var r: Dictionary = main.melee.strike()
+	check(r.kind == "target" and r.node == w and is_equal_approx(w.health, 75.0), "the pipe hits a walker for 25 (%s, %.0f)" % [r.kind, w.health])
+	check(w.state == w.State.CHASE, "a hit makes it chase you")
+	var kills: int = ms.kills
+	w.take_hit(80.0, w.global_position, Vector3(0, 0, -1))
+	check(w.is_dead() and w.collision_layer == 0 and ms.kills == kills + 1, "at 0 health it dies and stops blocking")
+	check(not ms.alive().has(w), "dead walkers don't count as alive")
+	w.take_hit(25.0, w.global_position, Vector3(0, 0, -1))
+	check(ms.kills == kills + 1, "hitting a corpse does nothing")
+	main.melee.set_item("")
+
+
+## v0.14: siren, wave size, spawning at the edge, clearing, dawn, summary, saving.
+func _test_waves() -> void:
+	var wv = main.waves
+	var ms = main.mutants
+	var Waves = load("res://scripts/waves.gd")
+	check(Waves.wave_size(1) == 4 and Waves.wave_size(5) == 12 and Waves.wave_size(40) == Waves.MAX_SIZE, "waves grow by 2 each night up to %d" % Waves.MAX_SIZE)
+	var got_siren := [false]
+	wv.siren.connect(func(): got_siren[0] = true, CONNECT_ONE_SHOT)
+	wv.on_dusk(1)
+	check(got_siren[0], "the siren sounds at dusk")
+	ms.clear()
+	main.day_night.restore(main.day_night.day, 21.0)
+	var n0: int = wv.wave
+	wv.start_wave()
+	check(wv.active and wv.wave == n0 + 1 and wv.remaining() == Waves.wave_size(wv.wave), "night starts wave %d with %d mutants" % [wv.wave, wv.remaining()])
+	var size: int = wv.remaining()
+	for i in 40:
+		wv._process(1.0)
+	check(wv.to_spawn == 0 and wv.hunters().size() == size, "the whole wave arrives in groups (%d)" % wv.hunters().size())
+	check(wv.hunters().all(func(m): return Vector2(m.position.x, m.position.z).length() > 195.0), "they come in from the edge of the map")
+	main.hud._process(0.0)
+	check(main.hud.clock.text.contains("Wave %d: %d left" % [wv.wave, size]), "the HUD shows the wave counter: " + main.hud.clock.text.replace("\n", " | "))
+	# Save in the middle of the night.
+	var data: Dictionary = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	var ended := []
+	wv.wave_ended.connect(func(s): ended.append(s))
+	main._on_player_hit(5.0, main.player.global_position)
+	for m in wv.hunters():
+		m.take_hit(500.0, m.global_position, Vector3.FORWARD)
+	wv._process(0.1)
+	check(not wv.active and ended.size() == 1 and ended[0].cleared and ended[0].kills == size, "killing them all ends the wave (%s)" % str(ended))
+	check(int(ended[0].damage) == 5, "the summary counts damage taken")
+	check(main.hud.summary.visible and Waves.summary_lines(ended[0])[0] == "Wave %d cleared!" % wv.wave, "the summary card shows")
+	main.apply_save_data(data)
+	check(wv.active and wv.hunters().size() == size and wv.wave == n0 + 1, "a wave in progress is saved and loaded")
+	wv.on_dawn(3)
+	check(not wv.active and wv.hunters().is_empty() and not ended[1].cleared, "dawn ends the wave and the rest crumble")
+	check(Waves.summary_lines(ended[1])[0].begins_with("Dawn"), "dawn summary: " + Waves.summary_lines(ended[1])[0])
+	check(ms.alive().size() == 0, "crumbled mutants don't count as alive")
+	data.erase("waves")
+	main.day_night.restore(6, 10.0)
+	main.apply_save_data(data)
+	main.day_night.restore(6, 10.0)
+	check(not wv.active, "older saves load without a wave running")
+	main.survival.health = 100.0
+	ms.clear()
+	march_walker = ms.spawn("walker", Vector3(0, 0, 40))
+	march_walker.make_hunter(Vector3.ZERO)
+	main.player.position = Vector3(60, main.terrain.surface_height(60, -60), -60)
+
+
+## v0.15: collapsing upper floors, finding pieces from colliders, spikes biting back.
+func _test_breaking() -> void:
+	var b = main.building
+	var ms = main.mutants
+	b.load_data([])
+	var w := {"kind": "edge", "cx": 5, "cz": -3, "dir": 0, "level": 0}
+	var wk: String = b.place("wall", w, b.evaluate("wall", w).y)
+	var f := {"kind": "cell", "cx": 5, "cz": -3, "dir": 0, "level": 1}
+	var fev: Dictionary = b.evaluate("floor", f)
+	var fk: String = b.place("floor", f, fev.y)
+	var f2 := {"kind": "cell", "cx": 6, "cz": -3, "dir": 0, "level": 1}
+	var f2k: String = b.place("floor", f2, b.evaluate("floor", f2).y)
+	check(fev.ok and b.pieces.has(f2k), "a floor held up by one wall, with an overhang")
+	var collapsed := []
+	b.piece_collapsed.connect(func(k, _t): collapsed.append(k))
+	b.damage(wk, 9999.0)
+	check(not b.pieces.has(fk) and not b.pieces.has(f2k) and collapsed.size() == 2, "when the wall breaks the floors above collapse (%d)" % collapsed.size())
+	var d := {"kind": "edge", "cx": 5, "cz": -5, "dir": 0, "level": 0}
+	var dk: String = b.place("doorway", d, b.evaluate("doorway", d).y)
+	var gate_body: Node = b.pieces[dk].hinge.get_child(0)
+	check(b.piece_key_of(gate_body) == dk, "a gate counts as part of its doorway")
+	var ss := {"kind": "obj", "cx": 7, "cz": -6, "dir": 0, "level": 0}
+	var sk: String = b.place("spikes", ss, b.evaluate("spikes", ss).y)
+	var m = ms.spawn("walker", Vector3(15, 0, -11))
+	m.break_key = sk
+	m.state = m.State.BREAK
+	for i in 20:
+		m._break(0.05)
+	check(b.pieces[sk].hp < b.max_hp(b.pieces[sk]) and is_equal_approx(m.health, 100.0 - m.SPIKE_DAMAGE), "clawing at spikes hurts the mutant (%.0f)" % m.health)
+	b.remove(sk)
+	m._break(0.05)
+	check(m.state != m.State.BREAK, "when the piece is gone it moves on")
+	# Nobody home: a wave mutant at the base goes for the nearest building.
+	var lone := {"kind": "edge", "cx": 1, "cz": 1, "dir": 0, "level": 0}
+	var lk: String = b.place("wall", lone, b.evaluate("wall", lone).y)
+	var h = ms.spawn("walker", Vector3(6, 0, 4))
+	h.make_hunter(Vector3.ZERO)
+	check(h._wreck_target(0.1) and h._wreck_key == lk, "a wave mutant at an empty base heads for the nearest wall")
+	b.remove(lk)
+	ms.clear()
+	b.load_data([])
+
+
+## v0.16: runner, brute and spitter stats, wave mixes, acid arcs, saving types.
+func _test_types() -> void:
+	var ms = main.mutants
+	var T: Dictionary = ms.Mutant.TYPES
+	check(T.has("runner") and T.has("brute") and T.has("spitter"), "four mutant types")
+	check(T.runner.run > main.player.WALK_SPEED and T.runner.run < main.player.SPRINT_SPEED, "runners outrun your walk but not your sprint")
+	check(T.runner.health < T.walker.health and T.brute.health >= 4.0 * T.walker.health, "runners are weak, brutes are tanky")
+	check(T.brute.wall_damage >= 4.0 * T.walker.wall_damage and T.brute.run < T.walker.run, "brutes are slow and wreck walls")
+	var Waves = load("res://scripts/waves.gd")
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 3
+	var m1: Array = Waves.wave_mix(1, rng)
+	check(m1.size() == 4 and m1.all(func(t): return t == "walker"), "night 1 is all walkers")
+	check(Waves.wave_mix(2, rng).has("runner"), "runners join on night 2")
+	check(Waves.wave_mix(3, rng).has("spitter"), "spitters join on night 3")
+	var m4: Array = Waves.wave_mix(4, rng)
+	check(m4.has("brute") and m4.size() == Waves.wave_size(4), "brutes join on night 4: " + Waves.mix_text(m4))
+	var late: Array = Waves.wave_mix(12, rng)
+	check(late.filter(func(t): return t != "walker").size() > late.size() / 3, "later waves are mostly the nasty ones: " + Waves.mix_text(late))
+	check(Waves.mix_text(["walker", "walker", "brute"]) == "2 walkers, 1 brute", "wave banner text")
+	# The lob lands where it aims.
+	var from := Vector3(0, 3, 0)
+	var to := Vector3(11, 2, -6)
+	var v: Vector3 = ms.Mutant.launch_velocity(from, to, 15.0)
+	var p := from
+	var best := 99.0
+	for i in 240:
+		v.y -= 9.8 / 120.0
+		p += v / 120.0
+		best = minf(best, p.distance_to(to))
+	check(best < 0.3, "acid arcs land on target (misses by %.2f m)" % best)
+	# Brutes barely flinch.
+	ms.clear()
+	var b = ms.spawn("brute", Vector3(60, 0, 60))
+	var w = ms.spawn("walker", Vector3(64, 0, 60))
+	b.take_hit(25.0, b.global_position, Vector3.FORWARD)
+	w.take_hit(25.0, w.global_position, Vector3.FORWARD)
+	check(b.velocity.length() < w.velocity.length() * 0.5, "brutes barely flinch when hit")
+	check(b.get_child_count() > 2 and b._shape.shape.radius > w._shape.shape.radius, "brutes are bigger")
+	ms.spawn("spitter", Vector3(70, 0, 60))
+	ms.spawn("runner", Vector3(74, 0, 60))
+	var data: Dictionary = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	ms.clear()
+	main.apply_save_data(data)
+	var kinds: Array = ms.alive().map(func(m): return m.type)
+	kinds.sort()
+	check(kinds == ["brute", "runner", "spitter", "walker"], "mutant types are saved: " + str(kinds))
+	# Wave queue saved.
+	main.day_night.restore(main.day_night.day, 21.0)
+	main.waves.start_wave()
+	var q: Array = main.waves.queue.duplicate()
+	data = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	main.waves.end_wave(true)
+	main.apply_save_data(data)
+	check(main.waves.queue == q and main.waves.active, "the wave's lineup is saved")
+	main.waves.end_wave(true)
+	main.day_night.restore(main.day_night.day, 10.0)
+	main.survival.health = 5.0
+	main._on_player_hit(30.0, main.player.global_position, "brute")
+	check(main.death_screen._cause.text == "A brute got you.", "death screen names the brute: " + main.death_screen._cause.text)
+	main.respawn()
+	ms.clear()
+
+
+## v0.17: the pistol. Crafting, reloading, firing, rate, kick, aiming, noise, saving.
+func _test_pistol() -> void:
+	var g = main.guns
+	var inv = main.inventory
+	var player = main.player
+	var d = main.dummy
+	inv.load_data({})
+	inv.add_all({"scrap": 10, "wood": 2, "nails": 6})
+	check(main.Items.craft("pistol", inv) != null and inv.count_of("pistol") == 1, "the workbench makes a pistol")
+	inv.add_all({"scrap": 2, "nails": 3})
+	main.Items.craft("ammo_9mm", inv)
+	check(inv.count_of("ammo_9mm") == 8, "and 8 rounds of 9mm")
+	inv.selected = inv.slots.find(inv.slots.filter(func(x): return x.get("item", "") == "pistol")[0])
+	main._process(0.0)
+	check(g.item == "pistol" and g.visible and not main.melee.visible, "holding the pistol shows it in both hands")
+	g.mag = {}
+	g._cooldown = 0.0
+	check(not g.try_fire().fired and g.reload_t < 0.0, "a gun can't fire while it is still coming up")
+	g._process(g.RAISE_TIME + 0.01)
+	var r: Dictionary = g.try_fire()
+	check(not r.fired and g.reload_t >= 0.0, "an empty pistol clicks and starts reloading")
+	for i in 16:
+		g._process(0.1)
+	check(g.loaded("pistol") == 8 and inv.count_of("ammo_9mm") == 0, "reloading takes rounds from your pockets (%d loaded)" % g.loaded("pistol"))
+	check(not g.start_reload(), "no reload without spare ammo")
+	inv.add("ammo_9mm", 30)
+	check(g.start_reload(), "reload with ammo")
+	for i in 16:
+		g._process(0.1)
+	check(g.loaded("pistol") == 12 and inv.count_of("ammo_9mm") == 26, "a full magazine holds 12")
+	main.hud._process(0.0)
+	check(main.hud.ammo_label.text.begins_with("Pistol  12 / 26"), "the HUD shows the ammo: " + main.hud.ammo_label.text.replace("\n", " | "))
+	# Aim at the dummy from 10 m.
+	player.position = Vector3(-3, main.terrain.surface_height(-3, 14), 14)
+	player.rotation.y = 0.0
+	player.head.rotation.x = -0.03
+	player.head.position.y = player.EYE_HEIGHT
+	g.set_ads(true)
+	for i in 5:
+		g._process(0.1)
+	check(g.ads_amount > 0.99 and player.camera.fov < root.get_node("Settings").fov * 0.8, "aiming down the sights zooms in (fov %.0f)" % player.camera.fov)
+	var before: float = d.total_damage
+	var pitch: float = player.head.rotation.x
+	var shots := 0
+	for i in 3:
+		r = g.try_fire()
+		g._cooldown = 0.0
+		player.head.rotation.x = -0.03
+		player.rotation.y = 0.0
+		shots += 1 if r.kind == "target" else 0
+	check(shots == 3 and is_equal_approx(d.total_damage - before, 34.0 * 3), "aimed shots hit the dummy at 10 m for 34 each (%d hits, %.0f)" % [shots, d.total_damage - before])
+	check(g.loaded("pistol") == 9, "each shot uses a round")
+	g.try_fire()
+	check(player.head.rotation.x > -0.03 + 0.02, "each shot kicks the view up")
+	check(not g.try_fire().fired, "one shot at a time (rate limit)")
+	g._process(0.25)
+	g.set_ads(false)
+	# A shot brings a wandering walker running.
+	var ms = main.mutants
+	ms.clear()
+	var w = ms.spawn("walker", player.position + Vector3(25, 0, 10))
+	w.rotation.y = atan2(-1, 0)  # looking away
+	check(w.state == w.State.WANDER, "the walker is minding its own business")
+	g.try_fire()
+	check(w.state == w.State.CHASE, "a gunshot 27 m away brings it running")
+	ms.clear()
+	var data: Dictionary = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	g.mag = {}
+	main.apply_save_data(data)
+	check(g.loaded("pistol") == 7, "rounds in the magazine are saved (%d)" % g.loaded("pistol"))
+	inv.load_data({})
+	main._process(0.0)
+	check(g.item == "" and not g.visible, "putting the pistol away hides it")
+	for i in 5:
+		g._process(0.1)
+	check(is_equal_approx(player.camera.fov, root.get_node("Settings").fov), "the view zooms back out")
+
+
+## v0.18: shotgun pellets, rifle scope, headshots, switching, new ammo.
+func _test_long_guns() -> void:
+	var g = main.guns
+	var inv = main.inventory
+	var player = main.player
+	var d = main.dummy
+	var Items = main.Items
+	inv.load_data({})
+	inv.add_all({"scrap": 40, "wood": 10, "nails": 30, "cloth": 4})
+	for id in ["shotgun", "shells", "rifle", "ammo_762"]:
+		Items.craft(id, inv)
+	check(inv.count_of("shotgun") == 1 and inv.count_of("rifle") == 1 and inv.count_of("shells") == 6 and inv.count_of("ammo_762") == 5, "the workbench makes a shotgun, a rifle and their ammo")
+	main.inventory_ui.open_bench("x")
+	check(main.inventory_ui._recipe_buttons.size() == Items.RECIPES.size(), "all %d recipes are on the workbench" % Items.RECIPES.size())
+	main.inventory_ui.close()
+	# Headshot with the rifle on a walker 14 m away.
+	var w = chase_walker
+	g.set_item("rifle")
+	check(g.raise_t > 0.0 and not g.try_fire().fired, "switching weapons takes a moment")
+	g._process(g.RAISE_TIME + 0.01)
+	g.mag["rifle"] = 5
+	g.set_ads(true)
+	for i in 5:
+		g._process(0.1)
+	main.hud._update_ammo()
+	check(main.hud.scope.visible and not g._models.rifle.visible, "the rifle scope fills the view when aiming")
+	check(player.camera.fov < root.get_node("Settings").fov * 0.4, "and zooms in a lot (fov %.0f)" % player.camera.fov)
+	var head: Vector3 = w.global_position + Vector3(0, 1.68, 0)
+	var eye: Vector3 = player.camera.global_position
+	var to := head - eye
+	player.head.rotation.x = atan2(to.y, Vector2(to.x, to.z).length())
+	player.rotation.y = atan2(-to.x, -to.z)
+	var r: Dictionary = g.try_fire()
+	check(r.kind == "head" and w.is_dead(), "a rifle headshot kills a walker outright (%s, %.0f damage)" % [r.kind, r.get("damage", 0.0)])
+	check(is_equal_approx(r.get("damage", 0.0), g.GUNS.rifle.damage * g.HEADSHOT), "headshots do double damage")
+	g.set_ads(false)
+	main.mutants.clear()
+	# Shotgun on the dummy: close up most pellets hit, far away few do.
+	g._rng.seed = 42
+	g.set_item("shotgun")
+	g._process(g.RAISE_TIME + 0.01)
+	var totals: Array = []
+	for dist in [4.0, 26.0]:
+		player.position = Vector3(-3, main.terrain.surface_height(-3, 4 + dist), 4 + dist)
+		var aim: Vector3 = d.global_position + Vector3(0, 1.3, 0) - (player.position + Vector3(0, player.EYE_HEIGHT, 0))
+		player.rotation.y = 0.0
+		player.head.rotation.x = atan2(aim.y, Vector2(aim.x, aim.z).length())
+		var sum := 0.0
+		for i in 4:
+			g.mag["shotgun"] = 6
+			g._cooldown = 0.0
+			var hits_before: int = d.hits
+			var before: float = d.total_damage
+			g.try_fire()
+			sum += d.total_damage - before
+			if i == 0 and dist < 5.0:
+				check(d.hits == hits_before + 1, "pellets on one target add up to a single hit")
+		totals.append(sum)
+	check(totals[0] > 13.0 * 4 * 2 and totals[0] > totals[1] * 2.0, "the shotgun is deadly close up and weak far away (%.0f vs %.0f)" % [totals[0], totals[1]])
+	check(g.loaded("shotgun") == 5, "each blast uses one shell")
+	g.set_item("")
+
+
+## v0.19: spike strip, barbed wire and landmine.
+func _test_traps() -> void:
+	var b = main.building
+	var ms = main.mutants
+	var tr = main.traps
+	var player = main.player
+	b.load_data([])
+	ms.clear()
+	var keys := {}
+	var cx := 3
+	for t in ["spike_strip", "barbed_wire", "landmine"]:
+		var slot := {"kind": "obj", "cx": cx, "cz": -8, "dir": 0, "level": 0}
+		var ev: Dictionary = b.evaluate(t, slot)
+		check(ev.ok, "a %s can be built on the sand (%s)" % [t, ev.reason])
+		keys[t] = b.place(t, slot, ev.y)
+		cx += 3
+	check(b.pieces[keys.spike_strip].node.collision_layer == b.TRAP_LAYER, "traps don't block you or the mutants")
+	# Spike strip.
+	var strip: Vector3 = b.pieces[keys.spike_strip].node.global_position
+	var w = ms.spawn("walker", strip)
+	w.global_position = strip
+	tr.tick(0.1)
+	check(is_equal_approx(w.health, 100.0 - tr.STRIP_DAMAGE) and w.slow_mult < 1.0, "a spike strip bites a mutant walking over it (%.0f)" % w.health)
+	check(b.pieces[keys.spike_strip].hp < b.max_hp(b.pieces[keys.spike_strip]), "and wears down")
+	tr.tick(0.1)
+	check(is_equal_approx(w.health, 100.0 - tr.STRIP_DAMAGE), "but not every tick")
+	# Barbed wire.
+	w.global_position = b.pieces[keys.barbed_wire].node.global_position
+	w.slow_mult = 1.0
+	var hp: float = w.health
+	for i in 10:
+		tr.tick(0.1)
+	check(w.slow_mult <= tr.WIRE_SLOW + 0.01 and hp - w.health > 3.0, "barbed wire slows a mutant and cuts it (%.1f damage)" % (hp - w.health))
+	var py: float = main.terrain.surface_height(-20, 20)
+	player.position = Vector3(-20, py, 20)
+	# Landmine: a walker on it, another 3.5 m away, a brute close by.
+	var mine: Vector3 = b.pieces[keys.landmine].node.global_position
+	w.global_position = mine
+	w.health = 100.0
+	var w2 = ms.spawn("walker", mine)
+	w2.global_position = mine + Vector3(3.5, 0, 0)
+	var br = ms.spawn("brute", mine)
+	br.global_position = mine + Vector3(0, 0, 1.5)
+	var booms := []
+	tr.exploded.connect(func(p): booms.append(p), CONNECT_ONE_SHOT)
+	tr.tick(0.1)
+	check(booms.is_empty() and b.pieces.has(keys.landmine), "a mine beeps and waits a moment")
+	tr._physics_process(0.3)
+	check(booms.size() == 1 and not b.pieces.has(keys.landmine), "then it goes off and is gone")
+	check(w.is_dead(), "the walker on it is blown apart")
+	check(not w2.is_dead() and w2.health < 100.0, "one 3.5 m away is hurt (%.0f left)" % w2.health)
+	check(not br.is_dead() and br.health < br.stats.health, "a brute survives a mine (%.0f left)" % br.health)
+	check(main.survival.health >= 100.0, "you were far enough away")
+	# A mine next to you hurts.
+	var slot := {"kind": "obj", "cx": -10, "cz": 9, "dir": 0, "level": 0}
+	var mk: String = b.place("landmine", slot, b.evaluate("landmine", slot).y)
+	player.position = b.pieces[mk].node.global_position + Vector3(2, 0, 0)
+	main.survival.health = 100.0
+	tr.detonate(mk)
+	check(main.survival.health < 100.0 and main.survival.cause.contains("landmine"), "standing next to a mine when it blows hurts (%.0f)" % main.survival.health)
+	# Wearing out.
+	ms.clear()
+	var w3 = ms.spawn("brute", strip)
+	w3.global_position = strip
+	for i in 30:
+		tr._bites.clear()
+		tr.tick(0.1)
+	check(not b.pieces.has(keys.spike_strip), "a spike strip wears out after enough bites")
+	ms.clear()
+	b.load_data([])
+	main.survival.health = 100.0
+
+
+## v0.20: generator fuel, power range, floodlights, electric fence, fire pit.
+func _test_power() -> void:
+	var b = main.building
+	var ms = main.mutants
+	var pw = main.power
+	var tr = main.traps
+	var inv = main.inventory
+	b.load_data([])
+	ms.clear()
+	inv.load_data({})
+	var place := func(t: String, slot: Dictionary) -> String:
+		var ev: Dictionary = b.evaluate(t, slot)
+		check(ev.ok, "a %s can be built (%s)" % [t, ev.reason])
+		return b.place(t, slot, ev.y)
+	var gk: String = place.call("generator", {"kind": "obj", "cx": 2, "cz": 2, "dir": 0, "level": 0})
+	var near: String = place.call("floodlight", {"kind": "obj", "cx": 5, "cz": 2, "dir": 0, "level": 0})
+	var far: String = place.call("floodlight", {"kind": "obj", "cx": -9, "cz": -4, "dir": 0, "level": 0})
+	var fk: String = place.call("electric_fence", {"kind": "edge", "cx": 3, "cz": 5, "dir": 0, "level": 0})
+	var pk: String = place.call("fire_pit", {"kind": "obj", "cx": -3, "cz": 6, "dir": 0, "level": 0})
+	check(not pw.add_fuel(gk, inv), "no fuel cans, no fuel")
+	inv.add("fuel", 12)
+	for i in 12:
+		pw.add_fuel(gk, inv)
+	check(is_equal_approx(b.pieces[gk].fuel, b.GEN_TANK) and inv.count_of("fuel") == 2, "the tank takes %d cans" % int(b.GEN_TANK))
+	check(main._prompt_for("gen:" + gk).contains("10/10 cans"), "generator prompt: " + main._prompt_for("gen:" + gk))
+	main.day_night.restore(main.day_night.day, 12.0)
+	pw.tick(0.25)
+	check(not b.pieces[gk].running and not b.pieces[near].powered, "by day the generator stays off")
+	main.day_night.restore(main.day_night.day, 22.0)
+	pw.tick(0.25)
+	check(b.pieces[gk].running and b.pieces[near].powered and b.pieces[near].light.visible, "at night it runs and a floodlight nearby lights up")
+	check(not b.pieces[far].powered, "a floodlight %d m away is out of range" % int(b.pieces[far].node.global_position.distance_to(b.pieces[gk].node.global_position)))
+	check(b.pieces[fk].powered, "the electric fence is live")
+	var before: float = b.pieces[gk].fuel
+	pw.tick(pw.FUEL_SECONDS)
+	check(is_equal_approx(before - b.pieces[gk].fuel, 1.0), "a can lasts %d seconds" % int(pw.FUEL_SECONDS))
+	# Shock a walker against the fence.
+	var fpos: Vector3 = b.pieces[fk].node.global_position
+	var w = ms.spawn("walker", fpos)
+	w.global_position = fpos + Vector3(0, 0, -0.5)
+	tr.tick(0.1)
+	check(is_equal_approx(w.health, 100.0 - tr.SHOCK_DAMAGE), "a live fence shocks a mutant touching it (%.0f)" % w.health)
+	# Run dry.
+	b.pieces[gk].fuel = 0.01
+	pw.tick(1.0)
+	check(not b.pieces[gk].running and not b.pieces[near].powered and not b.pieces[fk].powered, "out of fuel, the power goes off")
+	tr._bites.clear()
+	var hp: float = w.health
+	tr.tick(0.1)
+	check(is_equal_approx(w.health, hp), "a dead fence doesn't shock")
+	# Fire pit.
+	check(main._prompt_for("fire:" + pk) == "[E] Light the fire (1 wood)", "fire pit prompt")
+	inv.add("wood", 2)
+	main.interact("fire:" + pk)
+	check(b.pieces[pk].burn > 0.0 and b.pieces[pk].flame.visible and inv.count_of("wood") == 1, "a piece of wood lights the fire")
+	w.global_position = b.pieces[pk].node.global_position
+	hp = w.health
+	for i in 10:
+		tr.tick(0.1)
+	check(w.health < hp - 10.0, "mutants walking through the fire get burned (%.0f)" % (hp - w.health))
+	b.pieces[gk].fuel = 3.5
+	var data: Array = b.save_data()
+	b.load_data(data)
+	check(is_equal_approx(b.pieces[gk].fuel, 3.5) and b.pieces[pk].burn > 50.0, "fuel and fire are saved")
+	pw.tick(61.0)
+	check(not b.pieces[pk].flame.visible, "the fire burns out")
+	main.day_night.restore(main.day_night.day, 10.0)
+	ms.clear()
+	b.load_data([])
+
+
+## v0.21: a turret with a range circle while placing, loading and a real fight.
+func _start_turret() -> void:
+	var b = main.building
+	var bm = main.build_mode
+	var inv = main.inventory
+	b.load_data([])
+	main.mutants.clear()
+	inv.load_data({})
+	inv.add_all({"scrap": 18, "nails": 10, "wood": 2, "ammo_9mm": 30})
+	var player = main.player
+	player.position = Vector3(-3, main.terrain.surface_height(-3, -10), -10)
+	player.rotation.y = PI
+	player.head.rotation.x = -0.5
+	bm.active = true
+	bm.select(b.ORDER.find("turret"))
+	bm.update_preview()
+	check(bm.range_ring.visible, "placing a turret shows its range circle")
+	var t0: Vector3 = bm.ring_points[0]
+	var c: Vector3 = bm._ghost.global_position
+	check(absf(Vector2(t0.x - c.x, t0.z - c.z).length() - b.TURRET_RANGE) < 0.1, "the circle is %d m round the turret" % int(b.TURRET_RANGE))
+	bm.toggle()
+	check(not bm.range_ring.visible, "and hides when you stop building")
+	var slot := {"kind": "obj", "cx": -2, "cz": -8, "dir": 0, "level": 0}
+	turret_key = b.place("turret", slot, b.evaluate("turret", slot).y)
+	check(main._prompt_for("turret:" + turret_key).contains("0/%d rounds, EMPTY" % b.TURRET_AMMO), "turret prompt: " + main._prompt_for("turret:" + turret_key))
+	main.interact("turret:" + turret_key)
+	check(b.pieces[turret_key].ammo == 30 and inv.count_of("ammo_9mm") == 0, "E loads your 9mm rounds into it")
+	var data: Array = b.save_data()
+	b.load_data(data)
+	turret_key = b.slot_key(slot)
+	check(b.pieces[turret_key].ammo == 30, "its rounds are saved")
+	var tp: Vector3 = b.pieces[turret_key].node.global_position
+	turret_near = main.mutants.spawn("walker", tp + Vector3(4, 0, -11))
+	turret_near.set_physics_process(false)
+	turret_far = main.mutants.spawn("walker", tp + Vector3(-10, 0, 28))
+	turret_far.set_physics_process(false)
+	player.position = Vector3(20, main.terrain.surface_height(20, 20), 20)
+
+
+## v0.22: cash per wave and the shop terminal.
+func _test_shop() -> void:
+	var sh = main.shop
+	var ui = main.shop_ui
+	var inv = main.inventory
+	var Waves = load("res://scripts/waves.gd")
+	sh.cash = sh.START_CASH
+	check(main._prompt_for("shop") == "[E] Use the shop terminal   ($%d)" % sh.START_CASH, "the terminal by the flag: " + main._prompt_for("shop"))
+	main.interact("shop")
+	check(ui.is_open() and ui._cash.text == "Cash: $%d" % sh.START_CASH, "E opens the shop with your cash")
+	var water: int = sh.CATALOG.map(func(e): return e.name).find("3 water bottles")
+	var rifle: int = sh.CATALOG.map(func(e): return e.name).find("Hunting rifle")
+	check(ui._buttons[rifle].disabled and not ui._buttons[water].disabled, "things you can't afford are greyed out")
+	inv.load_data({})
+	ui.buy(water)
+	check(inv.count_of("water") == 3 and sh.cash == sh.START_CASH - 15, "buying 3 water bottles for $15")
+	check(sh.buy(rifle, inv) == null and inv.count_of("rifle") == 0, "no rifle without $380")
+	ui.close()
+	check(not ui.is_open(), "the shop closes")
+	# Cash for a night.
+	var c: Dictionary = Waves.cash_for({"wave": 3, "bounty": 50, "pieces": 10, "lost": 2, "cleared": false})
+	check(c.cash == 50 + 55 + 48 and c.cash_base == 48, "a night pays kills + survival + base condition ($%d)" % c.cash)
+	check(Waves.cash_for({"wave": 3, "bounty": 50, "pieces": 10, "lost": 2, "cleared": true}).cash == int(round(153 * 1.25)), "clearing the whole wave pays a quarter more")
+	check(Waves.cash_for({"wave": 1, "bounty": 0, "pieces": 0, "lost": 0, "cleared": false}).cash == 35, "even with no base, surviving pays")
+	# A real (short) wave.
+	var wv = main.waves
+	main.mutants.clear()
+	main.day_night.restore(main.day_night.day, 21.0)
+	wv.start_wave()
+	for i in 40:
+		wv._process(1.0)
+	var size: int = wv.hunters().size()
+	var bounty := 0
+	for m in wv.hunters():
+		bounty += wv.BOUNTY[m.type]
+		m.take_hit(9999.0, m.global_position, Vector3.FORWARD)
+	var before: int = sh.cash
+	var ended := []
+	wv.wave_ended.connect(func(s): ended.append(s), CONNECT_ONE_SHOT)
+	wv._process(0.1)
+	check(ended.size() == 1 and ended[0].cash_kills == bounty and sh.cash == before + ended[0].cash, "clearing wave %d (%d mutants) pays $%d" % [wv.wave, size, ended[0].get("cash", 0)])
+	check(Waves.summary_lines(ended[0])[-1] == "Cash earned: $%d" % ended[0].cash, "the summary shows the cash")
+	main.hud._process(0.0)
+	check(main.hud.clock.text.begins_with("$%d" % sh.cash), "the HUD shows your cash: " + main.hud.clock.text.split("\n")[0])
+	var data: Dictionary = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	var cash: int = sh.cash
+	sh.cash = 0
+	main.apply_save_data(data)
+	check(sh.cash == cash, "cash is saved")
+	data.erase("shop")
+	main.apply_save_data(data)
+	check(sh.cash == sh.START_CASH + 40 * wv.wave, "older saves get pay for the nights already survived")
+	main.day_night.restore(main.day_night.day, 10.0)
+	inv.load_data({})
+
+
+## v0.23: landing pad, drone orders and flights, blueprints unlocking builds.
+func _test_drone() -> void:
+	var sh = main.shop
+	var dr = main.drone
+	var b = main.building
+	var bm = main.build_mode
+	var ui = main.shop_ui
+	b.load_data([])
+	main.loot.load_data({})
+	sh.unlocked = {}
+	sh.cash = 1000
+	dr.load_data({})
+	check(not sh.is_unlocked("turret", b.PIECES) and sh.is_unlocked("wall", b.PIECES), "turrets need a blueprint, walls don't")
+	var player = main.player
+	player.position = Vector3(-3, main.terrain.surface_height(-3, -10), -10)
+	player.rotation.y = PI
+	player.head.rotation.x = -0.5
+	main.inventory.load_data({})
+	main.inventory.add_all({"scrap": 40, "nails": 20, "wood": 6})
+	bm.active = true
+	bm.select(b.ORDER.find("turret"))
+	bm.update_preview()
+	check(not bm.can_build and bm.reason.begins_with("Locked"), "a locked piece can't be built: " + bm.reason)
+	bm.toggle()
+	var bp: int = sh.DRONE.map(func(e): return e.name).find("Blueprint: Auto-turret")
+	var wood: int = sh.DRONE.map(func(e): return e.name).find("40 wood")
+	check(not sh.can_order(bp), "no drone orders without a landing pad")
+	var slot := {"kind": "obj", "cx": 6, "cz": 6, "dir": 0, "level": 0}
+	var ev: Dictionary = b.evaluate("landing_pad", slot)
+	check(ev.ok, "a landing pad can be built (%s)" % ev.reason)
+	b.place("landing_pad", slot, ev.y)
+	ui.open()
+	ui.show_page(true)
+	check(not ui.drone_buttons[bp].disabled and ui._drone_note.text.begins_with("Orders are flown"), "with a pad the drone page opens up")
+	ui.order(bp)
+	check(sh.cash == 850 and sh.blueprint_owned("bp_turret") and not sh.can_order(bp), "ordering a blueprint ($150), only once")
+	ui.order(wood)
+	ui.close()
+	var data: Dictionary = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	# Fly it for real (in big steps).
+	var got := []
+	dr.delivered.connect(func(items, pos): got.append(items.duplicate()), CONNECT_ONE_SHOT)
+	var t := 0.0
+	dr._process(0.1)
+	check(dr.phase == "in", "the drone takes off with both orders")
+	while dr.phase != "idle" and t < 60.0:
+		dr._process(0.1)
+		t += 0.1
+	check(got.size() == 1 and got[0].has("wood"), "it arrives and lowers a parcel (%.0f s)" % t)
+	check(sh.unlocked.has("turret"), "the blueprint is learned on delivery")
+	check(main.loot.drops.size() == 1 and main.loot.drops.values()[0].items.get("wood", 0) == 40, "the wood is in a bag on the pad")
+	check(sh.is_unlocked("turret", b.PIECES), "now turrets can be built")
+	# A parcel still in the air is saved.
+	main.loot.load_data({})
+	main.apply_save_data(data)
+	check(dr.orders.size() == 2 and not sh.unlocked.has("turret"), "orders not yet delivered are saved")
+	dr.finish_now()
+	check(sh.unlocked.has("turret") and main.loot.drops.size() == 1, "and delivered after loading")
+	data.erase("shop")
+	main.apply_save_data(data)
+	check(sh.unlocked.has("sandbags") and sh.unlocked.has("electric_fence"), "older saves keep every build")
+	var sb := {"kind": "edge", "cx": 4, "cz": 6, "dir": 0, "level": 0}
+	var sk: String = b.place("sandbags", sb, b.evaluate("sandbags", sb).y)
+	check(b.max_hp(b.pieces[sk]) == 900.0, "a sandbag wall has 900 hit points")
+	b.load_data([])
+	main.loot.load_data({})
+	dr.load_data({})
+	main.inventory.load_data({})
+
+
+## v0.24: base upgrades (zone, storage, workbench tiers, radio) and medkits.
+func _test_upgrades() -> void:
+	var sh = main.shop
+	var b = main.building
+	var ui = main.inventory_ui
+	var inv = main.inventory
+	var Items = main.Items
+	main.apply_save_data(JSON.parse_string(JSON.stringify(main.collect_save_data())))
+	for id in sh.upgrades:
+		sh.upgrades[id] = 0
+	main.apply_upgrades()
+	sh.cash = 3000
+	b.load_data([])
+	inv.load_data({})
+	inv.add_all({"scrap": 30, "wood": 10, "nails": 20, "cloth": 4})
+	ui.open_bench("x")
+	check(ui._recipe_buttons.shotgun.disabled and ui._recipe_buttons.shotgun.text.contains("tier 2"), "a new workbench can't make a shotgun yet")
+	ui.craft("shotgun")
+	check(inv.count_of("shotgun") == 0, "no shotgun from a tier 1 bench")
+	ui.close()
+	check(sh.buy_upgrade("bench") and ui.bench_tier == 2 and sh.cash == 2800, "workbench tier 2 for $200")
+	ui.open_bench("x")
+	ui.craft("shotgun")
+	check(inv.count_of("shotgun") == 1, "now it makes a shotgun")
+	check(ui._recipe_buttons.rifle.disabled, "the rifle needs tier 3")
+	ui.close()
+	# Zone.
+	var far := {"kind": "cell", "cx": 14, "cz": 0, "dir": 0, "level": 0}
+	check(not b.in_zone("foundation", far), "29 m out is outside the starting zone")
+	sh.buy_upgrade("zone")
+	check(b.zone_radius == 34.0 and b.in_zone("foundation", far) and main.base_zone.radius == 34.0, "a bigger zone: 34 m")
+	check(main.base_zone.get_child_count() == 3, "the stakes moved out")
+	sh.buy_upgrade("zone")
+	check(b.zone_radius == 42.0 and sh.next_level("zone").is_empty() and not sh.can_upgrade("zone"), "42 m is the biggest")
+	# Storage.
+	var cs := {"kind": "obj", "cx": -5, "cz": 5, "dir": 0, "level": 0}
+	var ck: String = b.place("chest", cs, b.evaluate("chest", cs).y)
+	check(b.storage_of(ck).slots.size() == 20, "chests start with 20 slots")
+	sh.buy_upgrade("storage")
+	check(b.storage_of(ck).slots.size() == 30, "a storage upgrade grows every chest to 30")
+	b.storage_of(ck).slots[27] = {"item": "wood", "count": 5}
+	var data: Dictionary = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	main.apply_save_data(data)
+	check(b.storage_of(ck).count_of("wood") == 5 and sh.upgrades.storage == 1 and b.zone_radius == 42.0, "upgrades and big chests are saved")
+	main.interact("chest:" + ck)
+	check(ui._chest_buttons[29].visible and not ui._chest_buttons[30].visible, "the chest screen shows 30 slots")
+	ui.close()
+	# Radio.
+	var wv = main.waves
+	sh.buy_upgrade("radio")
+	check(sh._radio.visible, "a radio sits on the terminal")
+	main.hud.banner.text = ""
+	wv.on_dusk(1)
+	var preview: Array = wv.preview_next()
+	check(main.hud.banner.text.begins_with("Radio: wave %d tonight" % (wv.wave + 1)), "at dusk the radio says what is coming: " + main.hud.banner.text)
+	main.day_night.restore(main.day_night.day, 21.0)
+	wv.start_wave()
+	check(wv.queue == preview, "and it is right")
+	wv.end_wave(true)
+	main.mutants.clear()
+	main.day_night.restore(main.day_night.day, 10.0)
+	# Medkit.
+	inv.load_data({})
+	inv.add("medkit", 1)
+	main.survival.health = 20.0
+	inv.selected = 0
+	main.use_selected()
+	check(is_equal_approx(main.survival.health, 90.0), "a medkit heals 70")
+	data.shop.erase("upgrades")
+	main.apply_save_data(data)
+	check(ui.bench_tier == 3, "older saves keep every recipe (tier 3 bench)")
+	b.load_data([])
+	inv.load_data({})
+
+
+## v1.0: difficulty levels and first-time hints.
+func _test_difficulty_and_hints() -> void:
+	var Waves = load("res://scripts/waves.gd")
+	var rng := RandomNumberGenerator.new()
+	check(game.difficulty == "normal" and game.diff("waves") == 1.0, "the default difficulty is normal")
+	check(Waves.wave_mix(5, rng, game.DIFFICULTIES.hard.waves).size() == 17 and Waves.wave_mix(5, rng, game.DIFFICULTIES.easy.waves).size() == 8, "hard waves are bigger, easy ones smaller (night 5: 17 / 12 / 8)")
+	game.difficulty = "easy"
+	main.survival.health = 100.0
+	main._on_player_hit(10.0, main.player.global_position)
+	check(is_equal_approx(main.survival.health, 94.0), "on easy a 10 damage claw does 6")
+	check(game.save_game("test") and game.read_slot("test").get("difficulty", "") == "easy", "the difficulty is saved with the game")
+	game.delete_slot("test")
+	game.difficulty = "normal"
+	main.survival.health = 100.0
+	var s = root.get_node("Settings")
+	var was: bool = s.hints
+	s.hints = true
+	s.hints_seen = []
+	main.hud._hint_queue.clear()
+	main.hud._hint_time = 0.0
+	check(main.hints.show_hint("gun") and main.hud.hint_box.visible and main.hud._hint_label.text.contains("reload"), "a first-time hint shows: " + main.hud._hint_label.text)
+	check(not main.hints.show_hint("gun"), "only the first time")
+	main.hud._hint_time = 0.0
+	main.hints.show_hint("build")
+	main.hints.show_hint("hammer")
+	check(main.hud._hint_queue.size() == 1, "hints wait their turn (%s)" % str(main.hud._hint_queue))
+	s.hints = false
+	check(not main.hints.show_hint("mutant"), "no hints when they are turned off")
+	s.hints = was
+	s.hints_seen = []
+	s.save_settings()
+	# The temporary test box.
+	if main.TEST_BOX:
+		main.shop.cash = 0
+		main.interact("testbox")
+		check(main.inventory_ui.is_open() and main.test_storage.count_of("rifle") == 1 and main.test_storage.count_of("wood") == 20, "the test box holds a stack of every item")
+		check(main.shop.cash == main.TEST_CASH, "and tops the cash up to $%d" % main.TEST_CASH)
+		main.test_storage.transfer(0, main.inventory)
+		main._check_station_reach()
+		check(main.inventory_ui.is_open(), "it doesn't close by itself")
+		main.inventory_ui.close()
+		main.inventory.load_data({})
+	# Controls page in the pause menu.
+	main.pause_menu.open()
+	main.pause_menu.show_page("controls")
+	check(main.pause_menu._col.get_child(1) is GridContainer and main.pause_menu._col.get_child(1).get_child_count() == main.pause_menu.CONTROLS.size() * 2, "the pause menu lists the controls")
+	main.pause_menu.resume()
+	# Graphics quality.
+	var q: int = s.quality
+	s.set_value("quality", 0)
+	check(not main.sun.shadow_enabled and main.player.camera.far < 500.0 and main.get_viewport().scaling_3d_scale < 1.0, "low quality: no sun shadows, shorter view, lower render scale")
+	s.set_value("quality", 2)
+	check(main.sun.shadow_enabled and main.player.camera.far == 900.0 and main.get_viewport().msaa_3d == Viewport.MSAA_2X, "high quality: shadows, full view, anti-aliasing")
+	s.set_value("quality", q)
+
+
+func _start_spitter() -> void:
+	var player = main.player
+	var py: float = main.terrain.surface_height(8, -8)
+	player.position = Vector3(8, py, -8)
+	player.velocity = Vector3.ZERO
+	main.survival.health = 100.0
+	chase_walker = main.mutants.spawn("spitter", Vector3(8, 0, -21))
+	chase_walker.make_hunter(Vector3.ZERO)
+	chase_walker.rotation.y = PI
+
+
+## A wave mutant smells you behind a wall and breaks through it.
+func _start_break_in() -> void:
+	var b = main.building
+	var player = main.player
+	var slot := {"kind": "edge", "cx": 0, "cz": -2, "dir": 0, "level": 0}
+	break_wall = b.place("wall", slot, b.evaluate("wall", slot).y, false, 0, 60.0)
+	player.position = Vector3(1, main.terrain.surface_height(1, -3.45), -3.45)
+	player.velocity = Vector3.ZERO
+	main.survival.health = 100.0
+	chase_walker = main.mutants.spawn("walker", Vector3(1, 0, -12))
+	chase_walker.make_hunter(Vector3.ZERO)
+	chase_walker.rotation.y = PI
+
+
+## Real chase over many frames: it walks up to the player and claws.
+func _start_chase() -> void:
+	var ms = main.mutants
+	var player = main.player
+	main.day_night.restore(main.day_night.day, 10.0)
+	var py: float = main.terrain.surface_height(8, -8)
+	player.position = Vector3(8, py, -8)
+	player.velocity = Vector3.ZERO
+	main.survival.health = 100.0
+	chase_walker = ms.spawn("walker", Vector3(8, 0, -20))
+	chase_walker.rotation.y = PI
+
+
 func _start_ramp_walk() -> void:
 	var b = main.building
 	var player = main.player
@@ -518,6 +1377,8 @@ func _process(_delta: float) -> bool:
 	frame += 1
 	var player = main.player
 	var terrain = main.terrain
+	if frame > 2010 and frame < 2250 and not main.mutants.spits().is_empty():
+		spit_seen = true
 	if frame > 720 and frame < 811:
 		ramp_top = maxf(ramp_top, player.position.y - ramp_base)
 	match frame:
@@ -636,7 +1497,86 @@ func _process(_delta: float) -> bool:
 			Input.action_release("move_forward")
 			check(ramp_top > 1.8, "the player can walk up a ramp (climbed %.2f m)" % ramp_top)
 			main.building.load_data([])
-		820:
+			_start_chase()
+		900:
+			var d: float = chase_walker.global_position.distance_to(main.player.global_position)
+			check(chase_walker.state != chase_walker.State.WANDER and d < 8.0, "the walker spots you and chases (%.1f m away)" % d)
+		1100:
+			check(main.survival.health < 100.0, "the walker reaches you and claws (health %.0f)" % main.survival.health)
+			_test_walker_hits()
+			main.mutants.clear()
+			main.survival.health = 100.0
+			_test_waves()
+		1220:
+			var d := Vector2(march_walker.position.x, march_walker.position.z).length()
+			check(d < 38.0, "a wave mutant marches on the base (%.1f m from the flag, started at 40)" % d)
+			main.mutants.clear()
+			_test_breaking()
+			_start_break_in()
+		1500:
+			var b = main.building
+			check(chase_walker.state == chase_walker.State.BREAK and chase_walker.break_key == break_wall, "a mutant blocked by a wall claws at it (state %d)" % chase_walker.state)
+			check(b.pieces.has(break_wall) and b.pieces[break_wall].hp < 60.0, "the wall takes damage (%.0f hp)" % b.pieces.get(break_wall, {}).get("hp", 0.0))
+			check(main.survival.health >= 100.0, "it can't claw you through the wall (health %.0f)" % main.survival.health)
+		1800:
+			check(not main.building.pieces.has(break_wall), "the wall breaks")
+			check(main.building.get_children().any(func(c): return c is CPUParticles3D), "a broken wall leaves dust and debris")
+		2000:
+			check(main.survival.health < 100.0, "then the mutant gets through to you (health %.0f)" % main.survival.health)
+			main.mutants.clear()
+			main.building.load_data([])
+			main.survival.health = 100.0
+			_test_types()
+			_start_spitter()
+		2250:
+			check(spit_seen, "the spitter lobs acid from a distance")
+			check(main.survival.health < 100.0, "the acid burns you (health %.0f)" % main.survival.health)
+			var d: float = chase_walker.global_position.distance_to(main.player.global_position)
+			check(d > 5.0, "the spitter keeps its distance (%.1f m)" % d)
+			main.mutants.clear()
+			main.survival.health = 100.0
+			var py: float = main.terrain.surface_height(8, -8)
+			main.player.position = Vector3(8, py, -8)
+			chase_walker = main.mutants.spawn("runner", Vector3(8, 0, -28))
+			chase_walker.make_hunter(Vector3.ZERO)
+			chase_walker.rotation.y = PI
+		2350:
+			var d: float = chase_walker.global_position.distance_to(main.player.global_position)
+			check(d < 13.0, "a runner closes 20 m in under 2 seconds (%.1f m left)" % d)
+			main.mutants.clear()
+			main.survival.health = 100.0
+			_test_pistol()
+			var p = main.player
+			p.position = Vector3(30, main.terrain.surface_height(30, -30), -30)
+			p.rotation.y = 0.0
+			chase_walker = main.mutants.spawn("walker", Vector3(30, 0, -44))
+			chase_walker.rotation.y = 0.0  # looking away
+			chase_walker.set_physics_process(false)
+		2362:
+			_test_long_guns()
+			_test_traps()
+			_test_power()
+			_test_shop()
+			_test_drone()
+			_test_upgrades()
+			_test_difficulty_and_hints()
+		2370:
+			_start_turret()
+		2490:
+			var b = main.building
+			var rec: Dictionary = b.pieces[turret_key]
+			check(turret_near.health < 100.0, "the turret shoots a walker 12 m away (%.0f left)" % turret_near.health)
+			check(rec.ammo < 30, "using rounds from its ammo box (%d left)" % rec.ammo)
+			check(is_equal_approx(turret_far.health, 100.0), "but leaves one 30 m away alone")
+			main.mutants.clear()
+			rec.ammo = 0
+			turret_near = main.mutants.spawn("walker", rec.node.global_position + Vector3(0, 0, -8))
+			turret_near.set_physics_process(false)
+		2560:
+			check(is_equal_approx(turret_near.health, 100.0), "an empty turret doesn't shoot")
+			main.mutants.clear()
+			main.building.load_data([])
+		2570:
 			if failures.is_empty():
 				print("== ALL TESTS PASSED ==")
 				quit(0)

@@ -27,10 +27,12 @@ const TIER_HP := [250.0, 600.0, 1500.0]
 const TIER_ITEM := ["wood", "scrap", "cement"]
 const REFUND := 0.5          # share of what a piece cost you get back when demolished
 const UNDO_SECONDS := 60.0   # build-mode right click gives everything back this soon after building
-const ZONE_RADIUS := 26.0    # base build zone around the flag at the origin
-const CHEST_SLOTS := 20
+const ZONE_RADIUS := 26.0    # base build zone around the flag at the origin (before upgrades)
+const CHEST_SLOTS := 20      # before upgrades
 
 signal piece_destroyed(key: String, type: String)
+## A piece fell down because what held it up was destroyed.
+signal piece_collapsed(key: String, type: String)
 ## A chest was taken down with things inside: drop them in a bag here.
 signal spilled(items: Dictionary, pos: Vector3)
 
@@ -48,14 +50,40 @@ const PIECES := {
 	"chest": {"name": "Storage chest", "slot": "obj", "cost": {"wood": 6, "nails": 4}, "dirs": 4, "fixed": true},
 	"workbench": {"name": "Workbench", "slot": "obj", "cost": {"wood": 6, "scrap": 3, "nails": 4}, "dirs": 4, "fixed": true},
 	"spikes": {"name": "Spike barricade", "slot": "obj", "cost": {"spike_barricade": 1}, "dirs": 2, "fixed": true, "pickup": true},
+	"spike_strip": {"name": "Spike strip", "slot": "obj", "cost": {"wood": 2, "nails": 8}, "dirs": 2, "fixed": true, "trap": true},
+	"barbed_wire": {"name": "Barbed wire", "slot": "obj", "cost": {"scrap": 3, "nails": 4}, "dirs": 2, "fixed": true, "trap": true},
+	"landmine": {"name": "Landmine", "slot": "obj", "cost": {"scrap": 4, "nails": 4, "cloth": 1}, "dirs": 1, "fixed": true, "trap": true},
+	"fire_pit": {"name": "Fire pit", "slot": "obj", "cost": {"wood": 4}, "dirs": 1, "fixed": true},
+	"generator": {"name": "Fuel generator", "slot": "obj", "cost": {"scrap": 12, "nails": 8}, "dirs": 4, "fixed": true},
+	"electric_fence": {"name": "Electric fence", "slot": "edge", "cost": {"scrap": 5, "nails": 6}, "dirs": 2, "fixed": true, "blueprint": true},
+	"floodlight": {"name": "Floodlight", "slot": "obj", "cost": {"scrap": 4, "wood": 2, "nails": 2}, "dirs": 4, "fixed": true},
+	"turret": {"name": "Auto-turret", "slot": "obj", "cost": {"scrap": 18, "nails": 10, "wood": 2}, "dirs": 4, "fixed": true, "blueprint": true},
+	"landing_pad": {"name": "Drone landing pad", "slot": "obj", "cost": {"wood": 4, "scrap": 2, "nails": 4}, "dirs": 1, "fixed": true},
+	"sandbags": {"name": "Sandbag wall", "slot": "edge", "cost": {"cloth": 4, "cement": 2}, "dirs": 2, "fixed": true, "hp": 900.0, "blueprint": true},
 }
-const ORDER := ["foundation", "wall", "doorway", "window", "floor", "stairs", "ramp", "roof", "chest", "workbench", "spikes"]
+const ORDER := ["foundation", "wall", "doorway", "window", "floor", "stairs", "ramp", "roof", "chest", "workbench", "spikes", "spike_strip", "barbed_wire", "landmine", "fire_pit", "generator", "electric_fence", "floodlight", "turret", "landing_pad", "sandbags"]
+## Pieces marked "blueprint" must be unlocked first (blueprints come by drone).
+const TURRET_RANGE := 22.0
+const TURRET_AMMO := 240     # 9mm rounds its ammo box holds
+const FENCE_H := 1.7
+const GEN_TANK := 10.0       # fuel cans a generator holds
+const FIRE_MAX := 300.0      # seconds of burning a fire pit holds
+const FIRE_PER_WOOD := 60.0
+## Traps don't block anyone: their bodies sit on their own physics layer (5),
+## which only the hammer's aim ray looks at.
+const TRAP_LAYER := 16
 ## Edge pieces that hold up whatever is built above them.
 const WALLISH := ["wall", "doorway", "window"]
 ## Cell pieces you can stand on at an upper level.
 const DECKS := ["floor", "roof"]
 
 var terrain  # Terrain
+## type -> {key: true}, kept up to date by place() and remove(), so systems
+## that only care about turrets or traps don't scan every piece.
+var _by_type := {}
+## Grown by base upgrades from the shop.
+var zone_radius := ZONE_RADIUS
+var chest_slots := CHEST_SLOTS
 ## main slot key -> {"type", "slot", "y", "node", "open" (gates), "tier", "hp", "built_at"}
 var pieces := {}
 ## every slot key a piece takes up (stairs take two) -> main slot key
@@ -72,6 +100,24 @@ func _ready() -> void:
 	_mats.concrete = LowPoly.material(Color(0.5, 0.49, 0.46))
 	_mats.concrete_dark = LowPoly.material(Color(0.38, 0.37, 0.35))
 	_mats.crack = LowPoly.material(Color(0.08, 0.06, 0.05))
+	_mats.stone = LowPoly.material(Color(0.45, 0.41, 0.37))
+	_mats.cloth = LowPoly.material(Color(0.7, 0.6, 0.42))
+	_mats.cloth_dark = LowPoly.material(Color(0.6, 0.51, 0.36))
+	_mats.live = StandardMaterial3D.new()  # electric fence wire with the power on
+	_mats.live.albedo_color = Color(0.6, 0.9, 1.0)
+	_mats.live.emission_enabled = true
+	_mats.live.emission = Color(0.4, 0.8, 1.0)
+	_mats.live.emission_energy_multiplier = 1.6
+	_mats.lamp = StandardMaterial3D.new()
+	_mats.lamp.albedo_color = Color(1.0, 0.97, 0.85)
+	_mats.lamp.emission_enabled = true
+	_mats.lamp.emission = Color(1.0, 0.95, 0.8)
+	_mats.lamp.emission_energy_multiplier = 0.0
+	_mats.lamp_on = _mats.lamp.duplicate()
+	_mats.lamp_on.emission_energy_multiplier = 4.0
+	_mats.flame = StandardMaterial3D.new()
+	_mats.flame.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_mats.flame.albedo_color = Color(1.0, 0.6, 0.15)
 
 
 ## The material a mesh part uses at a tier (parts are designed in wood).
@@ -260,7 +306,7 @@ func evaluate(type: String, slot: Dictionary) -> Dictionary:
 		if occupied.has(k):
 			return {"y": piece_at(k).y, "ok": false, "reason": "Something is already built here"}
 	if not in_zone(type, slot):
-		return {"y": _ground_level(type, slot).y, "ok": false, "reason": "Outside the base zone (stay within %d m of the flag)" % int(ZONE_RADIUS)}
+		return {"y": _ground_level(type, slot).y, "ok": false, "reason": "Outside the base zone (stay within %d m of the flag)" % int(zone_radius)}
 	if slot.get("level", 0) > 0:
 		if type == "foundation":
 			return {"y": 0.0, "ok": false, "reason": "Foundations go on the ground"}
@@ -275,9 +321,17 @@ func evaluate(type: String, slot: Dictionary) -> Dictionary:
 
 
 ## True if a piece in this slot is inside the base build zone.
-static func in_zone(type: String, slot: Dictionary) -> bool:
+func in_zone(type: String, slot: Dictionary) -> bool:
 	var c := slot_center(slot, type)
-	return Vector2(c.x, c.z).length() <= ZONE_RADIUS
+	return Vector2(c.x, c.z).length() <= zone_radius
+
+
+## Storage upgrade: every chest (and every new one) gets n slots.
+func set_chest_slots(n: int) -> void:
+	chest_slots = maxi(n, chest_slots)
+	for key in pieces:
+		if pieces[key].has("storage"):
+			pieces[key].storage.resize(chest_slots)
 
 
 # --- Piece shapes ---------------------------------------------------------------
@@ -353,6 +407,76 @@ static func piece_boxes(type: String) -> Array:
 				var x := -0.8 + i * 0.4
 				out.append([Vector3(0.08, 0.08, 1.4), Vector3(x, 0.5, 0), "plank", 0.6])
 				out.append([Vector3(0.08, 0.08, 1.4), Vector3(x + 0.1, 0.5, 0), "wood", -0.6])
+		"spike_strip":
+			out.append([Vector3(1.8, 0.05, 0.5), Vector3(0, 0.03, 0), "wood_dark"])
+			for i in 8:
+				for j in [-1.0, 0.0, 1.0]:
+					out.append([Vector3(0.025, 0.13, 0.025), Vector3(-0.77 + i * 0.22 + j * 0.05, 0.11, j * 0.15), "metal"])
+		"barbed_wire":
+			for sx in [-1.0, 1.0]:
+				out.append([Vector3(0.07, 0.95, 0.07), Vector3(sx * 0.85, 0.47, 0), "wood_dark"])
+			for h in [0.22, 0.45, 0.7, 0.9]:
+				out.append([Vector3(1.75, 0.02, 0.02), Vector3(0, h, 0), "metal"])
+			for z in [-0.2, 0.2]:
+				for h in [0.3, 0.6]:
+					out.append([Vector3(1.75, 0.02, 0.02), Vector3(0, h + z * 0.2, z), "metal"])
+			for i in 9:
+				out.append([Vector3(0.05, 0.05, 0.05), Vector3(-0.8 + i * 0.2, [0.22, 0.45, 0.7][i % 3], 0), "rust"])
+		"landmine":
+			out.append([Vector3(0.36, 0.07, 0.36), Vector3(0, 0.02, 0), "rust"])
+			out.append([Vector3(0.12, 0.04, 0.12), Vector3(0, 0.07, 0), "metal"])
+			out.append([Vector3(0.025, 0.45, 0.025), Vector3(0.3, 0.22, 0.3), "wood"])  # a little marker flag
+			out.append([Vector3(0.14, 0.09, 0.01), Vector3(0.37, 0.4, 0.3), "rust"])
+		"fire_pit":
+			for i in 8:
+				var a := i * TAU / 8.0
+				out.append([Vector3(0.28, 0.2, 0.22), Vector3(cos(a) * 0.5, 0.1, sin(a) * 0.5), "stone"])
+			out.append([Vector3(0.8, 0.12, 0.12), Vector3(0, 0.1, 0), "wood_dark"])
+			out.append([Vector3(0.12, 0.12, 0.8), Vector3(0, 0.2, 0), "wood_dark"])
+		"generator":
+			out.append([Vector3(1.0, 0.55, 0.6), Vector3(0, 0.38, 0), "metal"])
+			out.append([Vector3(0.7, 0.2, 0.5), Vector3(-0.1, 0.75, 0), "rust"])     # fuel tank
+			out.append([Vector3(1.1, 0.08, 0.7), Vector3(0, 0.07, 0), "wood_dark"])  # skid
+			out.append([Vector3(0.08, 0.4, 0.08), Vector3(0.4, 0.85, 0.2), "metal"])  # exhaust
+			out.append([Vector3(0.08, 0.08, 0.02), Vector3(0.35, 0.5, -0.31), "lamp"])  # running light
+		"electric_fence":
+			for sx in [-1.0, 1.0]:
+				out.append([Vector3(0.1, FENCE_H, 0.1), Vector3(sx * (CELL * 0.5 - 0.05), FENCE_H * 0.5, 0), "wood_dark"])
+			for i in 5:
+				out.append([Vector3(CELL - 0.1, 0.025, 0.025), Vector3(0, 0.3 + i * 0.32, 0), "metal"])
+				for sx in [-1.0, 1.0]:
+					out.append([Vector3(0.05, 0.06, 0.06), Vector3(sx * (CELL * 0.5 - 0.12), 0.3 + i * 0.32, 0), "rust"])
+		"floodlight":
+			out.append([Vector3(0.5, 0.1, 0.5), Vector3(0, 0.05, 0), "concrete_dark"])
+			out.append([Vector3(0.1, 3.2, 0.1), Vector3(0, 1.6, 0), "metal"])
+			out.append([Vector3(0.7, 0.07, 0.07), Vector3(0, 3.2, -0.05), "metal"])
+			for sx in [-1.0, 1.0]:
+				out.append([Vector3(0.3, 0.22, 0.18), Vector3(sx * 0.28, 3.2, -0.15), "metal"])
+				out.append([Vector3(0.26, 0.18, 0.02), Vector3(sx * 0.28, 3.2, -0.25), "lamp"])
+		"turret":
+			out.append([Vector3(0.9, 0.1, 0.9), Vector3(0, 0.05, 0), "concrete_dark"])
+			# A mast tall enough to fire over a wall (walls are 2.4 m).
+			out.append([Vector3(0.2, 3.3, 0.2), Vector3(0, 1.7, 0), "metal"])
+			for sx in [-1.0, 1.0]:
+				out.append([Vector3(0.06, 2.2, 0.06), Vector3(sx * 0.3, 1.0, 0), "rust", 0.0])  # braces
+			out.append([Vector3(0.66, 0.06, 0.06), Vector3(0, 2.1, 0), "rust"])
+			out.append([Vector3(0.45, 0.32, 0.3), Vector3(0.0, 0.26, 0.42), "rust"])   # ammo box
+			out.append([Vector3(0.36, 0.04, 0.26), Vector3(0.0, 0.44, 0.42), "metal"])
+			out.append([Vector3(0.04, 2.9, 0.04), Vector3(0.0, 1.9, 0.12), "metal"])    # feed belt up the mast
+		"landing_pad":
+			out.append([Vector3(1.9, 0.12, 1.9), Vector3(0, 0.06, 0), "concrete_dark"])
+			for sx in [-1.0, 1.0]:
+				out.append([Vector3(0.16, 0.02, 0.9), Vector3(sx * 0.3, 0.125, 0), "lamp"])  # the H
+			out.append([Vector3(0.6, 0.02, 0.16), Vector3(0, 0.125, 0), "lamp"])
+			for c in [Vector3(-0.85, 0.14, -0.85), Vector3(0.85, 0.14, -0.85), Vector3(-0.85, 0.14, 0.85), Vector3(0.85, 0.14, 0.85)]:
+				out.append([Vector3(0.1, 0.06, 0.1), c, "rust"])
+		"sandbags":
+			for row in 3:
+				for i in 4:
+					var x := -0.75 + i * 0.5 + (0.25 if row % 2 == 1 else 0.0)
+					if x > 0.9:
+						continue
+					out.append([Vector3(0.52, 0.3, 0.42 - row * 0.06), Vector3(x, 0.15 + row * 0.3, 0), "cloth" if (i + row) % 2 == 0 else "cloth_dark"])
 	return out
 
 
@@ -392,6 +516,26 @@ static func piece_colliders(type: String) -> Array:
 			return [[Vector3(1.7, 0.95, 0.8), Vector3(0, 0.475, 0), 0.0]]
 		"spikes":
 			return [[Vector3(1.9, 1.0, 1.2), Vector3(0, 0.5, 0), 0.0]]
+		"spike_strip":
+			return [[Vector3(1.8, 0.25, 0.5), Vector3(0, 0.12, 0), 0.0]]
+		"barbed_wire":
+			return [[Vector3(1.8, 0.95, 0.5), Vector3(0, 0.47, 0), 0.0]]
+		"landmine":
+			return [[Vector3(0.5, 0.3, 0.5), Vector3(0, 0.15, 0), 0.0]]
+		"fire_pit":
+			return [[Vector3(1.2, 0.3, 1.2), Vector3(0, 0.15, 0), 0.0]]
+		"generator":
+			return [[Vector3(1.1, 0.9, 0.7), Vector3(0, 0.45, 0), 0.0]]
+		"electric_fence":
+			return [[Vector3(CELL, FENCE_H, 0.15), Vector3(0, FENCE_H * 0.5, 0), 0.0]]
+		"floodlight":
+			return [[Vector3(0.5, 3.4, 0.5), Vector3(0, 1.7, 0), 0.0]]
+		"turret":
+			return [[Vector3(0.9, 3.4, 1.0), Vector3(0, 1.7, 0.1), 0.0]]
+		"landing_pad":
+			return [[Vector3(1.9, 0.14, 1.9), Vector3(0, 0.07, 0), 0.0]]
+		"sandbags":
+			return [[Vector3(CELL, 0.95, 0.45), Vector3(0, 0.47, 0), 0.0]]
 	return []
 
 
@@ -440,6 +584,9 @@ func place(type: String, slot: Dictionary, y: float, gate_open := false, tier :=
 		col.position = c[1]
 		col.rotation.x = c[2]
 		body.add_child(col)
+	if PIECES[type].get("trap", false):
+		body.collision_layer = TRAP_LAYER
+		body.collision_mask = 0
 	add_child(body)
 	if tier < 0:
 		tier = base_tier(type)
@@ -449,16 +596,125 @@ func place(type: String, slot: Dictionary, y: float, gate_open := false, tier :=
 	_add_cracks(rec)
 	_apply_tier(rec)
 	pieces[key] = rec
+	if not _by_type.has(type):
+		_by_type[type] = {}
+	_by_type[type][key] = true
 	for k in slot_keys(type, slot):
 		occupied[k] = key
 	if type == "doorway":
 		_add_gate(rec, gate_open)
 	elif type == "chest":
-		rec.storage = Inventory.new(CHEST_SLOTS)
+		rec.storage = Inventory.new(chest_slots)
 		body.set_meta("interact_id", "chest:" + key)
 	elif type == "workbench":
 		body.set_meta("interact_id", "bench:" + key)
+	elif type == "generator":
+		rec.fuel = 0.0
+		rec.running = false
+		body.set_meta("interact_id", "gen:" + key)
+	elif type == "fire_pit":
+		rec.burn = 0.0
+		body.set_meta("interact_id", "fire:" + key)
+		_add_flame(rec)
+	elif type == "floodlight":
+		var spot := SpotLight3D.new()
+		spot.position = Vector3(0, 3.1, -0.3)
+		spot.rotation.x = -0.45
+		spot.spot_range = 30.0
+		spot.spot_angle = 38.0
+		spot.light_energy = 5.0
+		spot.light_color = Color(1.0, 0.96, 0.85)
+		spot.visible = false
+		body.add_child(spot)
+		rec.light = spot
+	elif type == "turret":
+		rec.ammo = 0
+		body.set_meta("interact_id", "turret:" + key)
+		_add_turret_head(rec)
+	if type in ["floodlight", "electric_fence"]:
+		rec.powered = false
 	return key
+
+
+## The part that turns: a swivel with a gun on it and a muzzle flash.
+func _add_turret_head(rec: Dictionary) -> void:
+	var head := Node3D.new()
+	head.name = "Head"
+	head.position.y = 3.4
+	head.scale = Vector3.ONE * 1.4
+	rec.node.add_child(head)
+	var gun := Node3D.new()
+	head.add_child(gun)
+	for b in [[Vector3(0.34, 0.24, 0.5), Vector3(0, 0.05, 0.02), "metal"], [Vector3(0.07, 0.07, 0.7), Vector3(0, 0.07, -0.55), "rust"],
+			[Vector3(0.1, 0.1, 0.12), Vector3(0, 0.07, -0.88), "metal"], [Vector3(0.3, 0.03, 0.3), Vector3(0, 0.19, 0.0), "rust"],
+			[Vector3(0.36, 0.22, 0.04), Vector3(0, 0.12, -0.24), "metal"]]:
+		var mi := MeshInstance3D.new()
+		mi.mesh = _box_mesh(b[0])
+		mi.position = b[1]
+		mi.set_meta("mat", b[2])
+		mi.material_override = _mats[b[2]]
+		gun.add_child(mi)
+	var flash := MeshInstance3D.new()
+	var fm := BoxMesh.new()
+	fm.size = Vector3(0.18, 0.18, 0.25)
+	flash.mesh = fm
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = Color(1.0, 0.85, 0.4)
+	flash.material_override = mat
+	flash.position = Vector3(0, 0.07, -1.05)
+	flash.visible = false
+	gun.add_child(flash)
+	rec.head = head
+	rec.gun = gun
+	rec.flash = flash
+
+
+## Lamps glow and fence wires look live while the piece has power.
+func set_powered(rec: Dictionary, on: bool) -> void:
+	if rec.get("powered", null) == null and rec.type != "generator":
+		return
+	if rec.has("powered"):
+		if rec.powered == on:
+			return
+		rec.powered = on
+	for mi in _meshes(rec.node):
+		var m: String = mi.get_meta("mat")
+		if m == "lamp":
+			mi.material_override = _mats.lamp_on if on else _mats.lamp
+		elif m == "metal" and rec.type == "electric_fence" and mi.mesh.size.x > 1.0:
+			mi.material_override = _mats.live if on else _mats.metal
+	if rec.has("light"):
+		rec.light.visible = on
+
+
+## Flames (a few unshaded wedges) and a flickering light, shown while it burns.
+func _add_flame(rec: Dictionary) -> void:
+	var flame := Node3D.new()
+	flame.name = "Flame"
+	flame.position.y = 0.25
+	rec.node.add_child(flame)
+	for i in 4:
+		var mi := MeshInstance3D.new()
+		var cone := CylinderMesh.new()
+		cone.top_radius = 0.0
+		cone.bottom_radius = 0.22 - i * 0.03
+		cone.height = 0.7 - i * 0.08
+		cone.radial_segments = 5
+		cone.rings = 1
+		mi.mesh = cone
+		mi.material_override = _mats.flame
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.position = Vector3(cos(i * 2.1) * 0.12, cone.height * 0.5, sin(i * 2.1) * 0.12) if i > 0 else Vector3(0, cone.height * 0.5, 0)
+		flame.add_child(mi)
+	var light := OmniLight3D.new()
+	light.light_color = Color(1.0, 0.6, 0.25)
+	light.light_energy = 2.0
+	light.omni_range = 9.0
+	light.position.y = 0.6
+	flame.add_child(light)
+	flame.visible = false
+	rec.flame = flame
 
 
 ## A plank gate on a hinge inside a doorway. E opens and closes it.
@@ -517,6 +773,16 @@ func prompt(id: String) -> String:
 		return "[E] Open storage chest"
 	if id.begins_with("bench:"):
 		return "[E] Use workbench"
+	var rec: Dictionary = pieces[key]
+	if id.begins_with("gen:"):
+		var state := "running" if rec.running else ("idle, runs at night" if rec.fuel > 0.0 else "out of fuel")
+		return "[E] Add a fuel can   Generator %d/%d cans, %s" % [ceili(rec.fuel), int(GEN_TANK), state]
+	if id.begins_with("turret:"):
+		return "[E] Load 9mm rounds   Auto-turret %d/%d rounds%s" % [rec.ammo, TURRET_AMMO, "" if rec.ammo > 0 else ", EMPTY"]
+	if id.begins_with("fire:"):
+		if rec.burn <= 0.0:
+			return "[E] Light the fire (1 wood)"
+		return "[E] Add wood   Burning %d:%02d" % [int(rec.burn) / 60, int(rec.burn) % 60]
 	return ""
 
 
@@ -537,6 +803,8 @@ func remove(key: String, spill := true) -> String:
 	for k in slot_keys(rec.type, rec.slot):
 		occupied.erase(k)
 	pieces.erase(key)
+	if _by_type.has(rec.type):
+		_by_type[rec.type].erase(key)
 	return rec.type
 
 
@@ -573,7 +841,7 @@ static func base_tier(type: String) -> int:
 
 
 func max_hp(rec: Dictionary) -> float:
-	return TIER_HP[rec.tier]
+	return float(PIECES[rec.type].get("hp", TIER_HP[rec.tier]))
 
 
 ## Short name like "Scrap metal wall".
@@ -652,11 +920,183 @@ func damage(key: String, amount: float) -> bool:
 	rec.hp = maxf(rec.hp - amount, 0.0)
 	if rec.hp <= 0.0:
 		var type: String = rec.type
+		_debris(rec)
 		remove(key)
 		piece_destroyed.emit(key, type)
+		collapse_unsupported()
 		return true
 	_update_cracks(rec)
 	return false
+
+
+## Keys of all built pieces of these types.
+func keys_of(types: Array) -> Array:
+	var out: Array = []
+	for t in types:
+		if _by_type.has(t):
+			out.append_array(_by_type[t].keys())
+	return out
+
+
+## Key of the built piece a collider belongs to (walls, gates...), or "".
+func piece_key_of(n: Node) -> String:
+	while n and n != self:
+		if n.has_meta("piece_key"):
+			return n.get_meta("piece_key")
+		n = n.get_parent()
+	return ""
+
+
+## Keys of the pieces that could hold up an upper-level slot (same rules as _support_y).
+func _supporters(slot: Dictionary) -> Array:
+	var out: Array = []
+	var lv: int = slot.level
+	if slot.kind == "obj":
+		var deck := piece_at(cell_key(slot.cx, slot.cz, lv))
+		if not deck.is_empty() and deck.type in DECKS:
+			out.append(slot_key(deck.slot))
+		return out
+	if slot.kind == "cell":
+		for e in cell_edges(slot.cx, slot.cz, lv - 1):
+			var w := piece_at(slot_key(e))
+			if not w.is_empty() and w.type in WALLISH:
+				out.append(slot_key(w.slot))
+		for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var f := piece_at(cell_key(slot.cx + d.x, slot.cz + d.y, lv))
+			if not f.is_empty() and f.type in DECKS:
+				out.append(slot_key(f.slot))
+		return out
+	var below := piece_at(slot_key({"kind": "edge", "cx": slot.cx, "cz": slot.cz, "dir": slot.dir, "level": lv - 1}))
+	if not below.is_empty() and below.type in WALLISH:
+		out.append(slot_key(below.slot))
+	for c in edge_cells(slot):
+		var f := piece_at(cell_key(c.x, c.y, lv))
+		if not f.is_empty() and f.type in DECKS:
+			out.append(slot_key(f.slot))
+	return out
+
+
+## Upstairs pieces with no chain of support down to the ground fall down
+## (two floors can't hold each other up in the air). Returns how many fell.
+func collapse_unsupported() -> int:
+	var grounded := {}
+	for key in pieces:
+		if pieces[key].slot.level == 0:
+			grounded[key] = true
+	var changed := true
+	while changed:
+		changed = false
+		for key in pieces:
+			if grounded.has(key):
+				continue
+			for k in _supporters(pieces[key].slot):
+				if grounded.has(k):
+					grounded[key] = true
+					changed = true
+					break
+	var fell := 0
+	for key in pieces.keys():
+		if not grounded.has(key):
+			var rec: Dictionary = pieces[key]
+			_debris(rec)
+			remove(key)
+			piece_collapsed.emit(key, rec.type)
+			fell += 1
+	return fell
+
+
+## Broken boards and chunks tumble to the ground in a puff of dust, with a crash.
+func _debris(rec: Dictionary) -> void:
+	if not is_inside_tree():
+		return
+	var b := piece_bounds(rec.type)
+	var size: Vector3 = b[0]
+	var xf: Transform3D = rec.node.global_transform
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(slot_key(rec.slot)) + Time.get_ticks_msec()
+	var mat: Material = _tier_mat(rec.tier, "plank")
+	var ground: float = terrain.surface_height(xf.origin.x, xf.origin.z) if terrain else xf.origin.y
+	for i in 9:
+		var mi := MeshInstance3D.new()
+		mi.mesh = _box_mesh(Vector3(rng.randf_range(0.2, 0.7), rng.randf_range(0.08, 0.3), rng.randf_range(0.1, 0.3)))
+		mi.material_override = mat
+		add_child(mi)
+		var local: Vector3 = b[1] + Vector3(rng.randf_range(-0.5, 0.5) * size.x, rng.randf_range(-0.4, 0.4) * size.y, rng.randf_range(-0.5, 0.5) * size.z)
+		mi.global_position = xf * local
+		mi.rotation = Vector3(rng.randf() * TAU, rng.randf() * TAU, 0)
+		var land := mi.global_position + Vector3(rng.randf_range(-1.2, 1.2), 0, rng.randf_range(-1.2, 1.2))
+		land.y = maxf(ground, xf.origin.y) + 0.1
+		var t := rng.randf_range(0.45, 0.8)
+		var tw := mi.create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(mi, "global_position", land, t).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+		tw.tween_property(mi, "rotation", mi.rotation + Vector3(rng.randf_range(-3, 3), rng.randf_range(-3, 3), 0), t)
+		tw.chain().tween_interval(2.0)
+		tw.chain().tween_property(mi, "scale", Vector3.ONE * 0.01, 0.6)
+		tw.chain().tween_callback(mi.queue_free)
+	var dust := CPUParticles3D.new()
+	dust.one_shot = true
+	dust.emitting = true
+	dust.amount = 24
+	dust.lifetime = 1.6
+	dust.explosiveness = 0.9
+	dust.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	dust.emission_box_extents = size * 0.5
+	dust.direction = Vector3.UP
+	dust.spread = 70.0
+	dust.initial_velocity_min = 0.5
+	dust.initial_velocity_max = 2.0
+	dust.gravity = Vector3(0, -0.6, 0)
+	dust.scale_amount_min = 0.5
+	dust.scale_amount_max = 1.2
+	var q := SphereMesh.new()
+	q.radius = 0.3
+	q.height = 0.6
+	q.radial_segments = 6
+	q.rings = 3
+	var dm := StandardMaterial3D.new()
+	dm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	dm.albedo_color = Color(0.8, 0.68, 0.5, 0.5)
+	q.material = dm
+	dust.mesh = q
+	add_child(dust)
+	dust.global_position = xf * b[1]
+	get_tree().create_timer(2.0).timeout.connect(dust.queue_free)
+	var snd := AudioStreamPlayer3D.new()
+	snd.stream = _crash_sound()
+	snd.unit_size = 10.0
+	snd.max_distance = 70.0
+	add_child(snd)
+	snd.global_position = xf.origin
+	snd.pitch_scale = rng.randf_range(0.85, 1.1)
+	snd.play()
+	snd.finished.connect(snd.queue_free)
+
+
+var _crash: AudioStreamWAV
+
+## Generated crash: a burst of crackling noise over a low rumble.
+func _crash_sound() -> AudioStreamWAV:
+	if _crash:
+		return _crash
+	var rate := 22050
+	var n := int(rate * 1.1)
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var lp := 0.0
+	for i in n:
+		var t := float(i) / rate
+		lp += (rng.randf_range(-1, 1) - lp) * 0.08
+		var crackle := rng.randf_range(-1, 1) * (1.0 if rng.randf() < 0.08 else 0.25) * exp(-t * 5.0)
+		var s := (lp * 2.2 * exp(-t * 2.5) + crackle * 0.6 + sin(TAU * 55.0 * t) * 0.4 * exp(-t * 4.0)) * minf(t / 0.005, 1.0)
+		data.encode_s16(i * 2, int(clampf(s, -1.0, 1.0) * 28000.0))
+	_crash = AudioStreamWAV.new()
+	_crash.format = AudioStreamWAV.FORMAT_16_BITS
+	_crash.mix_rate = rate
+	_crash.data = data
+	return _crash
 
 
 ## True while a fresh piece can still be taken back for a full refund.
@@ -730,6 +1170,9 @@ func save_data() -> Array:
 		var d := {"type": p.type, "kind": p.slot.kind, "cx": p.slot.cx, "cz": p.slot.cz, "dir": p.slot.dir, "level": p.slot.level, "y": p.y, "open": p.open, "tier": p.tier, "hp": p.hp}
 		if p.has("storage"):
 			d.items = p.storage.save_data()
+		for k in ["fuel", "burn", "ammo"]:
+			if p.has(k):
+				d[k] = p[k]
 		out.append(d)
 	return out
 
@@ -743,3 +1186,9 @@ func load_data(data: Array) -> void:
 			var key := place(p.type, slot, float(p.y), bool(p.get("open", false)), int(p.get("tier", -1)), float(p.get("hp", -1.0)))
 			if pieces[key].has("storage") and p.has("items"):
 				pieces[key].storage.load_data(p.items)
+			if pieces[key].has("fuel"):
+				pieces[key].fuel = clampf(float(p.get("fuel", 0.0)), 0.0, GEN_TANK)
+			if pieces[key].has("ammo"):
+				pieces[key].ammo = clampi(int(p.get("ammo", 0)), 0, TURRET_AMMO)
+			if pieces[key].has("burn"):
+				pieces[key].burn = clampf(float(p.get("burn", 0.0)), 0.0, FIRE_MAX)

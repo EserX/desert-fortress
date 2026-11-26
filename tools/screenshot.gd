@@ -25,6 +25,29 @@ var shots := [
 	{"name": "15_base", "pos": Vector3(1, 0, 10), "yaw": PI + 0.15, "pitch": -0.12, "hour": 16.0, "base": true, "zone": true},
 	{"name": "16_bench", "pos": Vector3(-1, 0, 19.6), "yaw": 0.0, "pitch": -0.3, "hour": 16.0, "base": true, "bench": true},
 	{"name": "17_melee", "pos": Vector3(-2.6, 0, 6.0), "yaw": 0.2, "pitch": -0.08, "hour": 9.5, "melee": true},
+	{"name": "18_walker", "pos": Vector3(60, 0, 60), "yaw": 0.4, "pitch": -0.05, "hour": 17.5, "walker": true},
+	{"name": "19_walker_night", "pos": Vector3(60, 0, 60), "yaw": 0.4, "pitch": -0.02, "hour": 22.5, "walker": true},
+	{"name": "20_wave", "pos": Vector3(2, 0, 14), "yaw": 0.3, "pitch": -0.04, "hour": 21.2, "wave": true},
+	{"name": "21_summary", "pos": Vector3(2, 0, 14), "yaw": 0.3, "pitch": -0.04, "hour": 6.4, "summary": true},
+	{"name": "22_breakin", "pos": Vector3(3.0, 0, -0.5), "yaw": 0.25, "pitch": -0.1, "hour": 19.4, "breakin": true},
+	{"name": "23_types", "pos": Vector3(60, 0, 60), "yaw": 0.4, "pitch": -0.03, "hour": 16.5, "types": true},
+	{"name": "24_pistol", "pos": Vector3(60, 0, 60), "yaw": 0.4, "pitch": -0.03, "hour": 10.5, "gun": "pistol", "aim": false},
+	{"name": "25_pistol_ads", "pos": Vector3(60, 0, 60), "yaw": 0.4, "pitch": -0.03, "hour": 18.8, "gun": "pistol", "aim": true},
+	{"name": "26_shotgun", "pos": Vector3(60, 0, 60), "yaw": 0.4, "pitch": -0.03, "hour": 9.0, "gun": "shotgun", "aim": false},
+	{"name": "27_rifle_scope", "pos": Vector3(60, 0, 60), "yaw": 0.4, "pitch": -0.0, "hour": 9.0, "gun": "rifle", "aim": true},
+	{"name": "28_traps", "pos": Vector3(5, 0, -0.5), "yaw": 0.55, "pitch": -0.3, "hour": 16.5, "traps": true},
+	{"name": "29_power", "pos": Vector3(6, 0, 10), "yaw": 0.35, "pitch": -0.12, "hour": 22.0, "power": true},
+	{"name": "30_turret", "pos": Vector3(8, 0, 5), "yaw": -0.1, "pitch": 0.02, "hour": 17.0, "turret": true},
+	{"name": "31_terminal", "pos": Vector3(-0.6, 0, 4.2), "yaw": 0.5, "pitch": -0.2, "hour": 10.0, "terminal": true},
+	{"name": "32_shop", "pos": Vector3(-0.6, 0, 4.2), "yaw": 0.5, "pitch": -0.2, "hour": 10.0, "shop": true},
+	{"name": "33_drone", "pos": Vector3(4.5, 0, 12.5), "yaw": 0.17, "pitch": 0.28, "hour": 15.0, "drone": true},
+	{"name": "34_drone_shop", "pos": Vector3(4, 0, 9), "yaw": 0.6, "pitch": 0.0, "hour": 15.0, "drone_shop": true},
+	{"name": "35_upgrades", "pos": Vector3(-0.6, 0, 4.2), "yaw": 0.5, "pitch": -0.2, "hour": 10.0, "upgrades": true},
+	{"name": "36_chest", "pos": Vector3(-0.6, 0, 4.2), "yaw": 0.5, "pitch": -0.2, "hour": 10.0, "bigchest": true},
+	{"name": "37_hint", "pos": Vector3(0, 0, 9), "yaw": 0.3, "pitch": -0.05, "hour": 9.0, "hint": true},
+	{"name": "38_controls", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true, "page": "controls"},
+	{"name": "39_settings", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true, "page": "settings"},
+	{"name": "40_wave_map", "pos": Vector3(20, 0, 40), "yaw": 0.9, "pitch": 0.0, "hour": 21.5, "wave_map": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -34,6 +57,7 @@ func _initialize() -> void:
 		if arg.begins_with("only="):
 			var want := arg.substr(5)
 			shots = shots.filter(func(s): return s.name == want)
+	root.get_node("Settings").hints = false  # no tips in the pictures (not saved)
 	main = load("res://scenes/main.tscn").instantiate()
 	root.add_child(main)
 
@@ -108,19 +132,98 @@ func _process(_d: float) -> bool:
 			main.melee.swing_time = 0.12
 			main.dummy.take_hit(40.0, main.dummy.global_position + Vector3(0, 1.5, 0.2), Vector3(0, 0, -1))
 			main.hud.show_hitmarker("target")
+		if s.get("walker", false):
+			_walker_sample(p)
+		if s.has("gun"):
+			_gun_sample(p, s.gun, s.aim)
+		elif main.guns.item != "":
+			main.guns.set_item("")
+		if s.get("terminal", false) or s.get("shop", false):
+			main.building.load_data([])
+			main.mutants.clear()
+			main.shop.cash = 340
+			main.inventory.load_data({})
+			main.inventory.add_all({"hammer": 1, "pistol": 1})
+		if s.get("drone", false) or s.get("drone_shop", false):
+			_drone_sample()
+		if s.get("hint", false):
+			main.building.load_data([])
+			main.mutants.clear()
+			main.hud.show_hint(main.hints.HINTS.welcome)
+			main.hud._hint_time = 5.0
+		elif main.hud.hint_box.visible:
+			main.hud.hint_box.visible = false
+			main.hud._hint_time = 0.0
+		if s.get("upgrades", false):
+			main.shop.cash = 520
+			main.shop.upgrades = {"zone": 1, "storage": 0, "bench": 2, "radio": 0}
+			main.shop_ui.open()
+			main.shop_ui.show_page(2)
+		elif s.get("bigchest", false):
+			if main.shop_ui.is_open():
+				main.shop_ui.close()
+			var b = main.building
+			main.shop.upgrades.storage = 2
+			main.apply_upgrades()
+			var cs := {"kind": "obj", "cx": -1, "cz": 1, "dir": 0, "level": 0}
+			var ck: String = b.place("chest", cs, b.evaluate("chest", cs).y)
+			b.storage_of(ck).add_all({"wood": 55, "scrap": 30, "nails": 120, "cement": 4, "ammo_9mm": 90, "shells": 20})
+			main.inventory.add_all({"wood": 8, "medkit": 2})
+			main.inventory_ui.open_chest(ck, b.storage_of(ck))
+		elif s.get("shop", false):
+			main.shop_ui.open()
+		elif s.get("drone_shop", false):
+			main.shop_ui.open()
+			main.shop_ui.show_page(true)
+		elif main.shop_ui.is_open():
+			main.shop_ui.close()
+		if s.get("turret", false):
+			_turret_sample()
+		elif main.build_mode.range_ring.visible and not s.get("build", false):
+			main.build_mode.range_ring.visible = false
+		if s.get("power", false):
+			_power_sample()
+		if s.get("traps", false):
+			_traps_sample()
+		if s.get("types", false):
+			_types_sample(p)
+		if s.get("breakin", false):
+			_breakin_sample(p)
+		if s.get("wave", false):
+			_wave_sample(p)
+		if s.get("summary", false):
+			main.mutants.clear()
+			main.hud.show_summary(main.Waves.summary_lines({"wave": 3, "cleared": false, "kills": 7, "damage": 46.0, "lost": 2, "deaths": 0}))
+			main.hud._summary_time = 5.0
 		if s.get("build", false):
 			_build_sample()
 		elif s.get("zone", false):
 			main.build_mode.active = true
 			main.build_mode.select(10)
-		elif main.build_mode.active:
+		elif main.build_mode.active and not s.get("turret", false):
 			main.build_mode.toggle()
+		if s.get("wave_map", false):
+			main.building.load_data([])
+			main.mutants.clear()
+			main.waves.wave = 3
+			main.waves.start_wave()
+			for i in 30:
+				main.waves._process(1.0)
+			for m in main.mutants.alive():
+				m.global_position = m.global_position * randf_range(0.3, 0.8)
+				m.set_physics_process(false)
+			if not main.map_ui.is_open():
+				main.map_ui.toggle()
 		if s.get("menu", false):
 			main.pause_menu.open()
+			if s.has("page"):
+				main.pause_menu.show_page(s.page)
 		else:
 			main.pause_menu.resume()
 	elif frame % 20 == 15:
 		DirAccess.make_dir_recursive_absolute("res://screenshots")
+		if not FileAccess.file_exists("res://screenshots/.gdignore"):
+			FileAccess.open("res://screenshots/.gdignore", FileAccess.WRITE).store_string("")  # keep Godot from importing the PNGs
 		var img := root.get_viewport().get_texture().get_image()
 		img.save_png("res://screenshots/%s.png" % s.name)
 		print("saved ", s.name)
@@ -185,3 +288,206 @@ func _base_sample() -> void:
 	for o in [["chest", -3, 8, 0], ["workbench", -1, 8, 0], ["spikes", 0, 10, 0], ["spikes", 1, 10, 0], ["spikes", -1, 10, 0]]:
 		var slot := {"kind": "obj", "cx": o[1], "cz": o[2], "dir": o[3], "level": 0}
 		b.place(o[0], slot, b.evaluate(o[0], slot).y)
+
+
+## Two walkers coming at you and one lying dead (v0.13).
+func _walker_sample(p: Node3D) -> void:
+	var ms = main.mutants
+	ms.clear()
+	var fwd := -p.global_transform.basis.z
+	var right := p.global_transform.basis.x
+	var spots := [fwd * 3.2 + right * 0.6, fwd * 7.5 - right * 2.5, fwd * 5.0 + right * 3.5]
+	for i in spots.size():
+		var w = ms.spawn("walker", p.position + spots[i])
+		w.rotation.y = p.rotation.y + PI - 0.3 * (i - 1)
+		w.set_physics_process(false)
+		w._anim_t = 1.0 + i * 1.7
+		w._animate(0.0, 2.5)
+		if i == 0:
+			w._attack_t = 0.4
+			w._animate(0.0, 0.5)
+		if i == 2:
+			w.take_hit(200.0, w.global_position, -fwd)
+	main.inventory.load_data({})
+	main.inventory.add("machete", 1)
+	main.inventory.selected = 0
+	main.melee.set_item("machete")
+
+
+## A night wave walking in on the base, with the wave counter on the HUD (v0.14).
+func _wave_sample(p: Node3D) -> void:
+	var ms = main.mutants
+	ms.clear()
+	main.waves.wave = 3
+	main.waves.active = true
+	main.waves.to_spawn = 3
+	var fwd := -p.global_transform.basis.z
+	var right := p.global_transform.basis.x
+	for i in 6:
+		var w = ms.spawn("walker", p.position + fwd * (9.0 + i * 3.5) + right * ((i % 3) - 1) * 3.0)
+		w.make_hunter(Vector3.ZERO)
+		w.rotation.y = p.rotation.y + PI
+		w.set_physics_process(false)
+		w._anim_t = i * 1.3
+		w._animate(0.0, 2.2)
+	main.inventory.load_data({})
+	main.inventory.add("pipe", 1)
+	main.inventory.selected = 0
+	main.melee.set_item("pipe")
+
+
+## Walkers tearing at a wall line north of the flag; one wall just gave way (v0.15).
+func _breakin_sample(p: Node3D) -> void:
+	var b = main.building
+	var ms = main.mutants
+	b.load_data([])
+	ms.clear()
+	var keys := []
+	for cx in [-2, -1, 0, 1, 2]:
+		var slot := {"kind": "edge", "cx": cx, "cz": -5, "dir": 0, "level": 0}
+		keys.append(b.place("wall", slot, b.evaluate("wall", slot).y, false, 1 if cx == 2 else 0))
+	b.damage(keys[1], 190.0)
+	b.damage(keys[3], 120.0)
+	for i in 3:
+		var w = ms.spawn("walker", [Vector3(1.2, 0, -10.8 + 4.0), Vector3(-2.5, 0, -10.5), Vector3(4.5, 0, -10.8)][i])
+		w.rotation.y = PI
+		w.set_physics_process(false)
+		w._anim_t = i * 2.0
+		w._attack_t = [0.35, 0.2, 0.42][i]
+		w._animate(0.0, 0.3)
+	b.damage(keys[2], 9999.0)
+	main.mutants.night = true
+
+
+## Walker, runner, brute and spitter in a row, and a glob of acid in the air (v0.16).
+func _types_sample(p: Node3D) -> void:
+	var ms = main.mutants
+	ms.clear()
+	var fwd := -p.global_transform.basis.z
+	var right := p.global_transform.basis.x
+	var kinds := ["runner", "walker", "brute", "spitter"]
+	for i in kinds.size():
+		var w = ms.spawn(kinds[i], p.position + fwd * (6.5 + (i % 2) * 1.5) + right * (i - 1.5) * 2.2)
+		w.rotation.y = p.rotation.y + PI
+		w.set_physics_process(false)
+		w._anim_t = i * 1.1
+		w._animate(0.0, 1.5)
+	var sp = ms.alive()[3]
+	ms._on_spat(sp.global_position + Vector3(0, 1.4, 0) + fwd * -1.2, Vector3.ZERO, sp)
+	for g in ms.spits():
+		g.set_physics_process(false)
+	main.inventory.load_data({})
+	main.inventory.add("machete", 1)
+	main.inventory.selected = 0
+	main.melee.set_item("machete")
+
+
+## The pistol at the hip, or aimed with the muzzle flashing at a walker (v0.17).
+func _gun_sample(p: Node3D, gun: String, aimed: bool) -> void:
+	var ms = main.mutants
+	ms.clear()
+	var w = ms.spawn("walker", p.position - p.global_transform.basis.z * (25.0 if gun == "rifle" else 9.0))
+	w.rotation.y = p.rotation.y + PI
+	w.set_physics_process(false)
+	w._animate(0.0, 2.0)
+	main.inventory.load_data({})
+	main.inventory.add_all({gun: 1, main.guns.GUNS[gun].ammo: 24})
+	main.inventory.selected = 0
+	main.melee.set_item("")
+	main.guns.set_item(gun)
+	main.guns.raise_t = 0.0
+	main.guns.mag = {gun: 3}
+	main.guns.set_ads(aimed)
+	main.guns.ads_amount = 1.0 if aimed else 0.0
+	if aimed and gun == "pistol":
+		main.guns._flash.visible = true
+		main.guns._flash_t = 30.0
+		main.guns._kick = 0.4
+
+
+## A line of traps north of the flag, a walker caught in the wire and a mine going off (v0.19).
+func _traps_sample() -> void:
+	var b = main.building
+	var ms = main.mutants
+	b.load_data([])
+	ms.clear()
+	for o in [["spike_strip", -1, -2], ["spike_strip", 0, -2], ["spike_strip", 1, -2], ["barbed_wire", -1, -4], ["barbed_wire", 0, -4], ["barbed_wire", 1, -4], ["landmine", -1, -6], ["landmine", 1, -6]]:
+		var slot := {"kind": "obj", "cx": o[1], "cz": o[2], "dir": 0, "level": 0}
+		b.place(o[0], slot, b.evaluate(o[0], slot).y)
+	var w = ms.spawn("walker", Vector3(1.5, 0, -6.8))
+	w.rotation.y = PI
+	w.set_physics_process(false)
+	w._animate(0.0, 0.5)
+	main.traps._explosion(Vector3(-3.5, main.terrain.surface_height(-3.5, -11), -11))
+
+
+## A generator powering floodlights and an electric fence at night, and a fire pit (v0.20).
+func _power_sample() -> void:
+	var b = main.building
+	var ms = main.mutants
+	b.load_data([])
+	ms.clear()
+	var g: String = ""
+	for o in [["generator", "obj", 0, 2, 0], ["floodlight", "obj", -2, 0, 0], ["floodlight", "obj", 3, 0, 0], ["fire_pit", "obj", 2, 3, 0],
+			["electric_fence", "edge", -2, -1, 0], ["electric_fence", "edge", -1, -1, 0], ["electric_fence", "edge", 0, -1, 0], ["electric_fence", "edge", 1, -1, 0], ["electric_fence", "edge", 2, -1, 0]]:
+		var slot := {"kind": o[1], "cx": o[2], "cz": o[3], "dir": o[4], "level": 0}
+		var k: String = b.place(o[0], slot, b.evaluate(o[0], slot).y)
+		if o[0] == "generator":
+			g = k
+		if o[0] == "fire_pit":
+			b.pieces[k].burn = 200.0
+	b.pieces[g].fuel = 6.0
+	main.day_night.restore(1, 22.0)
+	main.power.tick(0.25)
+	for i in 2:
+		var w = ms.spawn("walker", Vector3(-1.0 + i * 3.0, 0, -5.5))
+		w.rotation.y = PI
+		w.set_physics_process(false)
+		w._animate(0.0, 1.0)
+
+
+## A turret firing at a walker, and build mode placing a second with its range circle (v0.21).
+func _turret_sample() -> void:
+	var b = main.building
+	var ms = main.mutants
+	b.load_data([])
+	ms.clear()
+	var slot := {"kind": "obj", "cx": 4, "cz": -3, "dir": 0, "level": 0}
+	var k: String = b.place("turret", slot, b.evaluate("turret", slot).y)
+	var rec: Dictionary = b.pieces[k]
+	rec.ammo = 120
+	rec.head.rotation.y = -0.35
+	rec.gun.rotation.x = 0.02
+	rec.flash.visible = true
+	var w = ms.spawn("walker", rec.node.global_position + Vector3(4.5, 0, -12))
+	w.rotation.y = PI - 0.4
+	w.set_physics_process(false)
+	w._animate(0.0, 2.0)
+	main.turrets.set_physics_process(false)
+	main.inventory.load_data({})
+	main.inventory.add_all({"scrap": 40, "nails": 20, "wood": 4})
+	main.shop.unlocked["turret"] = true
+	main.build_mode.active = true
+	main.build_mode.select(b.ORDER.find("turret"))
+
+
+## A landing pad with the drone coming down over it, and sandbag walls (v0.23).
+func _drone_sample() -> void:
+	var b = main.building
+	b.load_data([])
+	main.mutants.clear()
+	main.shop.cash = 420
+	main.shop.unlocked = {"sandbags": true}
+	var pad := {"kind": "obj", "cx": 1, "cz": 1, "dir": 0, "level": 0}
+	b.place("landing_pad", pad, b.evaluate("landing_pad", pad).y)
+	for cx in [0, 1, 2]:
+		var sb := {"kind": "edge", "cx": cx, "cz": 0, "dir": 0, "level": 0}
+		b.place("sandbags", sb, b.evaluate("sandbags", sb).y)
+	var dr = main.drone
+	dr.load_data({})
+	dr.order({"wood": 40, "bp_turret": 1})
+	dr._process(0.0)
+	dr.phase = "down"
+	dr._t = 2.4
+	dr._process(0.0)
+	dr.set_process(false)

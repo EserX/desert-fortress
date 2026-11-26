@@ -21,6 +21,7 @@ const CONSUMABLES := {
 	"canned_food": {"food": 35.0, "water": 5.0},
 	"water": {"water": 40.0},
 	"bandage": {"health": 30.0},
+	"medkit": {"health": 70.0},
 }
 
 var health := MAX
@@ -28,6 +29,8 @@ var food := MAX
 var water := MAX
 var dead := false
 var hot := false  # in the midday heat right now (for the HUD)
+var need_mult := 1.0  # difficulty: how fast food and water run down
+var cause := ""   # what hurt you last, for the death screen ("" = hunger, thirst or a fall)
 var _warned := {}
 
 
@@ -51,8 +54,8 @@ func tick(delta: float, hour: float, sprinting: bool, in_shade: bool) -> void:
 	if hour < 6.0 or hour >= 20.0:
 		water_rate *= NIGHT_FACTOR
 		food_rate *= NIGHT_FACTOR
-	food = maxf(food - food_rate * delta, 0.0)
-	water = maxf(water - water_rate * delta, 0.0)
+	food = maxf(food - food_rate * need_mult * delta, 0.0)
+	water = maxf(water - water_rate * need_mult * delta, 0.0)
 	if food <= 0.0 or water <= 0.0:
 		damage(STARVE_DAMAGE * delta)
 	elif food > 50.0 and water > 50.0:
@@ -69,9 +72,10 @@ func _check_warning(key: String, value: float, text: String) -> void:
 		_warned[key] = false
 
 
-func damage(amount: float) -> void:
+func damage(amount: float, from := "") -> void:
 	if dead:
 		return
+	cause = from
 	health = maxf(health - amount, 0.0)
 	if health <= 0.0:
 		dead = true
@@ -98,6 +102,7 @@ func consume(item: String) -> void:
 ## Back on your feet at the base: full health, needs topped up to at least 60.
 func respawn() -> void:
 	dead = false
+	cause = ""
 	health = MAX
 	food = maxf(food, 60.0)
 	water = maxf(water, 60.0)

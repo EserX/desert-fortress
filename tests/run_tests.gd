@@ -1295,6 +1295,17 @@ func _test_difficulty_and_hints() -> void:
 	s.hints = was
 	s.hints_seen = []
 	s.save_settings()
+	# The temporary test box.
+	if main.TEST_BOX:
+		main.shop.cash = 0
+		main.interact("testbox")
+		check(main.inventory_ui.is_open() and main.test_storage.count_of("rifle") == 1 and main.test_storage.count_of("wood") == 20, "the test box holds a stack of every item")
+		check(main.shop.cash == main.TEST_CASH, "and tops the cash up to $%d" % main.TEST_CASH)
+		main.test_storage.transfer(0, main.inventory)
+		main._check_station_reach()
+		check(main.inventory_ui.is_open(), "it doesn't close by itself")
+		main.inventory_ui.close()
+		main.inventory.load_data({})
 	# Controls page in the pause menu.
 	main.pause_menu.open()
 	main.pause_menu.show_page("controls")

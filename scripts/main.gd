@@ -31,6 +31,13 @@ const Shop = preload("res://scripts/shop.gd")
 const ShopUI = preload("res://scripts/shop_ui.gd")
 const Drone = preload("res://scripts/drone.gd")
 const Hints = preload("res://scripts/hints.gd")
+const LowPoly = preload("res://scripts/lowpoly.gd")
+
+## Testing aid (temporary): a green box by the spawn point that holds a full
+## stack of every item and tops your cash up to $2000 each time you open it.
+## Set to false to remove it from the game.
+const TEST_BOX := true
+const TEST_CASH := 2000
 
 const DISCOVER_RANGE := 45.0
 const REFILLS_PER_MORNING := 4
@@ -75,6 +82,8 @@ var shop: Shop
 var shop_ui: ShopUI
 var drone: Drone
 var hints: Hints
+var test_box: StaticBody3D
+var test_storage: Inventory
 ## Wrecks and ruins: {"key": "w3", "kind": "wreck", "pos": Vector3}.
 var places: Array = []
 ## Keys of places you have been near.
@@ -122,6 +131,9 @@ func _ready() -> void:
 	shop.position = Vector3(-2.2, terrain.surface_height(-2.2, 1.6), 1.6)
 	shop.rotation.y = PI + 0.5  # screen towards the spawn point
 	add_child(shop)
+
+	if TEST_BOX:
+		_make_test_box()
 
 	drone = Drone.new()
 	drone.name = "Drone"
@@ -566,6 +578,8 @@ func _gun_input(event: InputEvent) -> bool:
 func _prompt_for(id: String) -> String:
 	if id == "shop":
 		return "[E] Use the shop terminal   ($%d)" % shop.cash
+	if id == "testbox":
+		return "[E] Open the TEST box (every item, cash to $%d)" % TEST_CASH
 	for prefix in ["gate:", "chest:", "bench:", "gen:", "fire:", "turret:"]:
 		if id.begins_with(prefix):
 			return building.prompt(id)
@@ -603,6 +617,9 @@ func interact(id: String) -> void:
 		return
 	if id == "shop":
 		shop_ui.open()
+		return
+	if id == "testbox":
+		open_test_box()
 		return
 	if id.begins_with("gate:"):
 		building.toggle_gate(id.trim_prefix("gate:"))
@@ -793,6 +810,43 @@ func _on_player_hit(dmg: float, from: Vector3, kind := "walker") -> void:
 
 
 var _attack_warned_at := -100000
+
+## The temporary test box: a green crate with a white cross on the lid.
+func _make_test_box() -> void:
+	test_box = StaticBody3D.new()
+	test_box.name = "TestBox"
+	test_box.set_meta("interact_id", "testbox")
+	test_box.position = Vector3(3.0, terrain.surface_height(3.0, 7.0), 7.0)
+	add_child(test_box)
+	for b in [[Vector3(1.0, 0.7, 0.7), Vector3(0, 0.35, 0), Color(0.2, 0.55, 0.25)],
+			[Vector3(0.7, 0.02, 0.15), Vector3(0, 0.71, 0), Color(0.95, 0.95, 0.9)],
+			[Vector3(0.15, 0.02, 0.5), Vector3(0, 0.71, 0), Color(0.95, 0.95, 0.9)]]:
+		var mi := MeshInstance3D.new()
+		var m := BoxMesh.new()
+		m.size = b[0]
+		mi.mesh = m
+		mi.position = b[1]
+		mi.material_override = LowPoly.material(b[2])
+		test_box.add_child(mi)
+	var col := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(1.0, 0.72, 0.7)
+	col.shape = shape
+	col.position.y = 0.36
+	test_box.add_child(col)
+	test_storage = Inventory.new(40)
+
+
+## Refills the test box with a full stack of every item and opens it like a chest.
+func open_test_box() -> void:
+	test_storage.load_data({})
+	for item in Items.ITEMS:
+		if not item.begins_with("bp_"):
+			test_storage.add(item, int(Items.ITEMS[item].stack))
+	if shop.cash < TEST_CASH:
+		shop.add_cash(TEST_CASH - shop.cash)
+	inventory_ui.open_chest("", test_storage)
+
 
 ## When each first-time hint shows.
 func _connect_hints() -> void:

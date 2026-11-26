@@ -2,6 +2,13 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v1.0.5 (2026-11-26): Test box and a new roadmap
+- **Test box (temporary):** a green crate with a white cross right next to where you spawn. **E** opens it like a chest: it holds a full stack of every item in the game (weapons, ammo, materials, fuel, traps, medkits...), refills each time you open it, and tops your cash up to $2000 so you can try the shop, blueprints and base upgrades. It is not saved and doesn't count as a building. Turn it off with `TEST_BOX = false` in `scripts/main.gd`.
+- **Roadmap:** new milestones after v1.0, following the owner's focus (simple visuals; game logic, physics, building and **digging**): **M7 Digging and terrain** (deformable ground with a shovel, trenches and pits, mining, a water well), **M8 Building capabilities** (structural stability, more pieces, faster building, doors and wiring) and **M9 Game logic, AI and physics** (mutant navigation, a physics pass, survival depth, a crafting chain, events).
+- **Tests:** the test box contents, the cash top-up, and it not closing by itself.
+
+**Next:** v1.1, deformable ground and the shovel.
+
 ## v1.0.4 (2026-11-26): Tidy-up
 - Turrets, traps, fences, fire pits and generators no longer scan every building piece many times a second; the building keeps a list per piece type (`building.keys_of()`). It makes no difference with a small base (the soak test runs the same night, same result, about 2.4 ms per frame), but a big late-game base won't slow them down.
 

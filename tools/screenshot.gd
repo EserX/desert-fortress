@@ -17,6 +17,7 @@ var shots := [
 	{"name": "06_wreck", "target": "wreck", "hour": 11.0},
 	{"name": "07_ruin", "target": "ruin", "hour": 16.0},
 	{"name": "09_crate", "target": "crate", "hour": 10.5},
+	{"name": "10_inventory", "pos": Vector3(0, 0, 9), "yaw": 0.6, "pitch": -0.05, "hour": 10.0, "inventory": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -53,6 +54,12 @@ func _process(_d: float) -> bool:
 			p.position = pos
 			p.rotation.y = s.yaw
 			p.head.rotation.x = s.pitch
+		if s.get("inventory", false):
+			if main.inventory.weight() == 0.0:
+				main.inventory.add_all({"scrap": 12, "wood": 25, "nails": 37, "cloth": 3, "water": 2, "canned_food": 4})
+			main.inventory_ui.open()
+		elif main.inventory_ui.is_open():
+			main.inventory_ui.close()
 		if s.get("menu", false):
 			main.pause_menu.open()
 		else:

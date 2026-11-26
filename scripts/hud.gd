@@ -1,6 +1,7 @@
 extends CanvasLayer
 ## On-screen info: crosshair, compass, distance to base, stamina, controls help.
 
+const Items = preload("res://scripts/items.gd")
 const DIRS := ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
 
 var player: Node
@@ -14,6 +15,12 @@ var banner: Label
 var day_night  # DayNight
 var prompt: Label
 var pickups: VBoxContainer
+var inventory  # Inventory
+var hotbar: HBoxContainer
+var _hotbar_labels: Array[Label] = []
+var _hotbar_panels: Array[Panel] = []
+var _slot_style: StyleBoxFlat
+var _slot_selected_style: StyleBoxFlat
 var _banner_time := 0.0
 var _help_time := 12.0
 
@@ -63,7 +70,7 @@ func _ready() -> void:
 	stamina_bar.add_theme_stylebox_override("fill", fill)
 	root.add_child(stamina_bar)
 
-	help = _label("WASD move   Shift sprint   Space jump   Mouse look   Ctrl crouch   E search   F5 quicksave   Esc menu", 16)
+	help = _label("WASD move   Shift sprint   Space jump   Mouse look   Ctrl crouch   E search   Tab inventory   1-9 hotbar   Q drop   F5 quicksave   Esc menu", 16)
 	help.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	help.position = Vector2(20, -36)
 	root.add_child(help)
@@ -89,6 +96,8 @@ func _ready() -> void:
 	pickups.position = Vector2(-320, -40)
 	pickups.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(pickups)
+
+	_build_hotbar(root)
 
 	banner = _label("", 34)
 	banner.set_anchors_preset(Control.PRESET_CENTER_TOP)
@@ -151,6 +160,51 @@ func _process(delta: float) -> void:
 func show_banner(text: String) -> void:
 	banner.text = text
 	_banner_time = 5.0
+
+
+func _build_hotbar(root: Control) -> void:
+	_slot_style = StyleBoxFlat.new()
+	_slot_style.bg_color = Color(0.1, 0.07, 0.04, 0.55)
+	_slot_style.border_color = Color(0.85, 0.62, 0.35, 0.5)
+	_slot_style.set_border_width_all(1)
+	_slot_style.set_corner_radius_all(4)
+	_slot_selected_style = _slot_style.duplicate()
+	_slot_selected_style.border_color = Color(1.0, 0.9, 0.55)
+	_slot_selected_style.set_border_width_all(3)
+	hotbar = HBoxContainer.new()
+	hotbar.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	hotbar.add_theme_constant_override("separation", 4)
+	hotbar.size = Vector2(9 * 68 + 8 * 4, 56)
+	hotbar.position = Vector2(-hotbar.size.x / 2, -108)
+	hotbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(hotbar)
+	for i in 9:
+		var p := Panel.new()
+		p.custom_minimum_size = Vector2(68, 56)
+		p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		hotbar.add_child(p)
+		var l := _label("", 12)
+		l.set_anchors_preset(Control.PRESET_FULL_RECT)
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l.add_theme_constant_override("outline_size", 3)
+		p.add_child(l)
+		_hotbar_panels.append(p)
+		_hotbar_labels.append(l)
+	if inventory:
+		inventory.changed.connect(refresh_hotbar)
+	refresh_hotbar()
+
+
+func refresh_hotbar() -> void:
+	if inventory == null:
+		hotbar.visible = false
+		return
+	for i in 9:
+		var s: Dictionary = inventory.slots[i]
+		_hotbar_labels[i].text = "%d" % (i + 1) if s.is_empty() else "%d %s\nx%d" % [i + 1, Items.display_name(s.item), s.count]
+		_hotbar_panels[i].add_theme_stylebox_override("panel", _slot_selected_style if i == inventory.selected else _slot_style)
 
 
 func set_prompt(text: String) -> void:

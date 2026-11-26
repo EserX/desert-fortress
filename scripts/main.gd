@@ -11,6 +11,8 @@ const Ambience = preload("res://scripts/ambience.gd")
 const PauseMenu = preload("res://scripts/pause_menu.gd")
 const Loot = preload("res://scripts/loot.gd")
 const Items = preload("res://scripts/items.gd")
+const Inventory = preload("res://scripts/inventory.gd")
+const InventoryUI = preload("res://scripts/inventory_ui.gd")
 
 ## When true the world is only a backdrop for the title screen:
 ## no player, HUD or pause menu, just a slowly orbiting camera.
@@ -27,6 +29,8 @@ var day_night: DayNight
 var ambience: Ambience
 var pause_menu: PauseMenu
 var loot: Loot
+var inventory: Inventory
+var inventory_ui: InventoryUI
 var sun: DirectionalLight3D
 var moon: DirectionalLight3D
 var env: Environment
@@ -80,7 +84,11 @@ func _ready() -> void:
 	ambience.day_night = day_night
 	add_child(ambience)
 
+	inventory = Inventory.new()
+	inventory.changed.connect(func(): player.overloaded = inventory.overloaded())
+
 	hud = Hud.new()
+	hud.inventory = inventory
 	hud.name = "HUD"
 	hud.player = player
 	hud.day_night = day_night
@@ -90,7 +98,12 @@ func _ready() -> void:
 	pause_menu.name = "PauseMenu"
 	add_child(pause_menu)
 
-	loot.picked_up.connect(_on_picked_up)
+	# Added after the pause menu so it sees Esc first while open.
+	inventory_ui = InventoryUI.new()
+	inventory_ui.name = "InventoryUI"
+	inventory_ui.inventory = inventory
+	inventory_ui.drop_requested.connect(drop_slot)
+	add_child(inventory_ui)
 
 	# Autosave every morning.
 	day_night.day_started.connect(func(_d): Game.save_game("auto", _screenshot()))
@@ -103,10 +116,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event.is_action_pressed("quick_save"):
 		Game.save_game("quick", _screenshot())
+	elif inventory_ui.is_open():
+		return
 	elif event.is_action_pressed("interact"):
-		var id := player.interact_target()
-		if id != "":
-			loot.open(id)
+		interact(player.interact_target())
+	elif event.is_action_pressed("drop"):
+		drop_slot(inventory.selected)
+	elif event is InputEventMouseButton and event.pressed and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
+		var step := -1 if event.button_index == MOUSE_BUTTON_WHEEL_UP else 1
+		select_hotbar(posmod(inventory.selected + step, Inventory.HOTBAR))
 	elif event.is_action_pressed("quick_load"):
 		if not Game.load_game("quick"):
 			hud.show_banner("No quicksave yet (F5 to quicksave)")
@@ -114,7 +132,10 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _process(delta: float) -> void:
 	if hud and not get_tree().paused:
-		hud.set_prompt(loot.prompt(player.interact_target()))
+		hud.set_prompt("" if inventory_ui.is_open() else loot.prompt(player.interact_target()))
+		for i in Inventory.HOTBAR:
+			if Input.is_action_just_pressed("hotbar_%d" % (i + 1)) and not inventory_ui.is_open():
+				select_hotbar(i)
 	if _orbit_camera:
 		_orbit_angle += delta * 0.04
 		var target := Vector3(0, terrain.BASE_HEIGHT + 3.0, 0)
@@ -149,11 +170,50 @@ func thumbnail_image() -> Image:
 	return _screenshot()
 
 
-func _on_picked_up(items: Dictionary) -> void:
+## E on a container or a dropped bag: put what fits in the inventory.
+func interact(id: String) -> void:
+	if id == "":
+		return
+	var items: Dictionary
+	if loot.drops.has(id):
+		items = loot.drops[id].items
+	else:
+		items = loot.open(id)
+	if items.is_empty():
+		return
+	var left := inventory.add_all(items)
 	var lines: Array = []
 	for item in items:
-		lines.append("+%d %s" % [items[item], Items.display_name(item)])
+		var n: int = items[item] - int(left.get(item, 0))
+		if n > 0:
+			lines.append("+%d %s" % [n, Items.display_name(item)])
 	hud.show_pickup(lines)
+	if loot.drops.has(id):
+		loot.set_drop_items(id, left)
+	elif not left.is_empty():
+		loot.spawn_drop(left, _drop_spot())
+	if not left.is_empty():
+		hud.show_banner("Inventory full")
+
+
+## Drops a whole stack in a bag at your feet.
+func drop_slot(i: int) -> void:
+	var s := inventory.take_slot(i)
+	if not s.is_empty():
+		loot.spawn_drop({s.item: s.count}, _drop_spot())
+
+
+func select_hotbar(i: int) -> void:
+	inventory.selected = i
+	hud.refresh_hotbar()
+
+
+## On the sand a step in front of the player.
+func _drop_spot() -> Vector3:
+	var fwd := -player.global_transform.basis.z
+	var p := player.global_position + Vector3(fwd.x, 0, fwd.z).normalized() * 1.1
+	p.y = terrain.surface_height(p.x, p.z)
+	return p
 
 
 # --- Save / load ---------------------------------------------------------------
@@ -171,6 +231,7 @@ func collect_save_data() -> Dictionary:
 			"hour": day_night.hour,
 		},
 		"loot": loot.save_data(),
+		"inventory": inventory.save_data(),
 	}
 
 
@@ -178,6 +239,15 @@ func apply_save_data(data: Dictionary) -> void:
 	var w: Dictionary = data.get("world", {})
 	day_night.restore(int(w.get("day", 1)), float(w.get("hour", 9.0)))
 	loot.load_data(data.get("loot", {}))
+	if data.has("inventory"):
+		inventory.load_data(data.inventory)
+	else:
+		# v0.4 saves kept items as a plain {item: count} list.
+		inventory.load_data({})
+		var old: Dictionary = data.get("loot", {}).get("inventory", {})
+		for item in old:
+			if Items.ITEMS.has(item):
+				inventory.add(item, int(old[item]))
 	var p: Dictionary = data.get("player", {})
 	var pos: Array = p.get("position", [])
 	if pos.size() == 3:

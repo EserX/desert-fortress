@@ -2,6 +2,20 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v0.24.0 (2026-11-26): Base upgrades and the radio
+The shop terminal has a third page, **Base upgrades**:
+- **Bigger build zone:** 26 m to **34 m** ($200), then **42 m** ($400). The ring of stakes and the dashed line in build mode move out with it.
+- **More chest storage:** every chest (and every new one) grows from 20 to **30 slots** ($150), then **40** ($300). Nothing is ever lost; chests only grow.
+- **Workbench tiers:** a new game's workbench is tier 1 (tools, bandages, barricades, the pistol and its rounds). **Tier 2** ($200) adds the shotgun and shells, **tier 3** ($400) the hunting rifle, 7.62 rounds and the new **medkit** (2 bandages, 2 cloth, 1 water: heals 70, use with F). Locked recipes stay on the list as "needs workbench tier N".
+- **Radio** ($120): a field radio appears on top of the terminal. At dusk, instead of just the siren's warning, it tells you the coming wave's lineup ("Radio: wave 5 tonight, 6 walkers, 3 runners, 1 spitter, 2 brutes."), and the nightfall banner lists it again. Without a radio you only learn how many are coming.
+- The workbench list is now three columns (the cost shows in brackets with what you have; hover a recipe for its description), and the chest grid is flatter so a 40-slot chest fits at 1280×720.
+- **Saved:** every upgrade. **Older saves keep every recipe** (their workbench counts as tier 3); other upgrades start un-bought.
+- **Code:** `Shop.UPGRADES` with `next_level`, `upgrade_value` and `buy_upgrade`. `main.apply_upgrades()` sets `building.zone_radius`, the chest size (`building.set_chest_slots`, `Inventory.resize`) and `inventory_ui.bench_tier`. `Waves.preview_next()` lets the radio tell the lineup before it is rolled.
+- **Tests:** a tier 1 bench refusing the shotgun, buying tier 2 and making one, the rifle still needing tier 3, the zone growing twice (29 m now inside, the stakes moved), the limit, chests growing to 30, upgrades and a full big chest saved, the chest screen showing 30 slots, the radio on the terminal and its dusk lineup matching the real wave, medkits healing 70, and older saves keeping every recipe. New screenshot views `35_upgrades` and `36_chest`; `16_bench` shows the locked recipes.
+
+**Try:** save up after a few nights for the radio, so you know when the brutes are coming, then upgrade the workbench for the rifle.
+**Next:** v1.0, balance and polish: difficulty settings, first-time hints, a performance pass, a standalone Linux export and the README as a short manual.
+
 ## v0.23.0 (2026-11-26): Drone deliveries and blueprints
 - **Drone landing pad** (4 wood, 2 scrap, 4 nails): a concrete pad with a painted H, in build mode after the turret.
 - **Drone orders:** the shop terminal has a second page, **Drone orders**, with bigger loads at better prices: 40 wood $60, 40 scrap $90, 100 nails $45, 10 cement $80, 120 9mm rounds $80, 6 fuel cans $60, plus **blueprints**. Orders need a landing pad. A white quadcopter with an orange stripe flies in from the edge of the map, comes down over the pad, lowers the parcel and flies off, about 25 seconds in all, buzzing as it goes. The parcel is a bag on the pad with everything ordered since the last flight; orders placed while it is in the air go on the next one.

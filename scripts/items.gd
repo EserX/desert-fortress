@@ -25,6 +25,7 @@ const ITEMS := {
 	"bp_turret": {"name": "Blueprint: Auto-turret", "weight": 0.0, "stack": 1},
 	"bp_fence": {"name": "Blueprint: Electric fence", "weight": 0.0, "stack": 1},
 	"bp_sandbags": {"name": "Blueprint: Sandbag wall", "weight": 0.0, "stack": 1},
+	"medkit": {"name": "Medkit", "weight": 0.4, "stack": 5},
 }
 
 ## What each kind of container can hold: item -> [min, max]. A negative min
@@ -44,10 +45,11 @@ const RECIPES := {
 	"spike_barricade": {"count": 1, "cost": {"wood": 4, "nails": 4}, "info": "build it in build mode"},
 	"pistol": {"count": 1, "cost": {"scrap": 10, "wood": 2, "nails": 6}, "info": "12 rounds. RMB aims, R reloads"},
 	"ammo_9mm": {"count": 8, "cost": {"scrap": 2, "nails": 3}, "info": "for the pistol"},
-	"shotgun": {"count": 1, "cost": {"scrap": 14, "wood": 4, "nails": 8}, "info": "6 shells, deadly up close"},
-	"shells": {"count": 6, "cost": {"scrap": 2, "nails": 4, "cloth": 1}, "info": "for the shotgun"},
-	"rifle": {"count": 1, "cost": {"scrap": 16, "wood": 5, "nails": 10, "cloth": 2}, "info": "Scoped, 5 rounds, long range"},
-	"ammo_762": {"count": 5, "cost": {"scrap": 3, "nails": 4}, "info": "for the rifle"},
+	"shotgun": {"count": 1, "cost": {"scrap": 14, "wood": 4, "nails": 8}, "info": "6 shells, deadly up close", "tier": 2},
+	"shells": {"count": 6, "cost": {"scrap": 2, "nails": 4, "cloth": 1}, "info": "for the shotgun", "tier": 2},
+	"rifle": {"count": 1, "cost": {"scrap": 16, "wood": 5, "nails": 10, "cloth": 2}, "info": "Scoped, 5 rounds, long range", "tier": 3},
+	"ammo_762": {"count": 5, "cost": {"scrap": 3, "nails": 4}, "info": "for the rifle", "tier": 3},
+	"medkit": {"count": 1, "cost": {"bandage": 2, "cloth": 2, "water": 1}, "info": "heals 70, use with F", "tier": 3},
 }
 
 const CONTAINER_NAMES := {"glovebox": "glovebox", "trunk": "trunk", "crate": "crate", "supply": "supply crate"}
@@ -69,6 +71,11 @@ static func roll(kind: String, rng: RandomNumberGenerator) -> Dictionary:
 		var first: String = table.keys()[0]
 		out[first] = 1
 	return out
+
+
+## Workbench tier a recipe needs (base upgrades raise the bench's tier).
+static func recipe_tier(id: String) -> int:
+	return int(RECIPES[id].get("tier", 1))
 
 
 ## True if the inventory holds everything a recipe needs.

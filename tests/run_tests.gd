@@ -1182,6 +1182,81 @@ func _test_drone() -> void:
 	main.inventory.load_data({})
 
 
+## v0.24: base upgrades (zone, storage, workbench tiers, radio) and medkits.
+func _test_upgrades() -> void:
+	var sh = main.shop
+	var b = main.building
+	var ui = main.inventory_ui
+	var inv = main.inventory
+	var Items = main.Items
+	main.apply_save_data(JSON.parse_string(JSON.stringify(main.collect_save_data())))
+	for id in sh.upgrades:
+		sh.upgrades[id] = 0
+	main.apply_upgrades()
+	sh.cash = 3000
+	b.load_data([])
+	inv.load_data({})
+	inv.add_all({"scrap": 30, "wood": 10, "nails": 20, "cloth": 4})
+	ui.open_bench("x")
+	check(ui._recipe_buttons.shotgun.disabled and ui._recipe_buttons.shotgun.text.contains("tier 2"), "a new workbench can't make a shotgun yet")
+	ui.craft("shotgun")
+	check(inv.count_of("shotgun") == 0, "no shotgun from a tier 1 bench")
+	ui.close()
+	check(sh.buy_upgrade("bench") and ui.bench_tier == 2 and sh.cash == 2800, "workbench tier 2 for $200")
+	ui.open_bench("x")
+	ui.craft("shotgun")
+	check(inv.count_of("shotgun") == 1, "now it makes a shotgun")
+	check(ui._recipe_buttons.rifle.disabled, "the rifle needs tier 3")
+	ui.close()
+	# Zone.
+	var far := {"kind": "cell", "cx": 14, "cz": 0, "dir": 0, "level": 0}
+	check(not b.in_zone("foundation", far), "29 m out is outside the starting zone")
+	sh.buy_upgrade("zone")
+	check(b.zone_radius == 34.0 and b.in_zone("foundation", far) and main.base_zone.radius == 34.0, "a bigger zone: 34 m")
+	check(main.base_zone.get_child_count() == 3, "the stakes moved out")
+	sh.buy_upgrade("zone")
+	check(b.zone_radius == 42.0 and sh.next_level("zone").is_empty() and not sh.can_upgrade("zone"), "42 m is the biggest")
+	# Storage.
+	var cs := {"kind": "obj", "cx": -5, "cz": 5, "dir": 0, "level": 0}
+	var ck: String = b.place("chest", cs, b.evaluate("chest", cs).y)
+	check(b.storage_of(ck).slots.size() == 20, "chests start with 20 slots")
+	sh.buy_upgrade("storage")
+	check(b.storage_of(ck).slots.size() == 30, "a storage upgrade grows every chest to 30")
+	b.storage_of(ck).slots[27] = {"item": "wood", "count": 5}
+	var data: Dictionary = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	main.apply_save_data(data)
+	check(b.storage_of(ck).count_of("wood") == 5 and sh.upgrades.storage == 1 and b.zone_radius == 42.0, "upgrades and big chests are saved")
+	main.interact("chest:" + ck)
+	check(ui._chest_buttons[29].visible and not ui._chest_buttons[30].visible, "the chest screen shows 30 slots")
+	ui.close()
+	# Radio.
+	var wv = main.waves
+	sh.buy_upgrade("radio")
+	check(sh._radio.visible, "a radio sits on the terminal")
+	main.hud.banner.text = ""
+	wv.on_dusk(1)
+	var preview: Array = wv.preview_next()
+	check(main.hud.banner.text.begins_with("Radio: wave %d tonight" % (wv.wave + 1)), "at dusk the radio says what is coming: " + main.hud.banner.text)
+	main.day_night.restore(main.day_night.day, 21.0)
+	wv.start_wave()
+	check(wv.queue == preview, "and it is right")
+	wv.end_wave(true)
+	main.mutants.clear()
+	main.day_night.restore(main.day_night.day, 10.0)
+	# Medkit.
+	inv.load_data({})
+	inv.add("medkit", 1)
+	main.survival.health = 20.0
+	inv.selected = 0
+	main.use_selected()
+	check(is_equal_approx(main.survival.health, 90.0), "a medkit heals 70")
+	data.shop.erase("upgrades")
+	main.apply_save_data(data)
+	check(ui.bench_tier == 3, "older saves keep every recipe (tier 3 bench)")
+	b.load_data([])
+	inv.load_data({})
+
+
 func _start_spitter() -> void:
 	var player = main.player
 	var py: float = main.terrain.surface_height(8, -8)
@@ -1420,6 +1495,7 @@ func _process(_delta: float) -> bool:
 			_test_power()
 			_test_shop()
 			_test_drone()
+			_test_upgrades()
 		2370:
 			_start_turret()
 		2490:

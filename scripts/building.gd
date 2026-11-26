@@ -27,8 +27,8 @@ const TIER_HP := [250.0, 600.0, 1500.0]
 const TIER_ITEM := ["wood", "scrap", "cement"]
 const REFUND := 0.5          # share of what a piece cost you get back when demolished
 const UNDO_SECONDS := 60.0   # build-mode right click gives everything back this soon after building
-const ZONE_RADIUS := 26.0    # base build zone around the flag at the origin
-const CHEST_SLOTS := 20
+const ZONE_RADIUS := 26.0    # base build zone around the flag at the origin (before upgrades)
+const CHEST_SLOTS := 20      # before upgrades
 
 signal piece_destroyed(key: String, type: String)
 ## A piece fell down because what held it up was destroyed.
@@ -78,6 +78,9 @@ const WALLISH := ["wall", "doorway", "window"]
 const DECKS := ["floor", "roof"]
 
 var terrain  # Terrain
+## Grown by base upgrades from the shop.
+var zone_radius := ZONE_RADIUS
+var chest_slots := CHEST_SLOTS
 ## main slot key -> {"type", "slot", "y", "node", "open" (gates), "tier", "hp", "built_at"}
 var pieces := {}
 ## every slot key a piece takes up (stairs take two) -> main slot key
@@ -300,7 +303,7 @@ func evaluate(type: String, slot: Dictionary) -> Dictionary:
 		if occupied.has(k):
 			return {"y": piece_at(k).y, "ok": false, "reason": "Something is already built here"}
 	if not in_zone(type, slot):
-		return {"y": _ground_level(type, slot).y, "ok": false, "reason": "Outside the base zone (stay within %d m of the flag)" % int(ZONE_RADIUS)}
+		return {"y": _ground_level(type, slot).y, "ok": false, "reason": "Outside the base zone (stay within %d m of the flag)" % int(zone_radius)}
 	if slot.get("level", 0) > 0:
 		if type == "foundation":
 			return {"y": 0.0, "ok": false, "reason": "Foundations go on the ground"}
@@ -315,9 +318,17 @@ func evaluate(type: String, slot: Dictionary) -> Dictionary:
 
 
 ## True if a piece in this slot is inside the base build zone.
-static func in_zone(type: String, slot: Dictionary) -> bool:
+func in_zone(type: String, slot: Dictionary) -> bool:
 	var c := slot_center(slot, type)
-	return Vector2(c.x, c.z).length() <= ZONE_RADIUS
+	return Vector2(c.x, c.z).length() <= zone_radius
+
+
+## Storage upgrade: every chest (and every new one) gets n slots.
+func set_chest_slots(n: int) -> void:
+	chest_slots = maxi(n, chest_slots)
+	for key in pieces:
+		if pieces[key].has("storage"):
+			pieces[key].storage.resize(chest_slots)
 
 
 # --- Piece shapes ---------------------------------------------------------------
@@ -583,7 +594,7 @@ func place(type: String, slot: Dictionary, y: float, gate_open := false, tier :=
 	if type == "doorway":
 		_add_gate(rec, gate_open)
 	elif type == "chest":
-		rec.storage = Inventory.new(CHEST_SLOTS)
+		rec.storage = Inventory.new(chest_slots)
 		body.set_meta("interact_id", "chest:" + key)
 	elif type == "workbench":
 		body.set_meta("interact_id", "bench:" + key)

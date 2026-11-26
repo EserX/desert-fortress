@@ -269,6 +269,7 @@ func _ready() -> void:
 		if not left.is_empty():
 			loot.spawn_drop(left, _drop_spot())
 			hud.show_banner("Inventory full: the rest is in a bag at your feet"))
+	shop_ui.upgrade_bought.connect(func(id): hud.show_pickup(["Base upgrade: " + Shop.UPGRADES[id].name.to_lower()]))
 	shop_ui.ordered.connect(func(i): hud.show_pickup(["Ordered " + Shop.DRONE[i].name.to_lower() + " by drone"]))
 	add_child(shop_ui)
 	drone.delivered.connect(_on_delivery)
@@ -284,13 +285,22 @@ func _ready() -> void:
 
 	survival.died.connect(_on_died)
 	survival.died.connect(waves.note_death)
-	waves.wave_started.connect(func(n, _size): hud.show_banner("Wave %d is coming: %s. Defend the base!" % [n, Waves.mix_text(waves.queue)]))
+	waves.wave_started.connect(func(n, size):
+		if shop.upgrades.radio > 0:
+			hud.show_banner("Wave %d is coming: %s. Defend the base!" % [n, Waves.mix_text(waves.queue)])
+		else:
+			hud.show_banner("Wave %d: %d mutants are coming. Defend the base!" % [n, size]))
 	waves.wave_ended.connect(func(s):
 		shop.add_cash(int(s.get("cash", 0)))
 		hud.show_summary(Waves.summary_lines(s)))
 	waves.wave_started.connect(func(_n, _size): waves.stats.pieces = building.pieces.size())
 	hud.shop = shop
-	waves.siren.connect(func(): hud.show_banner("Siren! Mutants come at nightfall. Get back to the base."))
+	waves.siren.connect(func():
+		if shop.upgrades.radio > 0:
+			hud.show_banner("Radio: wave %d tonight, %s." % [waves.wave + 1, Waves.mix_text(waves.preview_next())])
+		else:
+			hud.show_banner("Siren! Mutants come at nightfall. Get back to the base."))
+	shop.upgraded.connect(func(_id): apply_upgrades())
 	mutants.player_hit.connect(_on_player_hit)
 	mutants.piece_hit.connect(_on_piece_attacked)
 	traps.player_hurt.connect(func(dmg, from, cause):
@@ -633,6 +643,15 @@ func _on_delivery(items: Dictionary, pos: Vector3) -> void:
 	hud.show_banner("Drone delivery on the landing pad" + (": new builds unlocked" if not learned.is_empty() else ""))
 
 
+## Makes the bought base upgrades take effect: zone size, chest size, bench tier.
+func apply_upgrades() -> void:
+	building.zone_radius = shop.upgrade_value("zone", Building.ZONE_RADIUS)
+	base_zone.set_radius(building.zone_radius)
+	building.set_chest_slots(shop.upgrade_value("storage", Building.CHEST_SLOTS))
+	inventory_ui.bench_tier = shop.upgrade_value("bench", 1)
+	inventory_ui.refresh()
+
+
 ## Moves your 9mm rounds into a turret's ammo box. Returns how many went in.
 func load_turret(key: String) -> int:
 	var rec: Dictionary = building.pieces.get(key, {})
@@ -818,13 +837,18 @@ func collect_save_data() -> Dictionary:
 func apply_save_data(data: Dictionary) -> void:
 	var w: Dictionary = data.get("world", {})
 	day_night.restore(int(w.get("day", 1)), float(w.get("hour", 9.0)))
+	# Upgrades first: chests must be big enough before their contents load.
+	shop.load_data(data.get("shop", {}))
+	building.chest_slots = Building.CHEST_SLOTS
+	apply_upgrades()
 	loot.load_data(data.get("loot", {}))
 	survival.load_data(data.get("survival", {}))
 	building.load_data(data.get("buildings", []))
 	waves.load_data(data.get("waves", {"wave": maxi(day_night.day - 1, 0)}))
 	guns.load_data(data.get("guns", {}))
 	# Older saves: a little starting cash plus pay for the nights already survived.
-	shop.load_data(data.get("shop", {"cash": Shop.START_CASH + 40 * waves.wave}))
+	if not data.has("shop"):
+		shop.cash = Shop.START_CASH + 40 * waves.wave
 	if not data.get("shop", {}).has("unlocked"):
 		# Saves from before blueprints keep every build they had.
 		for t in Building.PIECES:

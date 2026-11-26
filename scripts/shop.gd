@@ -42,14 +42,25 @@ const DRONE := [
 ]
 ## Blueprint item -> the build piece it unlocks.
 const BLUEPRINTS := {"bp_turret": "turret", "bp_fence": "electric_fence", "bp_sandbags": "sandbags"}
+## Base upgrades: each level's price and what it gives.
+const UPGRADES := {
+	"zone": {"name": "Bigger build zone", "levels": [{"price": 200, "value": 34.0, "text": "34 m"}, {"price": 400, "value": 42.0, "text": "42 m"}]},
+	"storage": {"name": "More chest storage", "levels": [{"price": 150, "value": 30, "text": "30 slots"}, {"price": 300, "value": 40, "text": "40 slots"}]},
+	"bench": {"name": "Workbench tier", "levels": [{"price": 200, "value": 2, "text": "tier 2: shotgun, shells"}, {"price": 400, "value": 3, "text": "tier 3: rifle, 7.62, medkits"}]},
+	"radio": {"name": "Radio", "levels": [{"price": 120, "value": 1, "text": "hear at dusk what is coming"}]},
+}
 const START_CASH := 50
 
 signal cash_changed(cash: int)
+signal upgraded(id: String)
 
 var cash := START_CASH
 ## Build pieces unlocked by blueprints.
 var unlocked := {}
 var drone  # Drone
+## Upgrade id -> how many levels bought.
+var upgrades := {"zone": 0, "storage": 0, "bench": 0, "radio": 0}
+var _radio: Node3D
 
 
 func _ready() -> void:
@@ -67,6 +78,20 @@ func _ready() -> void:
 	_box(Vector3(0.78, 0.06, 0.32), Vector3(0, 1.6, -0.03), dark)       # sun hood
 	_box(Vector3(0.5, 0.06, 0.18), Vector3(0, 1.0, -0.12), dark)        # keypad
 	_box(Vector3(0.5, 0.06, 0.5), Vector3(0, 0.03, 0), dark)            # foot
+	# A field radio on top, there once you buy the radio upgrade.
+	_radio = Node3D.new()
+	_radio.position = Vector3(0.18, 1.63, 0.02)
+	_radio.visible = false
+	add_child(_radio)
+	var olive := LowPoly.material(Color(0.33, 0.36, 0.22))
+	for b in [[Vector3(0.3, 0.16, 0.14), Vector3(0, 0.08, 0)], [Vector3(0.015, 0.5, 0.015), Vector3(0.11, 0.4, 0.03)]]:
+		var mi := MeshInstance3D.new()
+		var m := BoxMesh.new()
+		m.size = b[0]
+		mi.mesh = m
+		mi.position = b[1]
+		mi.material_override = olive if b[0].y < 0.3 else dark
+		_radio.add_child(mi)
 	var col := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
 	shape.size = Vector3(0.75, 1.65, 0.4)
@@ -151,8 +176,35 @@ func learn_blueprints(items: Dictionary) -> Array:
 	return learned
 
 
+## The next level of an upgrade ({} when it is maxed out).
+func next_level(id: String) -> Dictionary:
+	var levels: Array = UPGRADES[id].levels
+	return levels[upgrades[id]] if upgrades[id] < levels.size() else {}
+
+
+## What an upgrade gives right now (its last bought level), or base when none.
+func upgrade_value(id: String, base):
+	return UPGRADES[id].levels[upgrades[id] - 1].value if upgrades[id] > 0 else base
+
+
+func can_upgrade(id: String) -> bool:
+	var n := next_level(id)
+	return not n.is_empty() and cash >= int(n.price)
+
+
+func buy_upgrade(id: String) -> bool:
+	if not can_upgrade(id):
+		return false
+	cash -= int(next_level(id).price)
+	upgrades[id] += 1
+	cash_changed.emit(cash)
+	_radio.visible = upgrades.radio > 0
+	upgraded.emit(id)
+	return true
+
+
 func save_data() -> Dictionary:
-	return {"cash": cash, "unlocked": unlocked.keys()}
+	return {"cash": cash, "unlocked": unlocked.keys(), "upgrades": upgrades}
 
 
 func load_data(data: Dictionary) -> void:
@@ -160,4 +212,9 @@ func load_data(data: Dictionary) -> void:
 	unlocked = {}
 	for t in data.get("unlocked", []):
 		unlocked[str(t)] = true
+	# Saves from before workbench tiers keep every recipe.
+	var up: Dictionary = data.get("upgrades", {"bench": 2})
+	for id in upgrades:
+		upgrades[id] = clampi(int(up.get(id, 0)), 0, UPGRADES[id].levels.size())
+	_radio.visible = upgrades.radio > 0
 	cash_changed.emit(cash)

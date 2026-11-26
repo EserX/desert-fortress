@@ -71,6 +71,13 @@ static func wave_mix(n: int, rng: RandomNumberGenerator) -> Array:
 	return out
 
 
+## The lineup the next wave will bring (the same roll start_wave() will make).
+func preview_next() -> Array:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash("wave:%d:%d" % [world_seed, wave + 1])
+	return wave_mix(wave + 1, rng)
+
+
 ## "6 walkers, 2 runners, 1 brute"
 static func mix_text(types: Array) -> String:
 	var counts := {}

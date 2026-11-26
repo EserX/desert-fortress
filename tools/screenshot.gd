@@ -42,6 +42,8 @@ var shots := [
 	{"name": "32_shop", "pos": Vector3(-0.6, 0, 4.2), "yaw": 0.5, "pitch": -0.2, "hour": 10.0, "shop": true},
 	{"name": "33_drone", "pos": Vector3(4.5, 0, 12.5), "yaw": 0.17, "pitch": 0.28, "hour": 15.0, "drone": true},
 	{"name": "34_drone_shop", "pos": Vector3(4, 0, 9), "yaw": 0.6, "pitch": 0.0, "hour": 15.0, "drone_shop": true},
+	{"name": "35_upgrades", "pos": Vector3(-0.6, 0, 4.2), "yaw": 0.5, "pitch": -0.2, "hour": 10.0, "upgrades": true},
+	{"name": "36_chest", "pos": Vector3(-0.6, 0, 4.2), "yaw": 0.5, "pitch": -0.2, "hour": 10.0, "bigchest": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -139,7 +141,23 @@ func _process(_d: float) -> bool:
 			main.inventory.add_all({"hammer": 1, "pistol": 1})
 		if s.get("drone", false) or s.get("drone_shop", false):
 			_drone_sample()
-		if s.get("shop", false):
+		if s.get("upgrades", false):
+			main.shop.cash = 520
+			main.shop.upgrades = {"zone": 1, "storage": 0, "bench": 2, "radio": 0}
+			main.shop_ui.open()
+			main.shop_ui.show_page(2)
+		elif s.get("bigchest", false):
+			if main.shop_ui.is_open():
+				main.shop_ui.close()
+			var b = main.building
+			main.shop.upgrades.storage = 2
+			main.apply_upgrades()
+			var cs := {"kind": "obj", "cx": -1, "cz": 1, "dir": 0, "level": 0}
+			var ck: String = b.place("chest", cs, b.evaluate("chest", cs).y)
+			b.storage_of(ck).add_all({"wood": 55, "scrap": 30, "nails": 120, "cement": 4, "ammo_9mm": 90, "shells": 20})
+			main.inventory.add_all({"wood": 8, "medkit": 2})
+			main.inventory_ui.open_chest(ck, b.storage_of(ck))
+		elif s.get("shop", false):
 			main.shop_ui.open()
 		elif s.get("drone_shop", false):
 			main.shop_ui.open()

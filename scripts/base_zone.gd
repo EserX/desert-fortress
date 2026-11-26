@@ -9,19 +9,38 @@ const STAKES := 48
 const DASHES := 140
 
 var terrain  # Terrain
+var radius := Building.ZONE_RADIUS
 var _glow: MultiMeshInstance3D
 
 
 func _ready() -> void:
-	var r := Building.ZONE_RADIUS
+	_build()
+
+
+## The zone grew (base upgrade): move the stakes and the line out.
+func set_radius(r: float) -> void:
+	if is_equal_approx(r, radius):
+		return
+	radius = r
+	var lit := _glow.visible
+	for c in get_children():
+		remove_child(c)
+		c.queue_free()
+	_build()
+	_glow.visible = lit
+
+
+func _build() -> void:
+	var r := radius
 	var stake := BoxMesh.new()
 	stake.size = Vector3(0.09, 0.9, 0.09)
 	var rag := BoxMesh.new()
 	rag.size = Vector3(0.03, 0.18, 0.3)
 	var posts: Array = []
 	var rags: Array = []
-	for i in STAKES:
-		var a := TAU * i / STAKES
+	var stakes := int(STAKES * r / Building.ZONE_RADIUS)
+	for i in stakes:
+		var a := TAU * i / stakes
 		var p := Vector3(cos(a) * r, 0, sin(a) * r)
 		p.y = terrain.surface_height(p.x, p.z)
 		var t := Transform3D(Basis(Vector3.UP, -a).rotated(Vector3(sin(a), 0, -cos(a)), 0.06), p + Vector3(0, 0.4, 0))

@@ -8,6 +8,7 @@ const Items = preload("res://scripts/items.gd")
 
 signal bought(index: int, left: Dictionary)
 signal ordered(index: int)
+signal upgrade_bought(id: String)
 
 var shop  # Shop
 var inventory  # Inventory
@@ -19,6 +20,8 @@ var _counter: VBoxContainer
 var _drone_page: VBoxContainer
 var _drone_note: Label
 var _tabs: Array[Button] = []
+var _upgrade_page: VBoxContainer
+var upgrade_buttons := {}
 
 
 func _ready() -> void:
@@ -39,9 +42,9 @@ func _ready() -> void:
 	tabs.alignment = BoxContainer.ALIGNMENT_CENTER
 	tabs.add_theme_constant_override("separation", 10)
 	col.add_child(tabs)
-	for t in ["Counter", "Drone orders"]:
-		var tb := UI.button(tabs, t, show_page.bind(t == "Drone orders"))
-		tb.custom_minimum_size = Vector2(220, 36)
+	for t in ["Counter", "Drone orders", "Base upgrades"]:
+		var tb := UI.button(tabs, t, show_page.bind(["Counter", "Drone orders", "Base upgrades"].find(t)))
+		tb.custom_minimum_size = Vector2(200, 36)
 		tb.toggle_mode = true
 		_tabs.append(tb)
 	_counter = VBoxContainer.new()
@@ -51,6 +54,14 @@ func _ready() -> void:
 	_drone_page.add_theme_constant_override("separation", 8)
 	col.add_child(_drone_page)
 	_drone_note = UI.note(_drone_page, "")
+	_upgrade_page = VBoxContainer.new()
+	_upgrade_page.add_theme_constant_override("separation", 8)
+	col.add_child(_upgrade_page)
+	for id in shop.UPGRADES:
+		var b := UI.button(_upgrade_page, "", buy_upgrade.bind(id))
+		b.add_theme_font_size_override("font_size", 15)
+		b.custom_minimum_size = Vector2(0, 54)
+		upgrade_buttons[id] = b
 	var dgrid := GridContainer.new()
 	dgrid.columns = 3
 	dgrid.add_theme_constant_override("h_separation", 6)
@@ -90,17 +101,26 @@ func is_open() -> bool:
 	return _root.visible
 
 
-func show_page(drone: bool) -> void:
-	_counter.visible = not drone
-	_drone_page.visible = drone
-	_tabs[0].set_pressed_no_signal(not drone)
-	_tabs[1].set_pressed_no_signal(drone)
+## 0 = counter, 1 = drone orders, 2 = base upgrades (true/false also work for the first two).
+func show_page(page) -> void:
+	var p := int(page)
+	_counter.visible = p == 0
+	_drone_page.visible = p == 1
+	_upgrade_page.visible = p == 2
+	for i in _tabs.size():
+		_tabs[i].set_pressed_no_signal(i == p)
+	refresh()
+
+
+func buy_upgrade(id: String) -> void:
+	if shop.buy_upgrade(id):
+		upgrade_bought.emit(id)
 	refresh()
 
 
 func open() -> void:
 	_root.visible = true
-	show_page(false)
+	show_page(0)
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	refresh()
 
@@ -128,6 +148,16 @@ func refresh() -> void:
 	_cash.text = "Cash: $%d" % shop.cash
 	for i in _buttons.size():
 		_buttons[i].disabled = not shop.can_buy(i)
+	for id in upgrade_buttons:
+		var u: Dictionary = shop.UPGRADES[id]
+		var n: Dictionary = shop.next_level(id)
+		var have: int = shop.upgrades[id]
+		var b: Button = upgrade_buttons[id]
+		if n.is_empty():
+			b.text = "%s: done (%s)" % [u.name, u.levels[-1].text]
+		else:
+			b.text = "%s %d/%d: %s\n$%d" % [u.name, have + 1, u.levels.size(), n.text, n.price]
+		b.disabled = not shop.can_upgrade(id)
 	if shop.drone == null:
 		return
 	var has_pad: bool = shop.drone.pad_position() != null

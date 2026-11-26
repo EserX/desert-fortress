@@ -19,6 +19,8 @@ const MapUI = preload("res://scripts/map_ui.gd")
 const Building = preload("res://scripts/building.gd")
 const BuildMode = preload("res://scripts/build_mode.gd")
 const BaseZone = preload("res://scripts/base_zone.gd")
+const Melee = preload("res://scripts/melee.gd")
+const Dummy = preload("res://scripts/dummy.gd")
 
 const DISCOVER_RANGE := 45.0
 const REFILLS_PER_MORNING := 4
@@ -51,6 +53,8 @@ var map_ui: MapUI
 var building: Building
 var build_mode: BuildMode
 var base_zone: BaseZone
+var melee: Melee
+var dummy: Dummy
 ## Wrecks and ruins: {"key": "w3", "kind": "wreck", "pos": Vector3}.
 var places: Array = []
 ## Keys of places you have been near.
@@ -93,6 +97,12 @@ func _ready() -> void:
 	base_zone.terrain = terrain
 	add_child(base_zone)
 
+	dummy = Dummy.new()
+	dummy.name = "TrainingDummy"
+	dummy.position = Vector3(-3.0, terrain.surface_height(-3.0, 4.0), 4.0)
+	dummy.rotation.y = 0.5
+	add_child(dummy)
+
 	loot = Loot.new()
 	loot.name = "Loot"
 	loot.world_seed = world_seed
@@ -128,6 +138,12 @@ func _ready() -> void:
 	inventory = Inventory.new()
 	inventory.changed.connect(func(): player.overloaded = inventory.overloaded())
 	inventory.add("hammer", 1)  # everyone starts with a hammer
+	inventory.add("pipe", 1)    # and a rusty pipe
+
+	melee = Melee.new()
+	melee.name = "Hands"
+	melee.player = player
+	player.camera.add_child(melee)
 
 	build_mode = BuildMode.new()
 	build_mode.name = "BuildMode"
@@ -172,6 +188,7 @@ func _ready() -> void:
 	add_child(map_ui)
 
 	survival.died.connect(_on_died)
+	melee.hit_landed.connect(hud.show_hitmarker)
 	survival.warning.connect(hud.show_banner)
 
 	day_night.day_started.connect(_on_morning)
@@ -194,6 +211,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif build_mode.active and _build_input(event):
 		get_viewport().set_input_as_handled()
 	elif holding_hammer() and _hammer_input(event):
+		get_viewport().set_input_as_handled()
+	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT \
+			and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and Melee.is_weapon(melee.item):
+		melee.try_swing()
 		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("interact"):
 		interact(player.interact_target())
@@ -232,6 +253,8 @@ func _process(delta: float) -> void:
 					select_hotbar(i)
 		hud.build_label.text = build_mode.status_text() if build_mode.active else ""
 		base_zone.set_highlight(build_mode.active)
+		var held: Dictionary = inventory.selected_stack()
+		melee.set_item("" if build_mode.active or survival.dead or held.is_empty() else held.item)
 		_check_station_reach()
 	if _orbit_camera:
 		_orbit_angle += delta * 0.04
@@ -327,6 +350,7 @@ func hammer_use(key: String) -> void:
 	if rec.is_empty():
 		return
 	var rep := building.repair_cost(rec)
+	melee.play_swing(0.45)
 	if not rep.is_empty():
 		if _pay(rep):
 			building.repair(key)
@@ -587,6 +611,8 @@ func apply_save_data(data: Dictionary) -> void:
 		inventory.load_data(data.inventory)
 		if inventory.count_of("hammer") == 0:
 			inventory.add("hammer", 1)  # saves from before v0.10
+		if inventory.count_of("pipe") + inventory.count_of("machete") == 0:
+			inventory.add("pipe", 1)  # saves from before v0.12
 	else:
 		# v0.4 saves kept items as a plain {item: count} list.
 		inventory.load_data({})

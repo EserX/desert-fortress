@@ -260,6 +260,7 @@ func _test_building() -> void:
 	_test_more_pieces()
 	_test_tiers()
 	_test_base()
+	_test_melee()
 	b.load_data([])
 	bm.toggle()
 	inv.load_data({})
@@ -451,6 +452,51 @@ func _test_base() -> void:
 	b.remove(sk)
 	b.remove(wk)
 	b.remove(b.cell_key(-5, -5, 0))
+
+
+## v0.12: hands, pipe and machete swings, stamina cost, training dummy.
+func _test_melee() -> void:
+	var m = main.melee
+	var d = main.dummy
+	var inv = main.inventory
+	var player = main.player
+	player.position = Vector3(-3, main.terrain.surface_height(-3, 5.6), 5.6)
+	player.rotation.y = 0.0
+	player.head.rotation.x = 0.0
+	player.head.position.y = player.EYE_HEIGHT
+	inv.load_data({})
+	inv.add_all({"pipe": 1, "machete": 1})
+	m.set_item("pipe")
+	check(m.visible and m.item == "pipe", "hands show the rusty pipe")
+	player.stamina = 100.0
+	check(m.try_swing() and is_equal_approx(player.stamina, 88.0), "a pipe swing costs 12 stamina")
+	check(not m.try_swing(), "no new swing until the last one is done")
+	var r: Dictionary = m.strike()
+	check(r.kind == "target" and d.hits == 1 and is_equal_approx(d.total_damage, 25.0), "the pipe hits the dummy for 25 (%s)" % r.kind)
+	check(d._wobble_vel.length() > 0.5, "the dummy wobbles when hit")
+	check(d.get_children().any(func(c): return c is Label3D and c.text == "25"), "the damage floats up over the dummy")
+	m.set_item("machete")
+	player.stamina = 5.0
+	check(not m.try_swing(), "too out of breath to swing")
+	player.stamina = 100.0
+	check(m.try_swing() and is_equal_approx(player.stamina, 91.0), "a machete swing costs 9 stamina")
+	m.strike()
+	check(is_equal_approx(d.total_damage, 65.0), "the machete hits for 40")
+	player.rotation.y = PI
+	check(m.strike().kind == "", "swinging at thin air hits nothing")
+	m.set_item("water")
+	check(not m.visible, "hands hide with a water bottle")
+	m.set_item("hammer")
+	check(m.visible and not m.try_swing(), "the hammer is held but not swung as a weapon")
+	m.set_item("")
+	inv.load_data({})
+	inv.add("cloth", 1)
+	inv.add("scrap", 3)
+	inv.add("wood", 1)
+	check(main.Items.craft("machete", inv) != null and inv.count_of("machete") == 1, "the workbench makes a machete")
+	inv.load_data({})
+	main.apply_save_data(main.collect_save_data())
+	check(inv.count_of("pipe") == 1, "older saves get a rusty pipe")
 
 
 func _start_ramp_walk() -> void:

@@ -25,7 +25,7 @@ One version per development run, in this order. The full plan with reasons is in
 - [x] v0.11: Base build zone shown on the ground, storage chest, workbench crafting (hammer, bandage, spike barricade)
 
 ### M4: Combat and mutant waves
-- [ ] v0.12: First-person hands, melee weapon (rusty pipe, then machete), swing and hit feedback, stamina cost, training dummy
+- [x] v0.12: First-person hands, melee weapon (rusty pipe, then machete), swing and hit feedback, stamina cost, training dummy
 - [ ] v0.13: First mutant, the Walker: wanders, spots you, chases and attacks. Health, death and a fall
 - [ ] v0.14: Wave system: siren at dusk, mutants come from the map edge at night, wave counter, night ends at dawn or when all are dead, end-of-wave summary
 - [ ] v0.15: Mutants head for the base, attack walls in their way and break in. Walls collapse

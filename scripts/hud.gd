@@ -14,6 +14,7 @@ var clock: Label
 var banner: Label
 var day_night  # DayNight
 var prompt: Label
+var hitmarker: Label
 var pickups: VBoxContainer
 var inventory  # Inventory
 var survival  # Survival
@@ -42,6 +43,15 @@ func _ready() -> void:
 	cross.size = Vector2(40, 40)
 	cross.position = -cross.size / 2
 	root.add_child(cross)
+
+	hitmarker = _label("X", 30)
+	hitmarker.set_anchors_preset(Control.PRESET_CENTER)
+	hitmarker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hitmarker.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	hitmarker.size = Vector2(40, 40)
+	hitmarker.position = -hitmarker.size / 2
+	hitmarker.modulate.a = 0.0
+	root.add_child(hitmarker)
 
 	var title := _label("DESERT FORTRESS  v%s" % ProjectSettings.get_setting("application/config/version", ""), 18)
 	title.position = Vector2(20, 16)
@@ -74,7 +84,7 @@ func _ready() -> void:
 	stamina_bar.add_theme_stylebox_override("fill", fill)
 	root.add_child(stamina_bar)
 
-	help = _label("WASD move  Shift sprint  Space jump  Ctrl crouch  E search  Tab bag  1-9 hotbar  Q drop  F eat/use  M map  B build  F5 save  Esc menu", 16)
+	help = _label("WASD move  Shift sprint  Space jump  Ctrl crouch  E search  LMB swing  Tab bag  1-9 hotbar  Q drop  F eat/use  M map  B build  F5 save  Esc menu", 16)
 	help.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	help.position = Vector2(20, -36)
 	root.add_child(help)
@@ -275,6 +285,14 @@ func set_prompt(text: String) -> void:
 
 
 ## Shows "+3 Scrap metal" lines that fade out after a few seconds.
+## Flashes an X on the crosshair: orange for a hit on a target, grey on a wall or rock.
+func show_hitmarker(kind: String) -> void:
+	hitmarker.add_theme_color_override("font_color", Color(1.0, 0.55, 0.2) if kind == "target" else Color(0.75, 0.75, 0.75))
+	hitmarker.modulate.a = 1.0
+	var tw := hitmarker.create_tween()
+	tw.tween_property(hitmarker, "modulate:a", 0.0, 0.3)
+
+
 func show_pickup(lines: Array) -> void:
 	for text in lines:
 		var l := _label(text, 20)

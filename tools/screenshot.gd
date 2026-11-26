@@ -48,6 +48,8 @@ var shots := [
 	{"name": "38_controls", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true, "page": "controls"},
 	{"name": "39_settings", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true, "page": "settings"},
 	{"name": "40_wave_map", "pos": Vector3(20, 0, 40), "yaw": 0.9, "pitch": 0.0, "hour": 21.5, "wave_map": true},
+	{"name": "41_digging", "pos": Vector3(12, 0, 13.4), "yaw": 0.0, "pitch": -0.9, "hour": 15.5, "digging": true},
+	{"name": "42_trench", "pos": Vector3(12, 12, 22), "yaw": 0.0, "pitch": -0.7, "hour": 15.5, "digging": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -132,6 +134,8 @@ func _process(_d: float) -> bool:
 			main.melee.swing_time = 0.12
 			main.dummy.take_hit(40.0, main.dummy.global_position + Vector3(0, 1.5, 0.2), Vector3(0, 0, -1))
 			main.hud.show_hitmarker("target")
+		if s.get("digging", false):
+			_digging_sample()
 		if s.get("walker", false):
 			_walker_sample(p)
 		if s.has("gun"):
@@ -491,3 +495,26 @@ func _drone_sample() -> void:
 	dr._t = 2.4
 	dr._process(0.0)
 	dr.set_process(false)
+
+
+## A trench across the view, a deep pit, a sand pile, and a wall standing by the trench.
+func _digging_sample() -> void:
+	main.waves.active = false
+	main.hud._summary_time = 0.0
+	main.building.load_data([])
+	main.mutants.clear()
+	main.terrain.load_data({})
+	main.inventory.load_data({})
+	main.inventory.add("shovel", 1)
+	main.inventory.selected = 0
+	for i in 3:
+		for x in range(6, 18):
+			main.dig_at(Vector3(x + 0.5, 0, 11.5))
+	for i in 8:
+		for o in [Vector2(-0.5, -0.5), Vector2(0.5, -0.5), Vector2(-0.5, 0.5), Vector2(0.5, 0.5)]:
+			main.dig_at(Vector3(13.0 + o.x, 0, 7.0 + o.y))
+	for i in 6:
+		main.dig_at(Vector3(9.5, 0, 7.5), true)
+	var b = main.building
+	var slot := {"kind": "edge", "cx": 5, "cz": 5, "dir": 0}
+	b.place("wall", slot, b.evaluate("wall", slot).y)

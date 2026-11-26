@@ -29,6 +29,12 @@ const REFUND := 0.5          # share of what a piece cost you get back when demo
 const UNDO_SECONDS := 60.0   # build-mode right click gives everything back this soon after building
 const ZONE_RADIUS := 26.0    # base build zone around the flag at the origin (before upgrades)
 const CHEST_SLOTS := 20      # before upgrades
+## A spiked pit goes in a hole at least this deep. A ladder is this tall.
+const PIT_DEPTH := 0.9
+const LADDER_H := 4.2
+## Dig more than this out from under a piece standing on the sand and it falls
+## (foundations take 0.4 m more).
+const UNDERMINE_GAP := 0.6
 
 signal piece_destroyed(key: String, type: String)
 ## A piece fell down because what held it up was destroyed.
@@ -59,9 +65,11 @@ const PIECES := {
 	"floodlight": {"name": "Floodlight", "slot": "obj", "cost": {"scrap": 4, "wood": 2, "nails": 2}, "dirs": 4, "fixed": true},
 	"turret": {"name": "Auto-turret", "slot": "obj", "cost": {"scrap": 18, "nails": 10, "wood": 2}, "dirs": 4, "fixed": true, "blueprint": true},
 	"landing_pad": {"name": "Drone landing pad", "slot": "obj", "cost": {"wood": 4, "scrap": 2, "nails": 4}, "dirs": 1, "fixed": true},
-	"sandbags": {"name": "Sandbag wall", "slot": "edge", "cost": {"cloth": 4, "cement": 2}, "dirs": 2, "fixed": true, "hp": 900.0, "blueprint": true},
+	"sandbags": {"name": "Sandbag wall", "slot": "edge", "cost": {"sand": 6, "cloth": 2}, "dirs": 2, "fixed": true, "hp": 900.0, "blueprint": true},
+	"ladder": {"name": "Ladder", "slot": "obj", "cost": {"wood": 4, "nails": 4}, "dirs": 4, "fixed": true, "steep_ok": true, "noblock": true},
+	"spiked_pit": {"name": "Spiked pit", "slot": "obj", "cost": {"wood": 4, "nails": 6}, "dirs": 1, "fixed": true, "trap": true, "steep_ok": true, "pit": PIT_DEPTH},
 }
-const ORDER := ["foundation", "wall", "doorway", "window", "floor", "stairs", "ramp", "roof", "chest", "workbench", "spikes", "spike_strip", "barbed_wire", "landmine", "fire_pit", "generator", "electric_fence", "floodlight", "turret", "landing_pad", "sandbags"]
+const ORDER := ["foundation", "wall", "doorway", "window", "floor", "stairs", "ramp", "roof", "chest", "workbench", "spikes", "spike_strip", "barbed_wire", "landmine", "fire_pit", "generator", "electric_fence", "floodlight", "turret", "landing_pad", "sandbags", "ladder", "spiked_pit"]
 ## Pieces marked "blueprint" must be unlocked first (blueprints come by drone).
 const TURRET_RANGE := 22.0
 const TURRET_AMMO := 240     # 9mm rounds its ammo box holds
@@ -315,8 +323,12 @@ func evaluate(type: String, slot: Dictionary) -> Dictionary:
 			return {"y": _ground_level(type, slot).y + slot.level * WALL_H, "ok": false, "reason": "Needs a wall or floor to hold it up"}
 		return {"y": sy, "ok": true, "reason": ""}
 	var g := _ground_level(type, slot)
-	if g.steep:
+	if g.steep and not PIECES[type].get("steep_ok", false):
 		return {"y": g.y, "ok": false, "reason": "Ground too steep"}
+	if PIECES[type].has("pit") and terrain and terrain.has_method("depth_at"):
+		var c := slot_center(slot)
+		if terrain.depth_at(c.x, c.z) < float(PIECES[type].pit) - 0.001:
+			return {"y": g.y, "ok": false, "reason": "Dig a pit at least 1 m deep here first (shovel)"}
 	return {"y": g.y, "ok": true, "reason": ""}
 
 
@@ -463,6 +475,21 @@ static func piece_boxes(type: String) -> Array:
 			out.append([Vector3(0.45, 0.32, 0.3), Vector3(0.0, 0.26, 0.42), "rust"])   # ammo box
 			out.append([Vector3(0.36, 0.04, 0.26), Vector3(0.0, 0.44, 0.42), "metal"])
 			out.append([Vector3(0.04, 2.9, 0.04), Vector3(0.0, 1.9, 0.12), "metal"])    # feed belt up the mast
+		"ladder":
+			# Two rails leaning on the pit wall to the north (of the way it faces), with rungs.
+			var lean := 0.1
+			for sx in [-0.28, 0.28]:
+				out.append([Vector3(0.07, LADDER_H, 0.07), Vector3(sx, LADDER_H * 0.5, -0.8), "wood_dark", lean])
+			for i in int(LADDER_H / 0.35):
+				var h := 0.3 + i * 0.35
+				out.append([Vector3(0.56, 0.05, 0.05), Vector3(0, h, -0.8 + (h - LADDER_H * 0.5) * -tan(lean)), "wood"])
+		"spiked_pit":
+			out.append([Vector3(1.9, 0.05, 1.9), Vector3(0, 0.03, 0), "wood_dark"])
+			for i in 4:
+				for j in 4:
+					var p := Vector3(-0.72 + i * 0.48, 0.0, -0.72 + j * 0.48)
+					out.append([Vector3(0.07, 0.6, 0.07), p + Vector3(0, 0.3, 0), "wood", 0.12 * (1 if (i + j) % 2 == 0 else -1)])
+					out.append([Vector3(0.035, 0.12, 0.035), p + Vector3(0, 0.64, 0), "plank"])
 		"landing_pad":
 			out.append([Vector3(1.9, 0.12, 1.9), Vector3(0, 0.06, 0), "concrete_dark"])
 			for sx in [-1.0, 1.0]:
@@ -536,6 +563,10 @@ static func piece_colliders(type: String) -> Array:
 			return [[Vector3(1.9, 0.14, 1.9), Vector3(0, 0.07, 0), 0.0]]
 		"sandbags":
 			return [[Vector3(CELL, 0.95, 0.45), Vector3(0, 0.47, 0), 0.0]]
+		"ladder":
+			return [[Vector3(0.7, LADDER_H, 0.3), Vector3(0, LADDER_H * 0.5, -0.8), 0.0]]
+		"spiked_pit":
+			return [[Vector3(1.8, 0.6, 1.8), Vector3(0, 0.3, 0), 0.0]]
 	return []
 
 
@@ -584,7 +615,7 @@ func place(type: String, slot: Dictionary, y: float, gate_open := false, tier :=
 		col.position = c[1]
 		col.rotation.x = c[2]
 		body.add_child(col)
-	if PIECES[type].get("trap", false):
+	if PIECES[type].get("trap", false) or PIECES[type].get("noblock", false):
 		body.collision_layer = TRAP_LAYER
 		body.collision_mask = 0
 	add_child(body)
@@ -1003,6 +1034,96 @@ func collapse_unsupported() -> int:
 			piece_collapsed.emit(key, rec.type)
 			fell += 1
 	return fell
+
+
+## True if a person standing at pos is on a ladder (can climb it).
+func on_ladder(pos: Vector3) -> bool:
+	for key in keys_of(["ladder"]):
+		var local: Vector3 = pieces[key].node.global_transform.affine_inverse() * pos
+		if absf(local.x) < 0.65 and local.z > -2.0 and local.z < 0.1 and local.y > -0.4 and local.y < LADDER_H + 0.2:
+			return true
+	return false
+
+
+## A new foundation fills the sand under it up to its bottom (no gaps under it).
+func level_under(key: String) -> void:
+	var rec: Dictionary = pieces.get(key, {})
+	if rec.is_empty() or rec.type != "foundation" or terrain == null or not terrain.has_method("raise_area"):
+		return
+	var x0: float = rec.slot.cx * CELL
+	var z0: float = rec.slot.cz * CELL
+	terrain.raise_area(Rect2(x0, z0, CELL, CELL), rec.y - FOUNDATION_H)
+
+
+## The ground changed (digging): pieces standing on the sand nearby are checked.
+## Things like chests and traps settle onto the new ground; walls, foundations
+## and the rest fall down if too much was dug out from under them, and whatever
+## they held up comes down too. Returns how many pieces fell.
+func settle(area: Rect2) -> int:
+	var near := area.grow(CELL * 1.5)
+	var fell := 0
+	# Foundations first, then what stands on them or on the sand, then objects.
+	for pass_i in 3:
+		for key in pieces.keys():
+			if not pieces.has(key):
+				continue
+			var rec: Dictionary = pieces[key]
+			if rec.slot.level != 0:
+				continue
+			var c := slot_center(rec.slot, rec.type)
+			if not near.has_point(Vector2(c.x, c.z)):
+				continue
+			var is_obj: bool = rec.slot.kind == "obj"
+			if (pass_i == 0) != (rec.type == "foundation") or (pass_i == 2) != is_obj:
+				continue
+			if is_obj:
+				_reseat(rec)
+			elif undermined(rec):
+				_debris(rec)
+				remove(key)
+				piece_collapsed.emit(key, rec.type)
+				fell += 1
+	if fell > 0:
+		fell += collapse_unsupported()
+		# Objects that stood on a fallen foundation drop to the sand.
+		for key in pieces.keys():
+			if pieces.has(key) and pieces[key].slot.kind == "obj" and pieces[key].slot.level == 0:
+				_reseat(pieces[key])
+	return fell
+
+
+## True if a ground-level piece has lost the sand under it (see UNDERMINE_GAP):
+## under its middle, or under half of the points it stands on.
+func undermined(rec: Dictionary) -> bool:
+	var slot: Dictionary = rec.slot
+	if rec.type != "foundation":
+		if slot.kind == "cell" and not is_nan(foundation_top(slot.cx, slot.cz)):
+			return false
+		if slot.kind == "edge":
+			for c in edge_cells(slot):
+				if not is_nan(foundation_top(c.x, c.y)):
+					return false
+	var bottom: float = rec.y - (FOUNDATION_H if rec.type == "foundation" else 0.0)
+	# Foundations may stand on a slope already (up to MAX_SLOPE), so they take a bit more.
+	var limit := UNDERMINE_GAP + (0.4 if rec.type == "foundation" else 0.0)
+	var g := _ground_samples(rec.type, slot)
+	var gaps := 0
+	for h in g:
+		if bottom - h > limit:
+			gaps += 1
+	# The middle sample is the last of each square (or of the edge).
+	return gaps * 2 >= g.size() or bottom - g[g.size() - 1] > limit
+
+
+## Moves an object on the sand (not on a foundation or floor) to the ground under it.
+func _reseat(rec: Dictionary) -> void:
+	var under := piece_at(cell_key(rec.slot.cx, rec.slot.cz, 0))
+	if not under.is_empty() and under.type in ["foundation", "floor"]:
+		return
+	var y: float = _ground_level(rec.type, rec.slot).y
+	if absf(y - rec.y) > 0.001:
+		rec.y = y
+		rec.node.position.y = y
 
 
 ## Broken boards and chunks tumble to the ground in a puff of dust, with a crash.

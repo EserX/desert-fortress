@@ -1,6 +1,6 @@
 extends Node3D
 ## Makes the trap pieces bite. Ten times a second it checks which mutants are
-## standing on a spike strip, in barbed wire or on a landmine. Traps wear out
+## standing on a spike strip, in barbed wire, on a landmine or in a spiked pit. Traps wear out
 ## as they work (their hit points go down) and mines go off once.
 ## The player can walk over traps safely (they are set for mutant weight),
 ## but a mine's blast hurts anyone close.
@@ -20,6 +20,9 @@ const MINE_PIECE_DAMAGE := 120.0
 const SHOCK_DAMAGE := 20.0     # electric fence, per jolt
 const SHOCK_EVERY := 0.5
 const FIRE_DPS := 12.0
+const PIT_DAMAGE := 30.0       # spiked pit, per bite
+const PIT_EVERY := 1.0
+const PIT_WEAR := 8.0
 
 signal player_hurt(damage: float, from: Vector3, cause: String)
 signal exploded(pos: Vector3)
@@ -45,6 +48,8 @@ func _on_trap(rec: Dictionary, m: Node3D) -> bool:
 			return absf(local.x) < 1.05 and absf(local.z) < 0.8 and local.y > -0.5 and local.y < 2.0
 		"fire_pit":
 			return Vector2(local.x, local.z).length() < 0.85
+		"spiked_pit":
+			return absf(local.x) < 1.0 and absf(local.z) < 1.0 and local.y < 0.9
 		_:
 			return absf(local.x) < 1.0 and absf(local.z) < 0.55
 
@@ -69,7 +74,7 @@ func _physics_process(delta: float) -> void:
 ## One check of every trap against every mutant.
 func tick(dt: float) -> void:
 	var traps: Array = []
-	for key in building.keys_of(["spike_strip", "barbed_wire", "landmine", "electric_fence", "fire_pit"]):
+	for key in building.keys_of(["spike_strip", "barbed_wire", "landmine", "electric_fence", "fire_pit", "spiked_pit"]):
 		var rec: Dictionary = building.pieces[key]
 		if building.PIECES[rec.type].get("trap", false) or rec.get("powered", false) or rec.get("burn", 0.0) > 0.0:
 			traps.append(key)
@@ -90,6 +95,13 @@ func tick(dt: float) -> void:
 						_bites[bk] = STRIP_EVERY
 						m.hurt(STRIP_DAMAGE)
 						building.damage(key, STRIP_WEAR)
+				"spiked_pit":
+					m.slow(0.3)
+					var bk := "%s|%d" % [key, m.get_instance_id()]
+					if not _bites.has(bk):
+						_bites[bk] = PIT_EVERY
+						m.hurt(PIT_DAMAGE)
+						building.damage(key, PIT_WEAR)
 				"barbed_wire":
 					m.slow(WIRE_SLOW)
 					m.hurt(WIRE_DPS * dt)

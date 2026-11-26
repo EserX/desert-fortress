@@ -190,7 +190,8 @@ func try_place() -> bool:
 	var cost: Dictionary = Building.PIECES[type].cost
 	for item in cost:
 		inventory.remove(item, cost[item])
-	building.place(type, slot, base_y)
+	var key: String = building.place(type, slot, base_y)
+	building.level_under(key)
 	return true
 
 

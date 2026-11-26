@@ -36,6 +36,8 @@ If `git pull` complains about untracked `.uid` files, they are safe to delete.
 
 **Building.** Press **B** near the flag. Pick a piece with the mouse wheel (or 1–9), turn it with **R**, build with left click. Everything must be inside the ring of stakes (the base zone). Right click undoes a piece built in the last minute. With the **hammer** selected, left click a piece to repair it or upgrade it (wood, then scrap metal, then concrete), and right click twice to demolish it for half the cost back. Upstairs pieces need walls or floors under them; if those break, they fall.
 
+**Digging.** Make a **shovel** at the workbench (3 scrap, 2 wood) or buy one at the shop ($40). Around the base (within about 48 m of the flag) the ground can be dug: hold the shovel and left click to dig out the 1 m square under the crosshair (a yellow square shows it). Each dig lowers it 25 cm and gives you a bag of **sand**; right click fills it back in with a bag of sand. Digging a row of squares makes a level trench. You hit **bedrock** 4 m down, and you can pile sand up to 2 m high. Careful near your base: dig the sand out from under a wall or foundation and it falls down, with everything it held up. Chests, traps and other things on the sand just settle into the hole. Nothing can be dug under the flag, the shop terminal, rocks or wrecks.
+
 **Nights.** At 18:30 a siren warns you. At 20:00 a wave of mutants comes in from the edge of the map and marches on the base. Close to you they know where you are, walls or not, and tear through anything in their way. The wave ends when all are dead or at dawn. A summary shows your kills and your pay.
 
 | Mutant | What to know |
@@ -65,8 +67,8 @@ If `git pull` complains about untracked `.uid` files, they are safe to delete.
 | Space | Jump |
 | Ctrl / C | Crouch (quieter) |
 | Mouse | Look |
-| Left click | Swing, shoot, build, or use the hammer |
-| Right click | Aim a gun; hammer: demolish; build mode: undo |
+| Left click | Swing, shoot, build, use the hammer, or dig with the shovel |
+| Right click | Aim a gun; hammer: demolish; shovel: fill; build mode: undo |
 | R | Reload; build mode: turn the piece |
 | E | Search, open, use (gates, chests, workbench, generator, fire pit, turret, shop) |
 | Tab / I | Inventory |

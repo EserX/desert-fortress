@@ -4,7 +4,7 @@ extends SceneTree
 ## it play out for a few thousand frames. Reports how the night went, how long
 ## frames took, and fails if anything odd happened (errors show in the log).
 ##   godot --headless --path . -s tools/soak_test.gd --fixed-fps 60
-## Optional: -- wave=8 frames=4000
+## Optional: -- wave=8 frames=4000 walls=1 away=1 trench=1
 
 var main: Node
 var frame := 0
@@ -17,6 +17,7 @@ var _max_alive := 0
 var _kills0 := 0
 var walls_only := false  # -- walls=1: just the ring of walls, no traps or turrets
 var away := false   # -- away=1: the player is far out in the desert all night
+var trench := false  # -- trench=1: a 2.25 m deep trench ring 14 m out from the flag
 
 
 func _initialize() -> void:
@@ -29,6 +30,8 @@ func _initialize() -> void:
 			walls_only = true
 		elif arg == "away=1":
 			away = true
+		elif arg == "trench=1":
+			trench = true
 	main = load("res://scenes/main.tscn").instantiate()
 	root.add_child(main)
 
@@ -48,6 +51,17 @@ func _fortress() -> void:
 		place.call("wall" if i != 0 else "doorway", "edge", i, 3)
 		place.call("wall", "edge", -3, i, 1)
 		place.call("wall", "edge", 3, i, 1)
+	if trench:
+		var t = main.terrain
+		var cells := {}
+		for i in range(-15, 15):
+			for e in [-15, 14]:
+				cells[Vector2i(i, e)] = true
+				cells[Vector2i(e, i)] = true
+		for n in 9:
+			for c in cells:
+				t.dig(c.x + 0.5, c.y + 0.5)
+		print("trench: %d cells, %.2f m deep" % [cells.size(), t.cell_depth(t.dig_cell(0.5, 14.5))])
 	if walls_only:
 		print("fortress: %d pieces (walls only)" % b.pieces.size())
 		return
@@ -98,6 +112,11 @@ func _process(delta: float) -> bool:
 		var real := (Time.get_ticks_usec() - _t0) / 1000.0
 		for m in main.mutants.alive():
 			print("   left: %s state=%d at %s (%.0f m from the flag) hp %.0f break=%s blocked_by=%s" % [m.type, m.state, m.global_position.snapped(Vector3.ONE * 0.1), Vector2(m.global_position.x, m.global_position.z).length(), m.health, m.break_key, m._blocking_piece(-m.global_transform.basis.z)])
+		var in_trench := 0
+		for m in main.mutants.alive():
+			if m.global_position.y < main.terrain.BASE_HEIGHT - 1.0:
+				in_trench += 1
+		print("   mutants down in a hole: %d" % in_trench)
 		print("== SOAK DONE after %d frames: wave active=%s, kills %d, most alive at once %d, pieces left %d" % [frame, main.waves.active, main.mutants.kills - _kills0, _max_alive, main.building.pieces.size()])
 		print("   real time %.0f ms for %d frames (%.2f ms per frame, headless, no rendering)" % [real, frame - 5, real / maxf(frame - 5, 1)])
 		quit(0)

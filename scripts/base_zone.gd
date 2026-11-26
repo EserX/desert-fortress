@@ -30,6 +30,16 @@ func set_radius(r: float) -> void:
 	_glow.visible = lit
 
 
+## The ground under the ring changed (digging): stand the stakes on it again.
+func rebuild() -> void:
+	var lit := _glow.visible
+	for c in get_children():
+		remove_child(c)
+		c.queue_free()
+	_build()
+	_glow.visible = lit
+
+
 func _build() -> void:
 	var r := radius
 	var stake := BoxMesh.new()

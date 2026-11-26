@@ -1526,6 +1526,119 @@ func _check_digging() -> void:
 	main.player.position = main.player.spawn_point
 
 
+var pit_walker: Node
+var deep_walker: Node
+
+
+## Digs a 2 x 2 m pit centred on (x, z), `times` digs deep.
+func _dig_pit(x: float, z: float, times: int) -> void:
+	for i in times:
+		for o in [Vector2(-0.5, -0.5), Vector2(0.5, -0.5), Vector2(-0.5, 0.5), Vector2(0.5, 0.5)]:
+			main.dig_at(Vector3(x + o.x, 0, z + o.y))
+
+
+## v1.2: trenches and pits. A walker in a 1.5 m pit and one in a 2.25 m pit.
+func _start_pits() -> void:
+	main.inventory.load_data({})
+	main.mutants.clear()
+	main.terrain.load_data({})
+	main.building.load_data([])
+	main.player.position = Vector3(-30, main.terrain.surface_height(-30, 30), 30)
+	_dig_pit(14.0, -14.0, 6)
+	_dig_pit(-14.0, -14.0, 9)
+	check(absf(main.terrain.cell_depth(main.terrain.dig_cell(-14.5, -14.5)) - 2.25) < 0.01, "a 2.25 m pit dug")
+	pit_walker = main.mutants.spawn("walker", Vector3(14.0, 0, -14.0))
+	pit_walker.make_hunter(Vector3(14.0, 0, -26.0))
+	deep_walker = main.mutants.spawn("walker", Vector3(-14.0, 0, -14.0))
+	deep_walker.make_hunter(Vector3(-14.0, 0, -26.0))
+
+
+func _check_pits() -> void:
+	var t = main.terrain
+	var d1: float = Vector2(pit_walker.global_position.x - 14.0, pit_walker.global_position.z + 14.0).length()
+	print("    pit walker at ", pit_walker.global_position, "  deep walker at ", deep_walker.global_position)
+	check(d1 > 2.5 and pit_walker.global_position.y > t.BASE_HEIGHT - 0.3, "a walker climbs out of a 1.5 m pit (%.1f m from it)" % d1)
+	var d2: float = Vector2(deep_walker.global_position.x + 14.0, deep_walker.global_position.z + 14.0).length()
+	check(d2 < 1.6 and deep_walker.global_position.y < t.BASE_HEIGHT - 1.5, "but a 2.25 m pit holds one (y %.2f)" % deep_walker.global_position.y)
+	main.mutants.clear()
+
+
+## v1.2: spiked pit, ladder, sandbags and foundations levelling the sand (no physics needed).
+func _test_trench_pieces() -> void:
+	var b = main.building
+	var t = main.terrain
+	main.inventory.load_data({})
+	check(b.PIECES.sandbags.cost.has("sand") and b.PIECES.sandbags.cost.has("cloth"), "sandbags are made of sand and cloth")
+	# Spiked pit: only in a hole.
+	var ps := {"kind": "obj", "cx": 5, "cz": -8, "dir": 0}  # x 10..12, z -16..-14
+	var ev: Dictionary = b.evaluate("spiked_pit", ps)
+	check(not ev.ok and ev.reason.begins_with("Dig a pit"), "a spiked pit needs a hole: " + ev.reason)
+	_dig_pit(11.0, -15.0, 4)
+	ev = b.evaluate("spiked_pit", ps)
+	check(ev.ok and absf(ev.y - (t.BASE_HEIGHT - 1.0)) < 0.01, "and fits in a 1 m pit (%s)" % ev.reason)
+	var pk: String = b.place("spiked_pit", ps, ev.y)
+	var m = main.mutants.spawn("walker", Vector3(11.0, 0, -15.0))
+	m.set_physics_process(false)
+	main.traps.tick(0.1)
+	check(m.health < 100.0 and m.slow_mult < 1.0, "the stakes hurt and slow a mutant in the pit (%.0f)" % m.health)
+	var hp: float = m.health
+	main.traps.tick(0.1)
+	check(is_equal_approx(m.health, hp), "once a second, not every tick")
+	check(b.pieces[pk].hp < b.max_hp(b.pieces[pk]), "the stakes wear out")
+	main.mutants.clear()
+	# Ladder: stands in a pit, you climb it from in front.
+	var ls := {"kind": "obj", "cx": 6, "cz": -8, "dir": 0}  # next to the spiked pit, on the slope
+	_dig_pit(13.0, -15.0, 4)
+	ev = b.evaluate("ladder", ls)
+	check(ev.ok, "a ladder can stand in a pit (%s)" % ev.reason)
+	b.place("ladder", ls, ev.y)
+	check(b.on_ladder(Vector3(13.0, ev.y, -15.3)) and not b.on_ladder(Vector3(13.0, ev.y, -13.0)) and not b.on_ladder(Vector3(14.0, ev.y, -15.3)), "you are on the ladder only right in front of it")
+	check(b.on_ladder(Vector3(13.0, ev.y + 2.0, -15.6)), "and on the way up")
+	# Foundations fill the sand under them.
+	t.load_data({})
+	b.load_data([])
+	for i in 2:
+		main.dig_at(Vector3(16.5, 0, 16.5))
+	var fs := {"kind": "cell", "cx": 8, "cz": 8, "dir": 0}  # x 16..18, z 16..18
+	ev = b.evaluate("foundation", fs)
+	var fk: String = b.place("foundation", fs, ev.y)
+	b.level_under(fk)
+	var bottom: float = ev.y - b.FOUNDATION_H
+	check(t.surface_height(16.0, 16.0) > bottom - 0.001 and t.surface_height(17.0, 17.0) > bottom - 0.001, "a foundation fills the hole under it up to its bottom (%.2f)" % t.surface_height(16.5, 16.5))
+	check(absf(t.surface_height(15.0, 16.0) - t.BASE_HEIGHT) < 0.01, "and nothing outside it")
+	var bm_src: String = FileAccess.get_file_as_string("res://scripts/build_mode.gd")
+	check("level_under" in bm_src, "building a foundation levels the sand")
+	b.load_data([])
+	t.load_data({})
+
+
+var ladder_top := 0.0
+
+
+## v1.2 physics: climbing a ladder out of a 2.25 m pit.
+func _start_ladder() -> void:
+	var b = main.building
+	_dig_pit(-7.0, 11.0, 9)
+	var ls := {"kind": "obj", "cx": -4, "cz": 5, "dir": 0}  # x -8..-6, z 10..12
+	var ev: Dictionary = b.evaluate("ladder", ls)
+	b.place("ladder", ls, ev.y)
+	ladder_top = main.terrain.surface_height(-7.0, 8.5)
+	var p = main.player
+	p.position = Vector3(-7.0, ev.y + 0.05, 11.2)
+	p.velocity = Vector3.ZERO
+	p.rotation.y = 0.0  # facing north, the ladder
+	Input.action_press("move_forward")
+
+
+func _check_ladder() -> void:
+	Input.action_release("move_forward")
+	var p = main.player
+	check(p.position.y > ladder_top - 0.2 and p.position.z < 10.0, "you climb a ladder out of a 2.25 m pit (y %.2f, z %.2f)" % [p.position.y, p.position.z])
+	main.building.load_data([])
+	main.terrain.load_data({})
+	p.position = p.spawn_point
+
+
 func _process(_delta: float) -> bool:
 	frame += 1
 	var player = main.player
@@ -1734,6 +1847,15 @@ func _process(_delta: float) -> bool:
 		2640:
 			_check_digging()
 		2650:
+			_start_pits()
+		3130:
+			_check_pits()
+		3135:
+			_test_trench_pieces()
+			_start_ladder()
+		3300:
+			_check_ladder()
+		3310:
 			if failures.is_empty():
 				print("== ALL TESTS PASSED ==")
 				quit(0)

@@ -29,6 +29,9 @@ const REFUND := 0.5          # share of what a piece cost you get back when demo
 const UNDO_SECONDS := 60.0   # build-mode right click gives everything back this soon after building
 const ZONE_RADIUS := 26.0    # base build zone around the flag at the origin (before upgrades)
 const CHEST_SLOTS := 20      # before upgrades
+## A spiked pit goes in a hole at least this deep. A ladder is this tall.
+const PIT_DEPTH := 0.9
+const LADDER_H := 4.2
 ## Dig more than this out from under a piece standing on the sand and it falls
 ## (foundations take 0.4 m more).
 const UNDERMINE_GAP := 0.6
@@ -62,9 +65,11 @@ const PIECES := {
 	"floodlight": {"name": "Floodlight", "slot": "obj", "cost": {"scrap": 4, "wood": 2, "nails": 2}, "dirs": 4, "fixed": true},
 	"turret": {"name": "Auto-turret", "slot": "obj", "cost": {"scrap": 18, "nails": 10, "wood": 2}, "dirs": 4, "fixed": true, "blueprint": true},
 	"landing_pad": {"name": "Drone landing pad", "slot": "obj", "cost": {"wood": 4, "scrap": 2, "nails": 4}, "dirs": 1, "fixed": true},
-	"sandbags": {"name": "Sandbag wall", "slot": "edge", "cost": {"cloth": 4, "cement": 2}, "dirs": 2, "fixed": true, "hp": 900.0, "blueprint": true},
+	"sandbags": {"name": "Sandbag wall", "slot": "edge", "cost": {"sand": 6, "cloth": 2}, "dirs": 2, "fixed": true, "hp": 900.0, "blueprint": true},
+	"ladder": {"name": "Ladder", "slot": "obj", "cost": {"wood": 4, "nails": 4}, "dirs": 4, "fixed": true, "steep_ok": true, "noblock": true},
+	"spiked_pit": {"name": "Spiked pit", "slot": "obj", "cost": {"wood": 4, "nails": 6}, "dirs": 1, "fixed": true, "trap": true, "steep_ok": true, "pit": PIT_DEPTH},
 }
-const ORDER := ["foundation", "wall", "doorway", "window", "floor", "stairs", "ramp", "roof", "chest", "workbench", "spikes", "spike_strip", "barbed_wire", "landmine", "fire_pit", "generator", "electric_fence", "floodlight", "turret", "landing_pad", "sandbags"]
+const ORDER := ["foundation", "wall", "doorway", "window", "floor", "stairs", "ramp", "roof", "chest", "workbench", "spikes", "spike_strip", "barbed_wire", "landmine", "fire_pit", "generator", "electric_fence", "floodlight", "turret", "landing_pad", "sandbags", "ladder", "spiked_pit"]
 ## Pieces marked "blueprint" must be unlocked first (blueprints come by drone).
 const TURRET_RANGE := 22.0
 const TURRET_AMMO := 240     # 9mm rounds its ammo box holds
@@ -318,8 +323,12 @@ func evaluate(type: String, slot: Dictionary) -> Dictionary:
 			return {"y": _ground_level(type, slot).y + slot.level * WALL_H, "ok": false, "reason": "Needs a wall or floor to hold it up"}
 		return {"y": sy, "ok": true, "reason": ""}
 	var g := _ground_level(type, slot)
-	if g.steep:
+	if g.steep and not PIECES[type].get("steep_ok", false):
 		return {"y": g.y, "ok": false, "reason": "Ground too steep"}
+	if PIECES[type].has("pit") and terrain and terrain.has_method("depth_at"):
+		var c := slot_center(slot)
+		if terrain.depth_at(c.x, c.z) < float(PIECES[type].pit) - 0.001:
+			return {"y": g.y, "ok": false, "reason": "Dig a pit at least 1 m deep here first (shovel)"}
 	return {"y": g.y, "ok": true, "reason": ""}
 
 
@@ -466,6 +475,21 @@ static func piece_boxes(type: String) -> Array:
 			out.append([Vector3(0.45, 0.32, 0.3), Vector3(0.0, 0.26, 0.42), "rust"])   # ammo box
 			out.append([Vector3(0.36, 0.04, 0.26), Vector3(0.0, 0.44, 0.42), "metal"])
 			out.append([Vector3(0.04, 2.9, 0.04), Vector3(0.0, 1.9, 0.12), "metal"])    # feed belt up the mast
+		"ladder":
+			# Two rails leaning on the pit wall to the north (of the way it faces), with rungs.
+			var lean := 0.1
+			for sx in [-0.28, 0.28]:
+				out.append([Vector3(0.07, LADDER_H, 0.07), Vector3(sx, LADDER_H * 0.5, -0.8), "wood_dark", lean])
+			for i in int(LADDER_H / 0.35):
+				var h := 0.3 + i * 0.35
+				out.append([Vector3(0.56, 0.05, 0.05), Vector3(0, h, -0.8 + (h - LADDER_H * 0.5) * -tan(lean)), "wood"])
+		"spiked_pit":
+			out.append([Vector3(1.9, 0.05, 1.9), Vector3(0, 0.03, 0), "wood_dark"])
+			for i in 4:
+				for j in 4:
+					var p := Vector3(-0.72 + i * 0.48, 0.0, -0.72 + j * 0.48)
+					out.append([Vector3(0.07, 0.6, 0.07), p + Vector3(0, 0.3, 0), "wood", 0.12 * (1 if (i + j) % 2 == 0 else -1)])
+					out.append([Vector3(0.035, 0.12, 0.035), p + Vector3(0, 0.64, 0), "plank"])
 		"landing_pad":
 			out.append([Vector3(1.9, 0.12, 1.9), Vector3(0, 0.06, 0), "concrete_dark"])
 			for sx in [-1.0, 1.0]:
@@ -539,6 +563,10 @@ static func piece_colliders(type: String) -> Array:
 			return [[Vector3(1.9, 0.14, 1.9), Vector3(0, 0.07, 0), 0.0]]
 		"sandbags":
 			return [[Vector3(CELL, 0.95, 0.45), Vector3(0, 0.47, 0), 0.0]]
+		"ladder":
+			return [[Vector3(0.7, LADDER_H, 0.3), Vector3(0, LADDER_H * 0.5, -0.8), 0.0]]
+		"spiked_pit":
+			return [[Vector3(1.8, 0.6, 1.8), Vector3(0, 0.3, 0), 0.0]]
 	return []
 
 
@@ -587,7 +615,7 @@ func place(type: String, slot: Dictionary, y: float, gate_open := false, tier :=
 		col.position = c[1]
 		col.rotation.x = c[2]
 		body.add_child(col)
-	if PIECES[type].get("trap", false):
+	if PIECES[type].get("trap", false) or PIECES[type].get("noblock", false):
 		body.collision_layer = TRAP_LAYER
 		body.collision_mask = 0
 	add_child(body)
@@ -1006,6 +1034,25 @@ func collapse_unsupported() -> int:
 			piece_collapsed.emit(key, rec.type)
 			fell += 1
 	return fell
+
+
+## True if a person standing at pos is on a ladder (can climb it).
+func on_ladder(pos: Vector3) -> bool:
+	for key in keys_of(["ladder"]):
+		var local: Vector3 = pieces[key].node.global_transform.affine_inverse() * pos
+		if absf(local.x) < 0.65 and local.z > -2.0 and local.z < 0.1 and local.y > -0.4 and local.y < LADDER_H + 0.2:
+			return true
+	return false
+
+
+## A new foundation fills the sand under it up to its bottom (no gaps under it).
+func level_under(key: String) -> void:
+	var rec: Dictionary = pieces.get(key, {})
+	if rec.is_empty() or rec.type != "foundation" or terrain == null or not terrain.has_method("raise_area"):
+		return
+	var x0: float = rec.slot.cx * CELL
+	var z0: float = rec.slot.cz * CELL
+	terrain.raise_area(Rect2(x0, z0, CELL, CELL), rec.y - FOUNDATION_H)
 
 
 ## The ground changed (digging): pieces standing on the sand nearby are checked.

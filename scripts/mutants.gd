@@ -52,6 +52,7 @@ func spawn(kind: String, pos: Vector3, hp := -1.0) -> Mutant:
 	m.target = player
 	m.target_dead = player_dead
 	m.building = building
+	m.terrain = terrain
 	m.piece_hit.connect(func(k): piece_hit.emit(k))
 	m.sounds = _sounds
 	m.rotation.y = _rng.randf() * TAU

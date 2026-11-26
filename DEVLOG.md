@@ -2,6 +2,18 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v1.2.0 (2026-11-26): Trenches and pits
+- **Mutants and pits:** mutants walk or fall into holes, and climb a steep sand wall slowly: walkers and spitters at 0.35 m/s, runners at 0.55, brutes at 0.22. A wall **2 m high or more holds them** (they can't climb it, and pushing no longer slides them up the sand). In the soak test (wave 8, walls only, you away all night), a 2.25 m deep trench ring 14 m out caught **15 of 23** mutants and only 1 wall was lost; without the trench, 20 of 24 walls were torn down.
+- **Spiked pit** (4 wood, 6 nails, build mode): goes in a hole at least 1 m deep ("Dig a pit at least 1 m deep here first"). Its stakes bite a mutant in it for 30 every second and slow it to 30% (climbing out too), and they wear out.
+- **Ladder** (4 wood, 4 nails): stands in a pit (steep ground is fine). Walk into it and hold W to climb, S to climb down. Mutants can't use it. You can also dig yourself a ramp out with the shovel (steps of 25 to 50 cm).
+- **Sandbags** are now made of **6 sand and 2 cloth** (were 4 cloth and 2 cement). They still need their blueprint.
+- **Foundations level the ground:** building a foundation fills the sand under it up to its bottom, so a foundation over a dip or a dug hole has no gap under it.
+- Soak test option `trench=1`, and it reports how many mutants are down in a hole.
+- **Tests (15 new):** a walker climbs out of a 1.5 m pit and one stays in a 2.25 m pit, the sandbag cost, the spiked pit needing a hole and then biting (once a second) and wearing out, the ladder standing in a pit and where you can climb it, you climbing a ladder out of a 2.25 m pit, and a foundation filling a hole under it but nothing outside.
+
+**Try:** dig a trench 2.25 m deep (9 digs per square) round your walls, leave a way in over a ladder or a dug ramp for yourself, and put a spiked pit where they fall in.
+**Next:** v1.3, mining: a pickaxe, breakable rocks for stone, clay and stone layers, a stone building tier and buried caches.
+
 ## v1.1.0 (2026-11-26): Deformable ground and the shovel
 - **Diggable ground around the base.** The ground within 48 m of the flag (a 96 × 96 m square, covering even the biggest build zone) is now a finer grid of **1 m squares** in 36 chunks of 16 × 16. Only the chunks around a change are rebuilt (mesh and collision). The rest of the map keeps the old 4 m grid. The two meet without gaps, and the existing test that checks the collision against the height sampler at 200 random points still passes.
 - **Shovel** (workbench: 3 scrap, 2 wood; shop: $40). Hold it and left click to **dig** the square under the crosshair (a yellow square marks it, reach 4 m): it drops 25 cm and you get a bag of **sand** (1 kg). Right click **fills** a square with a bag of sand. A dig brings the square's highest corner down 25 cm and the other corners down to it, and a fill does the same upwards from the lowest corner. So a row of digs makes a level trench, and digging again flattens a tilted square before going deeper. The prompt shows how deep a square is dug, or how high it is piled.

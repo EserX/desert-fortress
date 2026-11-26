@@ -186,6 +186,7 @@ func _ready() -> void:
 	player.position = spawn
 	player.spawn_point = spawn
 	player.play_radius = terrain.PLAY_RADIUS
+	player.ladder_check = building.on_ladder
 	add_child(player)
 	_apply_quality()
 

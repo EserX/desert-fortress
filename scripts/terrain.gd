@@ -286,6 +286,41 @@ func fill(x: float, z: float) -> bool:
 	return _shape_cell(c, func(base: float, d: float) -> float: return minf(maxf(base + d, target) - base, MAX_RAISE))
 
 
+## How deep the ground is dug at world (x, z), at the nearest grid corner (0 outside).
+func depth_at(x: float, z: float) -> float:
+	var ix := roundi(x + DIG_HALF)
+	var iz := roundi(z + DIG_HALF)
+	if ix < 0 or iz < 0 or ix > DIG_CELLS or iz > DIG_CELLS:
+		return 0.0
+	return -vertex_delta(ix, iz)
+
+
+## Raises every grid corner inside area (x, z, edges included) that is lower than
+## height h up to h (foundations do this). Returns true if anything moved.
+func raise_area(area: Rect2, h: float) -> bool:
+	var n := DIG_CELLS + 1
+	var moved := false
+	var cells: Array = []
+	for iz in range(maxi(ceili(area.position.y + DIG_HALF), 0), mini(floori(area.end.y + DIG_HALF), DIG_CELLS) + 1):
+		for ix in range(maxi(ceili(area.position.x + DIG_HALF), 0), mini(floori(area.end.x + DIG_HALF), DIG_CELLS) + 1):
+			var i := iz * n + ix
+			var d := minf(h - fine_base[i], MAX_RAISE)
+			if d > delta[i] + 0.0005:
+				delta[i] = d
+				moved = true
+				cells.append(Vector2i(mini(ix, DIG_CELLS - 1), mini(iz, DIG_CELLS - 1)))
+	if not moved:
+		return false
+	var done := {}
+	for c in cells:
+		var k := Vector2i(c.x / CHUNK, c.y / CHUNK)
+		if not done.has(k):
+			done[k] = true
+			_rebuild_around(c)
+	ground_changed.emit(area.grow(1.0))
+	return true
+
+
 ## True if the cell can't go any deeper.
 func at_bedrock(x: float, z: float) -> bool:
 	var c := dig_cell(x, z)

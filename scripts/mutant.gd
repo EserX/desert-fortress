@@ -16,25 +16,25 @@ const TYPES := {
 		"name": "Walker", "health": 100.0, "walk": 1.1, "march": 2.2, "run": 3.3,
 		"sight": 24.0, "sight_night": 15.0, "hear": 9.0, "lose": 38.0,
 		"damage": 12.0, "reach": 1.7, "windup": 0.45, "cooldown": 1.4, "wall_damage": 20.0,
-		"skin": Color(0.46, 0.53, 0.38), "scale": Vector3(1, 1, 1), "push": 1.0, "pitch": 1.0,
+		"skin": Color(0.46, 0.53, 0.38), "scale": Vector3(1, 1, 1), "push": 1.0, "pitch": 1.0, "climb": 0.35,
 	},
 	"runner": {
 		"name": "Runner", "health": 45.0, "walk": 1.6, "march": 3.4, "run": 6.4,
 		"sight": 28.0, "sight_night": 18.0, "hear": 11.0, "lose": 45.0,
 		"damage": 7.0, "reach": 1.6, "windup": 0.25, "cooldown": 0.8, "wall_damage": 8.0,
-		"skin": Color(0.62, 0.42, 0.36), "scale": Vector3(0.82, 0.95, 0.82), "push": 1.6, "pitch": 1.45,
+		"skin": Color(0.62, 0.42, 0.36), "scale": Vector3(0.82, 0.95, 0.82), "push": 1.6, "pitch": 1.45, "climb": 0.55,
 	},
 	"brute": {
 		"name": "Brute", "health": 420.0, "walk": 0.9, "march": 1.7, "run": 2.5,
 		"sight": 22.0, "sight_night": 14.0, "hear": 8.0, "lose": 34.0,
 		"damage": 30.0, "reach": 2.3, "windup": 0.8, "cooldown": 2.2, "wall_damage": 95.0,
-		"skin": Color(0.48, 0.44, 0.52), "scale": Vector3(1.55, 1.35, 1.45), "push": 0.2, "pitch": 0.62,
+		"skin": Color(0.48, 0.44, 0.52), "scale": Vector3(1.55, 1.35, 1.45), "push": 0.2, "pitch": 0.62, "climb": 0.22,
 	},
 	"spitter": {
 		"name": "Spitter", "health": 70.0, "walk": 1.0, "march": 2.0, "run": 2.8,
 		"sight": 30.0, "sight_night": 20.0, "hear": 9.0, "lose": 40.0,
 		"damage": 6.0, "reach": 1.6, "windup": 0.45, "cooldown": 1.4, "wall_damage": 10.0,
-		"skin": Color(0.6, 0.62, 0.3), "scale": Vector3(1.05, 0.95, 1.05), "push": 1.0, "pitch": 1.15,
+		"skin": Color(0.6, 0.62, 0.3), "scale": Vector3(1.05, 0.95, 1.05), "push": 1.0, "pitch": 1.15, "climb": 0.35,
 		"spit": {"range": 17.0, "keep": 9.0, "cooldown": 3.2, "windup": 0.7, "damage": 14.0, "wall_damage": 25.0, "speed": 15.0},
 	},
 }
@@ -43,6 +43,10 @@ const GRAVITY := 18.0
 const CORPSE_SECONDS := 25.0
 const SPIKE_DAMAGE := 8.0   # a mutant hurts itself this much clawing at a spike barricade
 const SMELL := 30.0         # wave mutants know where you are this close, walls or not
+## Pits: a steep sand wall up to CLIMB_MAX high is climbed slowly ("climb" in m/s);
+## anything higher holds them. Smaller rises than CLIMB_STEP are just walked.
+const CLIMB_MAX := 1.9
+const CLIMB_STEP := 0.15
 
 signal attacked(damage: float, from: Vector3, kind: String)
 ## Lobbed a glob of acid (the manager adds it to the world).
@@ -62,6 +66,10 @@ var hunter := false
 var target: Node3D            # the player
 var target_dead := func(): return false
 var building  # Building
+var terrain  # Terrain (for climbing out of pits)
+## Scrambling up a pit wall right now.
+var climbing := false
+var _climb_base := 0.0        # where the climb started (the pit floor)
 var break_key := ""           # the piece it is tearing at in BREAK
 var _blocked_t := 0.0
 var _wreck_key := ""          # the piece a wave mutant has picked to wreck
@@ -432,6 +440,24 @@ func _physics_process(delta: float) -> void:
 		velocity.y = -0.5
 	else:
 		velocity.y -= GRAVITY * delta
+	if is_on_floor():
+		_climb_base = global_position.y
+	climbing = false
+	if want != Vector3.ZERO and is_on_wall() and terrain:
+		var rise := rim_ahead(want) - _climb_base
+		if rise > CLIMB_STEP and rise < CLIMB_MAX:
+			climbing = true
+			velocity.y = float(stats.climb) * slow_mult
+			velocity.x = want.x * 0.6
+			velocity.z = want.z * 0.6
+		elif rise >= CLIMB_MAX:
+			# Too high: don't let the push slide it up the sand.
+			var n := get_wall_normal()
+			var nh := Vector3(n.x, 0, n.z).normalized()
+			var into := Vector3(velocity.x, 0, velocity.z).dot(nh)
+			if into < 0.0:
+				velocity.x -= nh.x * into
+				velocity.z -= nh.z * into
 	move_and_slide()
 	# Walked into a wall, gate or barricade: tear it down.
 	var slow := Vector2(get_real_velocity().x, get_real_velocity().z).length() < speed * 0.4
@@ -481,6 +507,15 @@ func _wreck_target(delta: float) -> bool:
 		return false
 	_wander_to = building.pieces[_wreck_key].node.global_position
 	return true
+
+
+## Highest ground a little way ahead (the top of a pit wall it is facing).
+func rim_ahead(dir: Vector3) -> float:
+	var h := -INF
+	for d in [0.5, 1.0, 1.5]:
+		var p: Vector3 = global_position + dir * d
+		h = maxf(h, terrain.surface_height(p.x, p.z))
+	return h
 
 
 ## The building piece it is pushing against while walking in direction want, or "".

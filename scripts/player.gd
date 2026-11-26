@@ -21,6 +21,7 @@ const CROUCH_SPEED := 2.6
 const STAND_HEIGHT := 1.8
 const CROUCH_HEIGHT := 1.15
 const INTERACT_RANGE := 2.6
+const LADDER_SPEED := 2.4
 
 var stamina := STAMINA_MAX
 var exhausted := false
@@ -31,6 +32,9 @@ var camera: Camera3D
 var crouching := false
 ## Carrying too much: no sprinting.
 var overloaded := false
+## Returns true when a position is on a ladder (set by the world).
+var ladder_check := Callable()
+var on_ladder := false
 var sprinting := false
 var _bob_time := 0.0
 var _last_step_phase := 0
@@ -88,6 +92,16 @@ func _physics_process(delta: float) -> void:
 	_update_crouch(delta)
 
 	var input := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	# Ladders: forward climbs, back climbs down, nothing holds on.
+	on_ladder = ladder_check.is_valid() and ladder_check.call(global_position)
+	if on_ladder:
+		_fall_speed = 0.0
+		if input.y < -0.1:
+			velocity.y = LADDER_SPEED
+		elif input.y > 0.1 and not is_on_floor():
+			velocity.y = -LADDER_SPEED
+		elif not is_on_floor():
+			velocity.y = 0.0
 	var dir := (transform.basis * Vector3(input.x, 0.0, input.y)).normalized()
 	var moving := input.length() > 0.1
 

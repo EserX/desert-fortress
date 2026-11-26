@@ -22,7 +22,7 @@ One version per development run, in this order. The full plan with reasons is in
 - [x] v0.8: Build mode (B): see-through preview that snaps to a grid and turns green or red, with rotate (R). Wooden foundations and walls that cost wood and nails. Saved
 - [x] v0.9: More pieces: doorway with a gate (E opens it), wall with window, floor, stairs, ramp, roof
 - [x] v0.10: Material tiers (wood, then scrap metal, then concrete) with hit points. Hammer to upgrade, repair and demolish (part refund). Cracks when damaged
-- [ ] v0.11: Base build zone shown on the ground, storage chest, workbench crafting (hammer, bandage, spike barricade)
+- [x] v0.11: Base build zone shown on the ground, storage chest, workbench crafting (hammer, bandage, spike barricade)
 
 ### M4: Combat and mutant waves
 - [ ] v0.12: First-person hands, melee weapon (rusty pipe, then machete), swing and hit feedback, stamina cost, training dummy

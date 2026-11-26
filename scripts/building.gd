@@ -3,8 +3,12 @@ extends Node3D
 ## Cell pieces (foundation, floor, roof, stairs, ramp) fill a grid square;
 ## edge pieces (wall, doorway, window) stand on the line between two squares.
 ## Each slot holds at most one piece. Stairs and ramps are 2 squares long.
+## Objects (chest, workbench, spike barricade) stand in a square too, on the
+## sand, a foundation or a floor, in a slot of their own ("obj").
+## Everything must be built inside the base zone around the flag.
 
 const LowPoly = preload("res://scripts/lowpoly.gd")
+const Inventory = preload("res://scripts/inventory.gd")
 
 const CELL := 2.0
 const WALL_H := 2.4
@@ -23,10 +27,15 @@ const TIER_HP := [250.0, 600.0, 1500.0]
 const TIER_ITEM := ["wood", "scrap", "cement"]
 const REFUND := 0.5          # share of what a piece cost you get back when demolished
 const UNDO_SECONDS := 60.0   # build-mode right click gives everything back this soon after building
+const ZONE_RADIUS := 26.0    # base build zone around the flag at the origin
+const CHEST_SLOTS := 20
 
 signal piece_destroyed(key: String, type: String)
+## A chest was taken down with things inside: drop them in a bag here.
+signal spilled(items: Dictionary, pos: Vector3)
 
-## type -> {"name", "slot": "cell"/"edge", "cost", "dirs": how many ways R turns it}
+## type -> {"name", "slot": "cell"/"edge"/"obj", "cost", "dirs": how many ways R turns it,
+## "fixed": no material tiers, "pickup": demolishing gives the whole cost back}
 const PIECES := {
 	"foundation": {"name": "Wooden foundation", "slot": "cell", "cost": {"wood": 4, "nails": 4}, "dirs": 1},
 	"wall": {"name": "Wooden wall", "slot": "edge", "cost": {"wood": 3, "nails": 3}, "dirs": 2},
@@ -36,8 +45,11 @@ const PIECES := {
 	"stairs": {"name": "Wooden stairs", "slot": "cell", "cost": {"wood": 5, "nails": 4}, "dirs": 4, "long": true},
 	"ramp": {"name": "Scrap ramp", "slot": "cell", "cost": {"scrap": 3, "wood": 2, "nails": 3}, "dirs": 4, "long": true},
 	"roof": {"name": "Scrap roof", "slot": "cell", "cost": {"scrap": 3, "nails": 2}, "dirs": 1},
+	"chest": {"name": "Storage chest", "slot": "obj", "cost": {"wood": 6, "nails": 4}, "dirs": 4, "fixed": true},
+	"workbench": {"name": "Workbench", "slot": "obj", "cost": {"wood": 6, "scrap": 3, "nails": 4}, "dirs": 4, "fixed": true},
+	"spikes": {"name": "Spike barricade", "slot": "obj", "cost": {"spike_barricade": 1}, "dirs": 2, "fixed": true, "pickup": true},
 }
-const ORDER := ["foundation", "wall", "doorway", "window", "floor", "stairs", "ramp", "roof"]
+const ORDER := ["foundation", "wall", "doorway", "window", "floor", "stairs", "ramp", "roof", "chest", "workbench", "spikes"]
 ## Edge pieces that hold up whatever is built above them.
 const WALLISH := ["wall", "doorway", "window"]
 ## Cell pieces you can stand on at an upper level.
@@ -78,8 +90,8 @@ func _tier_mat(tier: int, key: String) -> Material:
 static func slot_for(type: String, p: Vector3, dir: int) -> Dictionary:
 	var cx := int(floor(p.x / CELL))
 	var cz := int(floor(p.z / CELL))
-	if PIECES[type].slot == "cell":
-		return {"kind": "cell", "cx": cx, "cz": cz, "dir": dir % PIECES[type].dirs, "level": 0}
+	if PIECES[type].slot != "edge":
+		return {"kind": PIECES[type].slot, "cx": cx, "cz": cz, "dir": dir % PIECES[type].dirs, "level": 0}
 	if dir % 2 == 0:
 		return {"kind": "edge", "cx": cx, "cz": int(round(p.z / CELL)), "dir": 0, "level": 0}
 	return {"kind": "edge", "cx": int(round(p.x / CELL)), "cz": cz, "dir": 1, "level": 0}
@@ -111,7 +123,7 @@ static func slot_keys(type: String, slot: Dictionary) -> Array:
 
 ## Centre of a slot on the ground plane (y = 0). Long pieces: between their squares.
 static func slot_center(slot: Dictionary, type := "") -> Vector3:
-	if slot.kind == "cell":
+	if slot.kind != "edge":
 		var c := Vector3((slot.cx + 0.5) * CELL, 0, (slot.cz + 0.5) * CELL)
 		if type != "" and PIECES[type].get("long", false):
 			var s := climb_step(slot.dir)
@@ -128,7 +140,7 @@ static func piece_transform(type: String, slot: Dictionary, y: float) -> Transfo
 	var yaw := 0.0
 	if slot.kind == "edge":
 		yaw = 0.0 if slot.dir == 0 else PI / 2
-	elif PIECES[type].get("long", false):
+	elif PIECES[type].get("long", false) or slot.kind == "obj":
 		yaw = -slot.dir * PI / 2
 	return Transform3D(Basis(Vector3.UP, yaw), Vector3(c.x, y, c.z))
 
@@ -139,7 +151,7 @@ func _ground_samples(type: String, slot: Dictionary) -> Array:
 	var h := CELL * 0.5
 	var centers: Array = []
 	var pts: Array
-	if slot.kind == "cell":
+	if slot.kind != "edge":
 		centers.append(slot_center(slot))
 		if PIECES[type].get("long", false):
 			var s := climb_step(slot.dir)
@@ -187,6 +199,11 @@ func _ground_level(type: String, slot: Dictionary) -> Dictionary:
 	var lo: float = g.min()
 	var hi: float = g.max()
 	var steep := hi - lo > MAX_SLOPE
+	if slot.kind == "obj":
+		var under := piece_at(cell_key(slot.cx, slot.cz, 0))
+		if not under.is_empty() and under.type in ["foundation", "floor"]:
+			return {"y": under.y, "steep": false}
+		return {"y": lo, "steep": steep}
 	if slot.kind == "cell":
 		var t := foundation_top(slot.cx, slot.cz)
 		if type != "foundation" and not is_nan(t):
@@ -205,6 +222,9 @@ func _ground_level(type: String, slot: Dictionary) -> Dictionary:
 ## Base height of what holds up an upper-level slot, or NAN if nothing does.
 func _support_y(slot: Dictionary) -> float:
 	var lv: int = slot.level
+	if slot.kind == "obj":
+		var deck := piece_at(cell_key(slot.cx, slot.cz, lv))
+		return deck.y if not deck.is_empty() and deck.type in DECKS else NAN
 	if slot.kind == "cell":
 		# Walls on any edge below, or a floor next door at the same level.
 		for e in cell_edges(slot.cx, slot.cz, lv - 1):
@@ -239,6 +259,8 @@ func evaluate(type: String, slot: Dictionary) -> Dictionary:
 	for k in slot_keys(type, slot):
 		if occupied.has(k):
 			return {"y": piece_at(k).y, "ok": false, "reason": "Something is already built here"}
+	if not in_zone(type, slot):
+		return {"y": _ground_level(type, slot).y, "ok": false, "reason": "Outside the base zone (stay within %d m of the flag)" % int(ZONE_RADIUS)}
 	if slot.get("level", 0) > 0:
 		if type == "foundation":
 			return {"y": 0.0, "ok": false, "reason": "Foundations go on the ground"}
@@ -250,6 +272,12 @@ func evaluate(type: String, slot: Dictionary) -> Dictionary:
 	if g.steep:
 		return {"y": g.y, "ok": false, "reason": "Ground too steep"}
 	return {"y": g.y, "ok": true, "reason": ""}
+
+
+## True if a piece in this slot is inside the base build zone.
+static func in_zone(type: String, slot: Dictionary) -> bool:
+	var c := slot_center(slot, type)
+	return Vector2(c.x, c.z).length() <= ZONE_RADIUS
 
 
 # --- Piece shapes ---------------------------------------------------------------
@@ -304,6 +332,27 @@ static func piece_boxes(type: String) -> Array:
 			out.append([Vector3(CELL - 0.1, 0.12, _ramp_len()), Vector3(0, WALL_H * 0.5, 0), "metal", _ramp_angle()])
 			for i in 4:
 				out.append([Vector3(CELL - 0.1, 0.03, 0.08), Vector3(0, WALL_H * 0.5 + 0.07, 0), "rust", _ramp_angle(), Vector3(0, 0, -1.6 + i * 1.07)])
+		"chest":
+			out.append([Vector3(1.1, 0.6, 0.65), Vector3(0, 0.3, 0), "wood"])
+			out.append([Vector3(1.14, 0.12, 0.69), Vector3(0, 0.66, 0), "wood_dark"])
+			for s in [-1.0, 1.0]:
+				out.append([Vector3(0.06, 0.74, 0.7), Vector3(s * 0.4, 0.36, 0), "metal"])
+			out.append([Vector3(0.14, 0.16, 0.05), Vector3(0, 0.56, -0.34), "metal"])
+		"workbench":
+			out.append([Vector3(1.7, 0.1, 0.8), Vector3(0, 0.9, 0), "plank"])
+			for sx in [-1.0, 1.0]:
+				for sz in [-1.0, 1.0]:
+					out.append([Vector3(0.1, 0.85, 0.1), Vector3(sx * 0.75, 0.425, sz * 0.32), "wood_dark"])
+			out.append([Vector3(1.6, 0.06, 0.7), Vector3(0, 0.3, 0), "wood"])
+			out.append([Vector3(0.2, 0.16, 0.2), Vector3(0.62, 1.03, -0.25), "metal"])
+			out.append([Vector3(0.5, 0.02, 0.4), Vector3(-0.35, 0.96, 0.05), "rust"])
+			out.append([Vector3(0.08, 0.3, 0.06), Vector3(-0.1, 1.1, 0.25), "wood_dark"])
+		"spikes":
+			out.append([Vector3(1.9, 0.18, 0.18), Vector3(0, 0.35, 0), "wood_dark"])
+			for i in 5:
+				var x := -0.8 + i * 0.4
+				out.append([Vector3(0.08, 0.08, 1.4), Vector3(x, 0.5, 0), "plank", 0.6])
+				out.append([Vector3(0.08, 0.08, 1.4), Vector3(x + 0.1, 0.5, 0), "wood", -0.6])
 	return out
 
 
@@ -337,6 +386,12 @@ static func piece_colliders(type: String) -> Array:
 			return out
 		"stairs", "ramp":
 			return [[Vector3(CELL, 0.2, _ramp_len()), Vector3(0, WALL_H * 0.5, 0), _ramp_angle()]]
+		"chest":
+			return [[Vector3(1.1, 0.72, 0.65), Vector3(0, 0.36, 0), 0.0]]
+		"workbench":
+			return [[Vector3(1.7, 0.95, 0.8), Vector3(0, 0.475, 0), 0.0]]
+		"spikes":
+			return [[Vector3(1.9, 1.0, 1.2), Vector3(0, 0.5, 0), 0.0]]
 	return []
 
 
@@ -398,6 +453,11 @@ func place(type: String, slot: Dictionary, y: float, gate_open := false, tier :=
 		occupied[k] = key
 	if type == "doorway":
 		_add_gate(rec, gate_open)
+	elif type == "chest":
+		rec.storage = Inventory.new(CHEST_SLOTS)
+		body.set_meta("interact_id", "chest:" + key)
+	elif type == "workbench":
+		body.set_meta("interact_id", "bench:" + key)
 	return key
 
 
@@ -446,21 +506,33 @@ func toggle_gate(key: String) -> void:
 		set_gate(key, not pieces[key].open)
 
 
-## Prompt text for a gate's interact id ("gate:<key>"), or "".
+## Prompt text for a gate, chest or workbench interact id ("gate:<key>"...), or "".
 func prompt(id: String) -> String:
-	if not id.begins_with("gate:"):
-		return ""
-	var key := id.trim_prefix("gate:")
+	var key := id.substr(id.find(":") + 1)
 	if not pieces.has(key):
 		return ""
-	return "[E] Close gate" if pieces[key].open else "[E] Open gate"
+	if id.begins_with("gate:"):
+		return "[E] Close gate" if pieces[key].open else "[E] Open gate"
+	if id.begins_with("chest:"):
+		return "[E] Open storage chest"
+	if id.begins_with("bench:"):
+		return "[E] Use workbench"
+	return ""
 
 
-func remove(key: String) -> String:
+## The storage of a chest piece, or null.
+func storage_of(key: String) -> Inventory:
+	return pieces.get(key, {}).get("storage", null)
+
+
+## Takes a piece away. A chest's contents spill into a bag unless spill is false.
+func remove(key: String, spill := true) -> String:
 	key = occupied.get(key, key)
 	if not pieces.has(key):
 		return ""
 	var rec: Dictionary = pieces[key]
+	if spill and rec.has("storage") and not rec.storage.contents().is_empty():
+		spilled.emit(rec.storage.contents(), rec.node.global_position)
 	rec.node.queue_free()
 	for k in slot_keys(rec.type, rec.slot):
 		occupied.erase(k)
@@ -506,6 +578,8 @@ func max_hp(rec: Dictionary) -> float:
 
 ## Short name like "Scrap metal wall".
 func describe(rec: Dictionary) -> String:
+	if PIECES[rec.type].get("fixed", false):
+		return PIECES[rec.type].name
 	var noun: String = PIECES[rec.type].name.replace("Wooden ", "").replace("Scrap ", "")
 	var tier_name: String = TIER_NAMES[rec.tier]
 	return "%s%s %s" % [tier_name[0].to_upper(), tier_name.substr(1), noun.to_lower()]
@@ -519,7 +593,7 @@ static func _size(type: String) -> int:
 
 ## What it costs to raise a piece one tier ({} at concrete).
 func upgrade_cost(rec: Dictionary) -> Dictionary:
-	if rec.tier >= TIER_NAMES.size() - 1:
+	if rec.tier >= TIER_NAMES.size() - 1 or PIECES[rec.type].get("fixed", false):
 		return {}
 	if rec.tier == 0:
 		return {"scrap": _size(rec.type) + 1, "nails": 2}
@@ -536,6 +610,8 @@ func repair_cost(rec: Dictionary) -> Dictionary:
 
 ## What demolishing gives back: half of everything put into it, rounded down.
 func refund(rec: Dictionary) -> Dictionary:
+	if PIECES[rec.type].get("pickup", false):
+		return PIECES[rec.type].cost.duplicate()
 	var spent: Dictionary = PIECES[rec.type].cost.duplicate()
 	var r := {"tier": base_tier(rec.type)}
 	while r.tier < rec.tier:
@@ -651,14 +727,19 @@ func save_data() -> Array:
 	var out: Array = []
 	for key in pieces:
 		var p: Dictionary = pieces[key]
-		out.append({"type": p.type, "kind": p.slot.kind, "cx": p.slot.cx, "cz": p.slot.cz, "dir": p.slot.dir, "level": p.slot.level, "y": p.y, "open": p.open, "tier": p.tier, "hp": p.hp})
+		var d := {"type": p.type, "kind": p.slot.kind, "cx": p.slot.cx, "cz": p.slot.cz, "dir": p.slot.dir, "level": p.slot.level, "y": p.y, "open": p.open, "tier": p.tier, "hp": p.hp}
+		if p.has("storage"):
+			d.items = p.storage.save_data()
+		out.append(d)
 	return out
 
 
 func load_data(data: Array) -> void:
 	for key in pieces.keys():
-		remove(key)
+		remove(key, false)
 	for p in data:
 		if PIECES.has(p.get("type", "")):
 			var slot := {"kind": str(p.kind), "cx": int(p.cx), "cz": int(p.cz), "dir": int(p.dir), "level": int(p.get("level", 0))}
-			place(p.type, slot, float(p.y), bool(p.get("open", false)), int(p.get("tier", -1)), float(p.get("hp", -1.0)))
+			var key := place(p.type, slot, float(p.y), bool(p.get("open", false)), int(p.get("tier", -1)), float(p.get("hp", -1.0)))
+			if pieces[key].has("storage") and p.has("items"):
+				pieces[key].storage.load_data(p.items)

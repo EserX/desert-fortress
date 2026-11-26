@@ -16,9 +16,10 @@ var slots: Array = []
 var selected := 0  # selected hotbar slot
 
 
-func _init() -> void:
-	slots.resize(SIZE)
-	for i in SIZE:
+## size: how many slots (chests use fewer than your pockets).
+func _init(size := SIZE) -> void:
+	slots.resize(size)
+	for i in size:
 		slots[i] = {}
 
 
@@ -33,7 +34,7 @@ func add(item: String, count: int) -> int:
 			var n := mini(count, max_stack - s.count)
 			s.count += n
 			count -= n
-	for i in SIZE:
+	for i in slots.size():
 		if count <= 0:
 			break
 		if slots[i].is_empty():
@@ -65,7 +66,7 @@ func count_of(item: String) -> int:
 ## Removes up to count of an item. Returns how many were removed.
 func remove(item: String, count: int) -> int:
 	var removed := 0
-	for i in range(SIZE - 1, -1, -1):
+	for i in range(slots.size() - 1, -1, -1):
 		var s: Dictionary = slots[i]
 		if removed >= count:
 			break
@@ -117,6 +118,52 @@ func move(a: int, b: int) -> void:
 	changed.emit()
 
 
+## Moves slot a of this inventory onto slot b of another (or the same) one:
+## merges equal items, otherwise swaps.
+func move_to(a: int, other, b: int) -> void:
+	if other == self:
+		move(a, b)
+		return
+	if slots[a].is_empty():
+		return
+	var sa: Dictionary = slots[a]
+	var sb: Dictionary = other.slots[b]
+	if not sb.is_empty() and sb.item == sa.item:
+		var n := mini(sa.count, int(Items.ITEMS[sa.item].stack) - sb.count)
+		sb.count += n
+		sa.count -= n
+		if sa.count <= 0:
+			slots[a] = {}
+	else:
+		slots[a] = sb
+		other.slots[b] = sa
+	changed.emit()
+	other.changed.emit()
+
+
+## Moves a whole stack into another inventory wherever it fits. Returns true if all of it went.
+func transfer(a: int, other) -> bool:
+	var s: Dictionary = slots[a]
+	if s.is_empty():
+		return true
+	var left: int = other.add(s.item, s.count)
+	if left <= 0:
+		slots[a] = {}
+	else:
+		s.count = left
+	changed.emit()
+	return left <= 0
+
+
+## Everything in here as {item: count}.
+func contents() -> Dictionary:
+	var out := {}
+	for s in slots:
+		if not s.is_empty():
+			out[s.item] = int(out.get(s.item, 0)) + s.count
+	return out
+
+
 func weight() -> float:
 	var w := 0.0
 	for s in slots:
@@ -138,10 +185,10 @@ func save_data() -> Dictionary:
 
 
 func load_data(data: Dictionary) -> void:
-	for i in SIZE:
+	for i in slots.size():
 		slots[i] = {}
 	var saved: Array = data.get("slots", [])
-	for i in mini(saved.size(), SIZE):
+	for i in mini(saved.size(), slots.size()):
 		var s = saved[i]
 		if s is Dictionary and Items.ITEMS.has(s.get("item", "")):
 			slots[i] = {"item": s.item, "count": int(s.count)}

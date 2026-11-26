@@ -18,11 +18,13 @@ const DeathScreen = preload("res://scripts/death_screen.gd")
 const MapUI = preload("res://scripts/map_ui.gd")
 const Building = preload("res://scripts/building.gd")
 const BuildMode = preload("res://scripts/build_mode.gd")
+const BaseZone = preload("res://scripts/base_zone.gd")
 
 const DISCOVER_RANGE := 45.0
 const REFILLS_PER_MORNING := 4
 const SUPPLY_CHANCE := 0.5
 const HAMMER_REACH := 3.5
+const CHEST_REACH := 4.0  # walk further than this from an open chest or bench and it closes
 
 ## When true the world is only a backdrop for the title screen:
 ## no player, HUD or pause menu, just a slowly orbiting camera.
@@ -48,6 +50,7 @@ var _shade_timer := 0.0
 var map_ui: MapUI
 var building: Building
 var build_mode: BuildMode
+var base_zone: BaseZone
 ## Wrecks and ruins: {"key": "w3", "kind": "wreck", "pos": Vector3}.
 var places: Array = []
 ## Keys of places you have been near.
@@ -84,6 +87,11 @@ func _ready() -> void:
 	building.name = "Building"
 	building.terrain = terrain
 	add_child(building)
+
+	base_zone = BaseZone.new()
+	base_zone.name = "BaseZone"
+	base_zone.terrain = terrain
+	add_child(base_zone)
 
 	loot = Loot.new()
 	loot.name = "Loot"
@@ -150,6 +158,8 @@ func _ready() -> void:
 	inventory_ui.name = "InventoryUI"
 	inventory_ui.inventory = inventory
 	inventory_ui.drop_requested.connect(drop_slot)
+	inventory_ui.crafted.connect(_on_crafted)
+	building.spilled.connect(func(items, pos): loot.spawn_drop(items, Vector3(pos.x, terrain.surface_height(pos.x, pos.z), pos.z)))
 	add_child(inventory_ui)
 
 	death_screen = DeathScreen.new()
@@ -221,6 +231,8 @@ func _process(delta: float) -> void:
 				else:
 					select_hotbar(i)
 		hud.build_label.text = build_mode.status_text() if build_mode.active else ""
+		base_zone.set_highlight(build_mode.active)
+		_check_station_reach()
 	if _orbit_camera:
 		_orbit_angle += delta * 0.04
 		var target := Vector3(0, terrain.BASE_HEIGHT + 3.0, 0)
@@ -290,8 +302,10 @@ func hammer_prompt(key: String) -> String:
 		text += "\n[LMB] Repair (%s)" % _cost_text(rep)
 	elif not up.is_empty():
 		text += "\n[LMB] Upgrade to %s (%s)" % [building.TIER_NAMES[rec.tier + 1], _cost_text(up)]
-	else:
+	elif not Building.PIECES[rec.type].get("fixed", false):
 		text += "\nFully upgraded"
+	else:
+		text += "\n"
 	if _demolish_armed == key and Time.get_ticks_msec() < _demolish_until:
 		return text + "   [RMB again] Demolish for real"
 	return text + "   [RMB] Demolish"
@@ -355,7 +369,7 @@ func _hammer_input(event: InputEvent) -> bool:
 
 
 func _prompt_for(id: String) -> String:
-	if id.begins_with("gate:"):
+	if id.begins_with("gate:") or id.begins_with("chest:") or id.begins_with("bench:"):
 		return building.prompt(id)
 	return loot.prompt(id)
 
@@ -392,6 +406,15 @@ func interact(id: String) -> void:
 	if id.begins_with("gate:"):
 		building.toggle_gate(id.trim_prefix("gate:"))
 		return
+	if id.begins_with("chest:"):
+		var storage = building.storage_of(id.trim_prefix("chest:"))
+		if storage:
+			inventory_ui.open_chest(id.trim_prefix("chest:"), storage)
+		return
+	if id.begins_with("bench:"):
+		if building.pieces.has(id.trim_prefix("bench:")):
+			inventory_ui.open_bench(id.trim_prefix("bench:"))
+		return
 	var items: Dictionary
 	if loot.drops.has(id):
 		items = loot.drops[id].items
@@ -414,6 +437,23 @@ func interact(id: String) -> void:
 		hud.show_banner("Inventory full")
 
 
+## Closes the chest or workbench screen when you walk off or it is taken down.
+func _check_station_reach() -> void:
+	var key: String = inventory_ui.chest_key if inventory_ui.chest_key != "" else inventory_ui.bench_key
+	if key == "" or not inventory_ui.is_open():
+		return
+	var rec: Dictionary = building.pieces.get(key, {})
+	if rec.is_empty() or rec.node.global_position.distance_to(player.global_position) > CHEST_REACH:
+		inventory_ui.close()
+
+
+func _on_crafted(id: String, left: Dictionary) -> void:
+	hud.show_pickup(["Made %s" % Items.display_name(id).to_lower()])
+	if not left.is_empty():
+		loot.spawn_drop(left, _drop_spot())
+		hud.show_banner("Inventory full: it is in a bag at your feet")
+
+
 ## Drops a whole stack in a bag at your feet.
 func drop_slot(i: int) -> void:
 	var s := inventory.take_slot(i)
@@ -427,7 +467,8 @@ func use_selected() -> void:
 	if s.is_empty() or not Survival.can_consume(s.item):
 		return
 	survival.consume(s.item)
-	hud.show_pickup(["%s %s" % ["Drank" if s.item == "water" else "Ate", Items.display_name(s.item).to_lower()]])
+	var verb := {"water": "Drank", "bandage": "Used"}.get(s.item, "Ate") as String
+	hud.show_pickup(["%s %s" % [verb, Items.display_name(s.item).to_lower()]])
 	inventory.take_one(inventory.selected)
 
 

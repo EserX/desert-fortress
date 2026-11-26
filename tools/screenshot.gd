@@ -22,6 +22,8 @@ var shots := [
 	{"name": "12_map", "pos": Vector3(20, 0, 40), "yaw": 0.9, "pitch": 0.0, "hour": 9.0, "map": true},
 	{"name": "13_build", "pos": Vector3(13, 0, 20), "yaw": 0.55, "pitch": -0.2, "hour": 15.5, "build": true},
 	{"name": "14_tiers", "pos": Vector3(7, 0, 16.5), "yaw": 0.0, "pitch": -0.1, "hour": 10.0, "tiers": true},
+	{"name": "15_base", "pos": Vector3(1, 0, 10), "yaw": PI + 0.15, "pitch": -0.12, "hour": 16.0, "base": true, "zone": true},
+	{"name": "16_bench", "pos": Vector3(-1, 0, 19.6), "yaw": 0.0, "pitch": -0.3, "hour": 16.0, "base": true, "bench": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -89,8 +91,18 @@ func _process(_d: float) -> bool:
 			main.inventory.load_data({})
 			main.inventory.add_all({"hammer": 1, "scrap": 9})
 			main.inventory.selected = 0
+		if s.get("base", false):
+			_base_sample()
+		if s.get("bench", false):
+			main.inventory.add_all({"cloth": 5, "wood": 8, "nails": 6, "scrap": 3})
+			main.inventory_ui.open_bench(main.building.slot_key({"kind": "obj", "cx": -1, "cz": 8, "dir": 0, "level": 0}))
+		elif main.inventory_ui.bench_key != "":
+			main.inventory_ui.close()
 		if s.get("build", false):
 			_build_sample()
+		elif s.get("zone", false):
+			main.build_mode.active = true
+			main.build_mode.select(10)
 		elif main.build_mode.active:
 			main.build_mode.toggle()
 		if s.get("menu", false):
@@ -151,3 +163,15 @@ func _build_sample() -> void:
 	main.build_mode.active = true
 	main.build_mode.select(1)
 	main.build_mode.dir = 0
+
+
+## A chest, a workbench and spike barricades near the zone edge (v0.11).
+func _base_sample() -> void:
+	var b = main.building
+	if b.pieces.has(b.slot_key({"kind": "obj", "cx": -1, "cz": 8, "dir": 0, "level": 0})):
+		return
+	var f := {"kind": "cell", "cx": -3, "cz": 8, "dir": 0, "level": 0}
+	b.place("foundation", f, b.evaluate("foundation", f).y)
+	for o in [["chest", -3, 8, 0], ["workbench", -1, 8, 0], ["spikes", 0, 10, 0], ["spikes", 1, 10, 0], ["spikes", -1, 10, 0]]:
+		var slot := {"kind": "obj", "cx": o[1], "cz": o[2], "dir": o[3], "level": 0}
+		b.place(o[0], slot, b.evaluate(o[0], slot).y)

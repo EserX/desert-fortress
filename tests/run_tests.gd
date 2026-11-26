@@ -259,6 +259,7 @@ func _test_building() -> void:
 	check(bm.try_remove() == "foundation" and inv.count_of("wood") == 20, "taking a piece down refunds it")
 	_test_more_pieces()
 	_test_tiers()
+	_test_base()
 	b.load_data([])
 	bm.toggle()
 	inv.load_data({})
@@ -366,6 +367,92 @@ func _test_tiers() -> void:
 ## Ramp: walk up it for real.
 var ramp_top := 0.0
 var ramp_base := 0.0
+## v0.11: base zone, storage chest, workbench crafting, bandages, spike barricade.
+func _test_base() -> void:
+	var b = main.building
+	var inv = main.inventory
+	var ui = main.inventory_ui
+	var player = main.player
+	var far := {"kind": "cell", "cx": 20, "cz": 0, "dir": 0, "level": 0}
+	var ev_far: Dictionary = b.evaluate("foundation", far)
+	check(not ev_far.ok and ev_far.reason.begins_with("Outside the base zone"), "can't build outside the base zone (%s)" % ev_far.reason)
+	check(b.in_zone("wall", {"kind": "edge", "cx": 3, "cz": 3, "dir": 0, "level": 0}), "near the flag is inside the zone")
+	check(main.base_zone.get_child_count() == 3, "zone stakes, rags and edge line exist")
+	main.base_zone.set_highlight(true)
+	check(main.base_zone.highlighted(), "zone edge lights up in build mode")
+	main.base_zone.set_highlight(false)
+
+	# A chest on a foundation.
+	var f := {"kind": "cell", "cx": -5, "cz": -5, "dir": 0, "level": 0}
+	var fy: float = b.evaluate("foundation", f).y
+	b.place("foundation", f, fy)
+	var cs := {"kind": "obj", "cx": -5, "cz": -5, "dir": 1, "level": 0}
+	var cev: Dictionary = b.evaluate("chest", cs)
+	check(cev.ok and is_equal_approx(cev.y, fy), "a chest stands on a foundation (%s)" % cev.reason)
+	var ck: String = b.place("chest", cs, cev.y)
+	check(not b.evaluate("chest", cs).ok, "one object per square")
+	check(b.prompt("chest:" + ck).contains("storage chest"), "chest prompt")
+	check(b.upgrade_cost(b.pieces[ck]).is_empty() and b.describe(b.pieces[ck]) == "Storage chest", "chests have no tiers")
+	player.position = Vector3(-9, main.terrain.surface_height(-9, -7.5) + 0.7, -7.5)
+	main.interact("chest:" + ck)
+	check(ui.is_open() and ui.chest == b.storage_of(ck), "E opens the chest screen")
+	inv.load_data({})
+	inv.add("wood", 10)
+	ui.click(0)
+	ui.click(3, true)
+	check(ui.chest.slots[3].get("item", "") == "wood" and inv.count_of("wood") == 0, "move a stack into the chest")
+	inv.add("nails", 5)
+	inv.transfer(0, ui.chest)
+	check(ui.chest.count_of("nails") == 5 and ui.chest.count_of("wood") == 10, "right-click moves a whole stack across")
+	ui.chest.transfer(3, inv)
+	check(inv.count_of("wood") == 10 and ui.chest.count_of("wood") == 0, "and back to the pockets")
+	ui.chest.add("wood", 7)
+	player.position += Vector3(10, 0, 0)
+	main._check_station_reach()
+	check(not ui.is_open(), "walking away closes the chest")
+	var saved: Array = b.save_data()
+	b.load_data(saved)
+	check(b.storage_of(ck) != null and b.storage_of(ck).count_of("wood") == 7 and b.storage_of(ck).count_of("nails") == 5, "chest contents are saved")
+	var drops_before: int = main.loot.drops.size()
+	b.remove(ck)
+	check(main.loot.drops.size() == drops_before + 1, "a chest taken down spills its contents into a bag")
+
+	# Workbench crafting.
+	var ws := {"kind": "obj", "cx": -4, "cz": -5, "dir": 0, "level": 0}
+	var wev: Dictionary = b.evaluate("workbench", ws)
+	check(wev.ok, "a workbench can stand on the sand (%s)" % wev.reason)
+	var wk: String = b.place("workbench", ws, wev.y)
+	player.position = Vector3(-7, main.terrain.surface_height(-7, -7.5) + 0.7, -7.5)
+	main.interact("bench:" + wk)
+	check(ui.is_open() and ui.bench_key == wk, "E opens the workbench")
+	inv.load_data({})
+	inv.add("cloth", 4)
+	ui.craft("spike_barricade")
+	check(inv.count_of("spike_barricade") == 0, "no crafting without materials")
+	ui.craft("bandage")
+	check(inv.count_of("bandage") == 1 and inv.count_of("cloth") == 2, "2 cloth make a bandage")
+	inv.add_all({"scrap": 2, "wood": 6, "nails": 4})
+	ui.craft("hammer")
+	ui.craft("spike_barricade")
+	check(inv.count_of("hammer") == 1 and inv.count_of("spike_barricade") == 1 and inv.count_of("wood") == 0, "craft a hammer and a spike barricade")
+	ui.close()
+	main.survival.health = 50.0
+	for i in inv.HOTBAR:
+		if inv.slots[i].get("item", "") == "bandage":
+			inv.selected = i
+	main.use_selected()
+	check(is_equal_approx(main.survival.health, 80.0) and inv.count_of("bandage") == 0, "a bandage heals 30")
+
+	# Spike barricade piece: costs the crafted item, comes back whole.
+	var ss := {"kind": "obj", "cx": -6, "cz": -5, "dir": 1, "level": 0}
+	var sk: String = b.place("spikes", ss, b.evaluate("spikes", ss).y)
+	check(b.refund(b.pieces[sk]) == {"spike_barricade": 1}, "demolishing spikes gives the barricade back")
+	check(main.hammer_prompt(wk).begins_with("Workbench"), "hammer prompt on a workbench: " + main.hammer_prompt(wk).replace("\n", " | "))
+	b.remove(sk)
+	b.remove(wk)
+	b.remove(b.cell_key(-5, -5, 0))
+
+
 func _start_ramp_walk() -> void:
 	var b = main.building
 	var player = main.player

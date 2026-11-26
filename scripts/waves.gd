@@ -205,13 +205,13 @@ func note_death() -> void:
 ## Lines for the end-of-wave summary.
 static func summary_lines(s: Dictionary) -> Array:
 	var lines: Array = []
-	lines.append(("Wave %d cleared!" if s.cleared else "Dawn: you survived night %d") % s.wave)
-	lines.append("Mutants killed: %d" % s.kills)
-	lines.append("Damage taken: %d" % int(s.damage))
-	if s.lost > 0:
-		lines.append("Building pieces lost: %d" % s.lost)
-	if s.deaths > 0:
-		lines.append("Times you died: %d" % s.deaths)
+	lines.append(("Wave %d cleared!" if s.get("cleared", false) else "Dawn: you survived night %d") % int(s.get("wave", 0)))
+	lines.append("Mutants killed: %d" % int(s.get("kills", 0)))
+	lines.append("Damage taken: %d" % int(s.get("damage", 0)))
+	if int(s.get("lost", 0)) > 0:
+		lines.append("Building pieces lost: %d" % int(s.lost))
+	if int(s.get("deaths", 0)) > 0:
+		lines.append("Times you died: %d" % int(s.deaths))
 	if s.has("cash"):
 		lines.append("Cash earned: $%d" % s.cash)
 	return lines

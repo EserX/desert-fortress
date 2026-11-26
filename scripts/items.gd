@@ -26,6 +26,8 @@ const ITEMS := {
 	"bp_fence": {"name": "Blueprint: Electric fence", "weight": 0.0, "stack": 1},
 	"bp_sandbags": {"name": "Blueprint: Sandbag wall", "weight": 0.0, "stack": 1},
 	"medkit": {"name": "Medkit", "weight": 0.4, "stack": 5},
+	"shovel": {"name": "Shovel", "weight": 2.0, "stack": 1},
+	"sand": {"name": "Sand", "weight": 1.0, "stack": 20},
 }
 
 ## What each kind of container can hold: item -> [min, max]. A negative min
@@ -42,6 +44,7 @@ const RECIPES := {
 	"hammer": {"count": 1, "cost": {"scrap": 2, "wood": 2}, "info": "repairs, upgrades, demolishes"},
 	"machete": {"count": 1, "cost": {"scrap": 3, "cloth": 1, "wood": 1}, "info": "faster and harder than the pipe"},
 	"bandage": {"count": 1, "cost": {"cloth": 2}, "info": "heals 30, use with F"},
+	"shovel": {"count": 1, "cost": {"scrap": 3, "wood": 2}, "info": "LMB digs (gives sand), RMB fills"},
 	"spike_barricade": {"count": 1, "cost": {"wood": 4, "nails": 4}, "info": "build it in build mode"},
 	"pistol": {"count": 1, "cost": {"scrap": 10, "wood": 2, "nails": 6}, "info": "12 rounds. RMB aims, R reloads"},
 	"ammo_9mm": {"count": 8, "cost": {"scrap": 2, "nails": 3}, "info": "for the pistol"},

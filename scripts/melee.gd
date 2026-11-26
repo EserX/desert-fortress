@@ -11,7 +11,7 @@ const WEAPONS := {
 	"machete": {"damage": 40.0, "stamina": 9.0, "cooldown": 0.55, "reach": 2.2},
 }
 ## Held in the hands but not swung at things (has its own left click).
-const TOOLS := ["hammer"]
+const TOOLS := ["hammer", "shovel"]
 const HIT_TIME := 0.16  # seconds from the click to the hit
 const MIX_RATE := 22050.0
 const REST_POS := Vector3(0.3, -0.27, -0.5)
@@ -63,7 +63,11 @@ func _ready() -> void:
 	var hammer := Node3D.new()
 	_box(hammer, Vector3(0.035, 0.42, 0.035), Vector3(0, 0.12, 0), wood)
 	_box(hammer, Vector3(0.07, 0.07, 0.17), Vector3(0, 0.33, -0.02), metal)
-	_models = {"pipe": pipe, "machete": machete, "hammer": hammer}
+	var shovel := Node3D.new()
+	_box(shovel, Vector3(0.035, 0.7, 0.035), Vector3(0, 0.22, 0), wood)
+	_box(shovel, Vector3(0.12, 0.035, 0.035), Vector3(0, -0.12, 0), wood)
+	_box(shovel, Vector3(0.15, 0.19, 0.02), Vector3(0, 0.64, 0.01), LowPoly.material(Color(0.32, 0.33, 0.34), 0.5))
+	_models = {"pipe": pipe, "machete": machete, "hammer": hammer, "shovel": shovel}
 	for k in _models:
 		_models[k].rotation.x = ITEM_TILT
 		_models[k].visible = false

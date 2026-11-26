@@ -43,6 +43,8 @@ const DISCOVER_RANGE := 45.0
 const REFILLS_PER_MORNING := 4
 const SUPPLY_CHANCE := 0.5
 const HAMMER_REACH := 3.5
+const SHOVEL_REACH := 4.0
+const SHOVEL_COOLDOWN := 0.45  # seconds between digs
 const CHEST_REACH := 4.0  # walk further than this from an open chest or bench and it closes
 
 ## When true the world is only a backdrop for the title screen:
@@ -88,6 +90,9 @@ var test_storage: Inventory
 var places: Array = []
 ## Keys of places you have been near.
 var discovered := {}
+var _shovel_ready_at := 0
+var _dig_marker: MeshInstance3D
+var _dig_marker_key := []
 var _demolish_armed := ""
 var _demolish_until := 0
 var sun: DirectionalLight3D
@@ -110,6 +115,11 @@ func _ready() -> void:
 	props.name = "Props"
 	add_child(props)
 	props.populate(terrain, world_seed)
+
+	# Nothing digs out the ground under the flag, rocks or wrecks.
+	for c in props.get_children():
+		if c is Node3D:
+			terrain.add_no_dig(c.position, 2.0)
 
 	for i in props.wreck_positions.size():
 		places.append({"key": "w%d" % i, "kind": "wreck", "pos": props.wreck_positions[i]})
@@ -134,6 +144,8 @@ func _ready() -> void:
 
 	if TEST_BOX:
 		_make_test_box()
+		terrain.add_no_dig(test_box.position, 1.3)
+	terrain.add_no_dig(shop.position, 1.3)
 
 	drone = Drone.new()
 	drone.name = "Drone"
@@ -146,6 +158,7 @@ func _ready() -> void:
 	dummy.position = Vector3(-3.0, terrain.surface_height(-3.0, 4.0), 4.0)
 	dummy.rotation.y = 0.5
 	add_child(dummy)
+	terrain.add_no_dig(dummy.position, 1.3)
 
 	loot = Loot.new()
 	loot.name = "Loot"
@@ -305,6 +318,18 @@ func _ready() -> void:
 	add_child(map_ui)
 
 	survival.died.connect(_on_died)
+	terrain.ground_changed.connect(_on_ground_changed)
+	_dig_marker = MeshInstance3D.new()
+	_dig_marker.name = "DigMarker"
+	var marker_mat := StandardMaterial3D.new()
+	marker_mat.albedo_color = Color(1.0, 0.85, 0.4, 0.35)
+	marker_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	marker_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	marker_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_dig_marker.material_override = marker_mat
+	_dig_marker.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_dig_marker.visible = false
+	add_child(_dig_marker)
 	hints = Hints.new()
 	hints.name = "Hints"
 	hints.hud = hud
@@ -365,6 +390,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 	elif holding_hammer() and _hammer_input(event):
 		get_viewport().set_input_as_handled()
+	elif holding_shovel() and _shovel_input(event):
+		get_viewport().set_input_as_handled()
 	elif guns.item != "" and _gun_input(event):
 		get_viewport().set_input_as_handled()
 	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT \
@@ -400,7 +427,10 @@ func _process(delta: float) -> void:
 			text = _prompt_for(player.interact_target())
 			if text == "" and holding_hammer():
 				text = hammer_prompt(piece_under_crosshair())
+			elif text == "" and holding_shovel():
+				text = shovel_prompt()
 		hud.set_prompt(text)
+		_update_dig_marker()
 		for i in Inventory.HOTBAR:
 			if Input.is_action_just_pressed("hotbar_%d" % (i + 1)) and not inventory_ui.is_open():
 				if build_mode.active:
@@ -415,6 +445,8 @@ func _process(delta: float) -> void:
 			hints.show_hint("build")
 		elif hand == "hammer":
 			hints.show_hint("hammer")
+		elif hand == "shovel":
+			hints.show_hint("shovel")
 		elif Guns.is_gun(hand):
 			hints.show_hint("gun")
 		melee.set_item(hand)
@@ -459,6 +491,129 @@ func thumbnail_image() -> Image:
 func holding_hammer() -> bool:
 	var s := inventory.selected_stack()
 	return not s.is_empty() and s.item == "hammer" and not build_mode.active
+
+
+func holding_shovel() -> bool:
+	var s := inventory.selected_stack()
+	return not s.is_empty() and s.item == "shovel" and not build_mode.active and not survival.dead
+
+
+## Where the shovel would dig: a point on the ground under the crosshair, or null.
+func dig_point() -> Variant:
+	var hit := player.look_hit(SHOVEL_REACH)
+	if hit.is_empty() or hit.collider != terrain:
+		return null
+	return hit.position
+
+
+## "Sand, dug 0.50 m deep\n[LMB] Dig   [RMB] Fill (3 sand)", or why you can't.
+func shovel_prompt() -> String:
+	var p = dig_point()
+	if p == null:
+		return ""
+	var why := terrain.dig_blocked(p.x, p.z)
+	if why != "":
+		return why
+	var depth := terrain.cell_depth(terrain.dig_cell(p.x, p.z))
+	var text := "Sand"
+	if depth > 0.05:
+		text += ", dug %.2f m deep" % depth
+	elif depth < -0.05:
+		text += ", piled %.2f m high" % -depth
+	if terrain.at_bedrock(p.x, p.z):
+		text += " (bedrock)\n[LMB] Can't dig deeper"
+	else:
+		text += "\n[LMB] Dig"
+	return text + "   [RMB] Fill (%d sand)" % inventory.count_of("sand")
+
+
+## Digs (or fills) the cell at p: digging gives a bag of sand, filling uses one.
+## Returns "" if the ground moved, or the reason it didn't.
+func dig_at(p: Vector3, filling := false) -> String:
+	var why := terrain.dig_blocked(p.x, p.z)
+	if why != "":
+		return why
+	if filling:
+		if inventory.count_of("sand") <= 0:
+			return "You have no sand. Dig some up first (left click)."
+		if not terrain.fill(p.x, p.z):
+			return "You can't pile the sand any higher here"
+		inventory.remove("sand", 1)
+		return ""
+	if terrain.at_bedrock(p.x, p.z):
+		return "Bedrock: you can't dig any deeper here"
+	if inventory.add("sand", 1) > 0:
+		return "No room in your bag for the sand"
+	if not terrain.dig(p.x, p.z):
+		inventory.remove("sand", 1)
+		return "Bedrock: you can't dig any deeper here"
+	return ""
+
+
+## Shovel: left click digs, right click fills.
+func _shovel_input(event: InputEvent) -> bool:
+	if not (event is InputEventMouseButton and event.pressed) or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+		return false
+	if event.button_index != MOUSE_BUTTON_LEFT and event.button_index != MOUSE_BUTTON_RIGHT:
+		return false
+	var p = dig_point()
+	if p == null:
+		return false
+	if Time.get_ticks_msec() < _shovel_ready_at:
+		return true
+	_shovel_ready_at = Time.get_ticks_msec() + int(SHOVEL_COOLDOWN * 1000.0)
+	melee.play_swing(SHOVEL_COOLDOWN)
+	var why := dig_at(p, event.button_index == MOUSE_BUTTON_RIGHT)
+	if why != "":
+		hud.show_banner(why)
+	return true
+
+
+## A see-through square on the cell the shovel would dig.
+func _update_dig_marker() -> void:
+	var p = dig_point() if holding_shovel() else null
+	if p == null or terrain.dig_blocked(p.x, p.z) != "":
+		_dig_marker.visible = false
+		return
+	var c: Vector2i = terrain.dig_cell(p.x, p.z)
+	var h: Array = terrain.cell_corners(c)
+	_dig_marker.visible = true
+	if _dig_marker_key == [c, h]:
+		return
+	_dig_marker_key = [c, h]
+	var x0: float = c.x - terrain.DIG_HALF
+	var z0: float = c.y - terrain.DIG_HALF
+	var lift := 0.04
+	var v := PackedVector3Array([
+		Vector3(x0, h[0] + lift, z0), Vector3(x0 + 1, h[1] + lift, z0), Vector3(x0 + 1, h[3] + lift, z0 + 1),
+		Vector3(x0, h[0] + lift, z0), Vector3(x0 + 1, h[3] + lift, z0 + 1), Vector3(x0, h[2] + lift, z0 + 1)])
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = v
+	var m := ArrayMesh.new()
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	_dig_marker.mesh = m
+
+
+## The ground was dug or filled: pieces settle or fall, and nobody ends up inside the sand.
+func _on_ground_changed(area: Rect2) -> void:
+	building.settle(area)
+	var near := area.grow(0.6)
+	var bodies: Array = [player]
+	bodies.append_array(mutants.get_children())
+	for b in bodies:
+		if b is CharacterBody3D and near.has_point(Vector2(b.position.x, b.position.z)):
+			var g := terrain.surface_height(b.position.x, b.position.z)
+			if b.position.y < g:
+				b.position.y = g
+	for id in loot.drops:
+		var n: Node3D = loot.drops[id].node
+		if near.has_point(Vector2(n.position.x, n.position.z)):
+			n.position.y = terrain.surface_height(n.position.x, n.position.z)
+	var r := building.zone_radius
+	var d := area.get_center().length()
+	if d > r - 4.0 and d < r + 4.0:
+		base_zone.rebuild()
 
 
 ## Slot key of the built piece under the crosshair (within hammer reach), or "".
@@ -924,10 +1079,14 @@ func collect_save_data() -> Dictionary:
 		"guns": guns.save_data(),
 		"shop": shop.save_data(),
 		"drone": drone.save_data(),
+		"terrain": terrain.save_data(),
 	}
 
 
 func apply_save_data(data: Dictionary) -> void:
+	# Dug ground first, so everything else is restored on top of it. Older saves: flat.
+	terrain.load_data(data.get("terrain", {}))
+	base_zone.rebuild()
 	var w: Dictionary = data.get("world", {})
 	day_night.restore(int(w.get("day", 1)), float(w.get("hour", 9.0)))
 	# Upgrades first: chests must be big enough before their contents load.

@@ -7,6 +7,7 @@ const HINTS := {
 	"welcome": "Welcome to the desert! Search wrecks and ruins with E for supplies. Build your fortress around the flag with B. Every night mutants attack.",
 	"loot": "Tab opens your bag. 1–9 picks a hotbar slot; F eats, drinks or uses what you hold.",
 	"build": "Build mode: left click builds, R turns the piece, the mouse wheel picks another. Stay inside the ring of stakes.",
+	"shovel": "Shovel: left click digs out a 1 m patch and gives sand, right click fills it back in. Dig too close to a wall and it falls down.",
 	"hammer": "Hammer: left click a piece to repair or upgrade it, right click twice to demolish it for half the cost back.",
 	"gun": "Hold right click to aim down the sights and R to reload. Gunshots bring mutants running.",
 	"dusk": "The siren means night is coming. Get behind your walls, close the gates and have a weapon ready.",

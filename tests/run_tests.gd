@@ -1373,6 +1373,159 @@ func _start_ramp_walk() -> void:
 	Input.action_press("move_forward")
 
 
+var pit_center := Vector3.ZERO
+
+
+## v1.1: deformable ground and the shovel (the parts that need no physics steps).
+func _test_digging() -> void:
+	var t = main.terrain
+	var b = main.building
+	var inv = main.inventory
+	var Items = load("res://scripts/items.gd")
+	var Shop = load("res://scripts/shop.gd")
+	check(Items.ITEMS.has("shovel") and Items.ITEMS.has("sand"), "shovel and sand are items")
+	check(Items.RECIPES.has("shovel") and Items.recipe_tier("shovel") == 1, "the workbench makes a shovel")
+	check(Shop.CATALOG.map(func(e): return e.name).has("Shovel"), "the shop sells a shovel")
+	main.open_test_box()
+	check(main.test_storage.count_of("shovel") == 1 and main.test_storage.count_of("sand") == 20, "the test box has a shovel and sand")
+	main.inventory_ui.close()
+	check(t.has_node("Ground_0_0") and t.has_node("Ground_5_5"), "the base area is a grid of ground chunks")
+	# The fine grid sampler matches its own vertices and the old ground.
+	check(absf(t.surface_height(12.0, -12.0) - t.vertex_height(60, 36)) < 0.001, "height at a grid point is the vertex height")
+	check(absf(t.surface_height(12.5, -12.5) - t.BASE_HEIGHT) < 0.01, "the base clearing is still flat (%.3f)" % t.surface_height(12.5, -12.5))
+	check(t.dig_blocked(100.0, 0.0) != "" and t.dig_blocked(12.5, -12.5) == "", "you can only dig near the base")
+	check(t.dig_blocked(main.shop.position.x, main.shop.position.z) != "", "not under the shop terminal")
+	check(t.dig_blocked(0.2, 0.2) != "", "not under the flag")
+	inv.load_data({})
+	inv.add("shovel", 1)
+	inv.selected = 0
+	check(main.holding_shovel(), "holding the shovel")
+	var p := Vector3(12.5, 0, -12.5)
+	var h0: float = t.surface_height(p.x, p.z)
+	check(main.dig_at(p) == "" and inv.count_of("sand") == 1, "a dig gives a bag of sand")
+	check(absf(t.surface_height(p.x, p.z) - (h0 - t.DIG_STEP)) < 0.001, "and lowers the cell %.2f m" % t.DIG_STEP)
+	for i in 3:
+		main.dig_at(p)
+	check(absf(t.cell_depth(t.dig_cell(p.x, p.z)) - 1.0) < 0.001 and inv.count_of("sand") == 4, "four digs make a 1 m hole and 4 sand")
+	check(main.dig_at(p, true) == "" and inv.count_of("sand") == 3, "filling uses a bag of sand")
+	check(absf(t.surface_height(p.x, p.z) - (h0 - 0.75)) < 0.001, "and raises the cell back up")
+	inv.remove("sand", 3)
+	check(main.dig_at(p, true) != "", "no filling without sand")
+	# Bedrock.
+	for i in 30:
+		main.dig_at(p)
+	var sand_at_bottom: int = inv.count_of("sand")
+	check(t.at_bedrock(p.x, p.z) and absf(t.cell_depth(t.dig_cell(p.x, p.z)) - t.BEDROCK) < 0.001, "bedrock stops the shovel %.0f m down" % t.BEDROCK)
+	check(main.dig_at(p).begins_with("Bedrock") and inv.count_of("sand") == sand_at_bottom, "no sand from bedrock")
+	# A row of single digs makes a level trench.
+	t.load_data({})
+	for x in [8.5, 9.5, 10.5]:
+		main.dig_at(Vector3(x, 0, -4.5))
+	var c: Array = t.cell_corners(t.dig_cell(9.5, -4.5))
+	check(absf(c.max() - c.min()) < 0.001 and absf(c[0] - (h0 - t.DIG_STEP)) < 0.001, "a row of digs makes a level trench")
+	# Piling sand stops at the limit.
+	inv.add("sand", 20)
+	var piled := 0
+	for i in 12:
+		if main.dig_at(Vector3(10.5, 0, -8.5), true) == "":
+			piled += 1
+	check(piled == int(t.MAX_RAISE / t.DIG_STEP), "sand piles up to %.0f m (%d fills)" % [t.MAX_RAISE, piled])
+	# Prompt when looking at the ground.
+	var player = main.player
+	player.position = Vector3(20.5, t.surface_height(20.5, -10.0), -10.0)
+	player.rotation.y = 0.0
+	player.head.rotation.x = -0.9
+	player.head.position.y = player.EYE_HEIGHT
+	var prompt: String = main.shovel_prompt()
+	check(prompt.begins_with("Sand") and "[LMB] Dig" in prompt, "shovel prompt: " + prompt.replace("\n", " / "))
+	main._update_dig_marker()
+	check(main._dig_marker.visible, "a marker shows the cell the shovel will dig")
+	check(main.hints.HINTS.has("shovel"), "there is a first-time hint for the shovel")
+	# Saved as height deltas.
+	var data: Dictionary = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	check(data.has("terrain") and data.terrain.deltas.size() > 0, "dug ground goes in the save (%d numbers)" % data.terrain.deltas.size())
+	var before: float = t.surface_height(9.5, -4.5)
+	t.load_data({})
+	check(absf(t.surface_height(9.5, -4.5) - h0) < 0.001, "cleared")
+	main.apply_save_data(data)
+	check(absf(t.surface_height(9.5, -4.5) - before) < 0.002, "dug ground is loaded")
+	data.erase("terrain")
+	main.apply_save_data(data)
+	check(absf(t.surface_height(9.5, -4.5) - h0) < 0.001, "older saves load flat ground")
+	# Undermining: a wall on the sand falls when the ground next to it is dug out.
+	b.load_data([])
+	var wall_slot := {"kind": "edge", "cx": 8, "cz": -4, "dir": 0}  # x 16..18 along z = -8
+	b.place("wall", wall_slot, b.evaluate("wall", wall_slot).y)
+	var wkey: String = b.slot_key(wall_slot)
+	var chest_slot := {"kind": "obj", "cx": 10, "cz": -4, "dir": 0}  # x 20..22, z -8..-6
+	b.place("chest", chest_slot, b.evaluate("chest", chest_slot).y)
+	var ckey: String = b.slot_key(chest_slot)
+	var far_slot := {"kind": "edge", "cx": 8, "cz": -10, "dir": 0}
+	b.place("wall", far_slot, b.evaluate("wall", far_slot).y)
+	main.dig_at(Vector3(16.5, 0, -8.5))
+	check(b.pieces.has(wkey), "one dig next to a wall is fine")
+	for i in 3:
+		main.dig_at(Vector3(16.5, 0, -8.5))
+		main.dig_at(Vector3(17.5, 0, -8.5))
+	check(not b.pieces.has(wkey), "a wall falls when the sand under it is dug out")
+	check(b.pieces.has(b.slot_key(far_slot)), "a wall further away stands")
+	var cy: float = b.pieces[ckey].y
+	main.dig_at(Vector3(20.5, 0, -7.5))
+	check(b.pieces[ckey].y < cy - 0.1, "a chest on the sand settles into the hole (%.2f -> %.2f)" % [cy, b.pieces[ckey].y])
+	# A foundation with a wall and a floor on top: dig it out and all of it comes down.
+	b.load_data([])
+	var f_slot := {"kind": "cell", "cx": 9, "cz": 3, "dir": 0}  # x 18..20, z 6..8
+	b.place("foundation", f_slot, b.evaluate("foundation", f_slot).y)
+	var fw_slot := {"kind": "edge", "cx": 9, "cz": 3, "dir": 0}
+	b.place("wall", fw_slot, b.evaluate("wall", fw_slot).y)
+	var up_slot := {"kind": "cell", "cx": 9, "cz": 3, "dir": 0, "level": 1}
+	b.place("floor", up_slot, b.evaluate("floor", up_slot).y)
+	check(b.pieces.size() == 3, "foundation, wall and floor built")
+	for i in 4:
+		for cell in [Vector3(18.5, 0, 6.5), Vector3(19.5, 0, 6.5), Vector3(18.5, 0, 7.5), Vector3(19.5, 0, 7.5)]:
+			main.dig_at(cell)
+	check(b.pieces.size() == 3, "a foundation takes 1 m of digging under it")
+	for i in 4:
+		for cell in [Vector3(18.5, 0, 6.5), Vector3(19.5, 0, 6.5), Vector3(18.5, 0, 7.5), Vector3(19.5, 0, 7.5)]:
+			main.dig_at(cell)
+	check(b.pieces.is_empty(), "dug out further, it falls with everything on it (%d left)" % b.pieces.size())
+	# A bag dropped in a hole settles to the bottom.
+	t.load_data({})
+	var bag: String = main.loot.spawn_drop({"wood": 1}, Vector3(26.5, t.surface_height(26.5, 4.5), 4.5))
+	main.dig_at(Vector3(26.5, 0, 4.5))
+	check(absf(main.loot.drops[bag].node.position.y - t.surface_height(26.5, 4.5)) < 0.001, "a dropped bag settles into the hole")
+	main.loot.set_drop_items(bag, {})
+	# Physics next: a 2 m wide, 1 m deep pit for the player to fall into.
+	pit_center = Vector3(14.0, 0, 10.0)
+	for i in 4:
+		for o in [Vector2(-0.5, -0.5), Vector2(0.5, -0.5), Vector2(-0.5, 0.5), Vector2(0.5, 0.5)]:
+			main.dig_at(Vector3(pit_center.x + o.x, 0, pit_center.z + o.y))
+	player.position = Vector3(pit_center.x, h0 + 0.2, pit_center.z)
+	player.velocity = Vector3.ZERO
+	player.head.rotation.x = 0.0
+
+
+## v1.1, after some physics frames: the new ground collides where it is drawn.
+func _check_digging() -> void:
+	var t = main.terrain
+	var player = main.player
+	var bottom: float = t.surface_height(pit_center.x, pit_center.z)
+	check(absf(bottom - (t.BASE_HEIGHT - 1.0)) < 0.01, "the pit is 1 m deep (%.2f)" % bottom)
+	var space: PhysicsDirectSpaceState3D = main.get_world_3d().direct_space_state
+	var q := PhysicsRayQueryParameters3D.create(Vector3(pit_center.x + 0.3, 50, pit_center.z - 0.2), Vector3(pit_center.x + 0.3, -50, pit_center.z - 0.2), 1, [player.get_rid()])
+	var hit := space.intersect_ray(q)
+	check(not hit.is_empty() and hit.collider == t and absf(hit.position.y - t.surface_height(pit_center.x + 0.3, pit_center.z - 0.2)) < 0.01, "collision follows the dug ground")
+	check(player.is_on_floor() and absf(player.position.y - bottom) < 0.1, "you fall into the pit and stand on its floor (y %.2f)" % player.position.y)
+	main.inventory.add("sand", 1)
+	main.dig_at(Vector3(pit_center.x - 0.5, 0, pit_center.z - 0.5), true)
+	main.dig_at(Vector3(pit_center.x + 0.5, 0, pit_center.z - 0.5), true)
+	check(player.position.y >= t.surface_height(player.position.x, player.position.z) - 0.001, "filling under you lifts you out of the sand")
+	t.load_data({})
+	main.building.load_data([])
+	main.inventory.load_data({})
+	main.player.position = main.player.spawn_point
+
+
 func _process(_delta: float) -> bool:
 	frame += 1
 	var player = main.player
@@ -1577,6 +1730,10 @@ func _process(_delta: float) -> bool:
 			main.mutants.clear()
 			main.building.load_data([])
 		2570:
+			_test_digging()
+		2640:
+			_check_digging()
+		2650:
 			if failures.is_empty():
 				print("== ALL TESTS PASSED ==")
 				quit(0)

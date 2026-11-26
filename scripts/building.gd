@@ -29,6 +29,9 @@ const REFUND := 0.5          # share of what a piece cost you get back when demo
 const UNDO_SECONDS := 60.0   # build-mode right click gives everything back this soon after building
 const ZONE_RADIUS := 26.0    # base build zone around the flag at the origin (before upgrades)
 const CHEST_SLOTS := 20      # before upgrades
+## Dig more than this out from under a piece standing on the sand and it falls
+## (foundations take 0.4 m more).
+const UNDERMINE_GAP := 0.6
 
 signal piece_destroyed(key: String, type: String)
 ## A piece fell down because what held it up was destroyed.
@@ -1003,6 +1006,77 @@ func collapse_unsupported() -> int:
 			piece_collapsed.emit(key, rec.type)
 			fell += 1
 	return fell
+
+
+## The ground changed (digging): pieces standing on the sand nearby are checked.
+## Things like chests and traps settle onto the new ground; walls, foundations
+## and the rest fall down if too much was dug out from under them, and whatever
+## they held up comes down too. Returns how many pieces fell.
+func settle(area: Rect2) -> int:
+	var near := area.grow(CELL * 1.5)
+	var fell := 0
+	# Foundations first, then what stands on them or on the sand, then objects.
+	for pass_i in 3:
+		for key in pieces.keys():
+			if not pieces.has(key):
+				continue
+			var rec: Dictionary = pieces[key]
+			if rec.slot.level != 0:
+				continue
+			var c := slot_center(rec.slot, rec.type)
+			if not near.has_point(Vector2(c.x, c.z)):
+				continue
+			var is_obj: bool = rec.slot.kind == "obj"
+			if (pass_i == 0) != (rec.type == "foundation") or (pass_i == 2) != is_obj:
+				continue
+			if is_obj:
+				_reseat(rec)
+			elif undermined(rec):
+				_debris(rec)
+				remove(key)
+				piece_collapsed.emit(key, rec.type)
+				fell += 1
+	if fell > 0:
+		fell += collapse_unsupported()
+		# Objects that stood on a fallen foundation drop to the sand.
+		for key in pieces.keys():
+			if pieces.has(key) and pieces[key].slot.kind == "obj" and pieces[key].slot.level == 0:
+				_reseat(pieces[key])
+	return fell
+
+
+## True if a ground-level piece has lost the sand under it (see UNDERMINE_GAP):
+## under its middle, or under half of the points it stands on.
+func undermined(rec: Dictionary) -> bool:
+	var slot: Dictionary = rec.slot
+	if rec.type != "foundation":
+		if slot.kind == "cell" and not is_nan(foundation_top(slot.cx, slot.cz)):
+			return false
+		if slot.kind == "edge":
+			for c in edge_cells(slot):
+				if not is_nan(foundation_top(c.x, c.y)):
+					return false
+	var bottom: float = rec.y - (FOUNDATION_H if rec.type == "foundation" else 0.0)
+	# Foundations may stand on a slope already (up to MAX_SLOPE), so they take a bit more.
+	var limit := UNDERMINE_GAP + (0.4 if rec.type == "foundation" else 0.0)
+	var g := _ground_samples(rec.type, slot)
+	var gaps := 0
+	for h in g:
+		if bottom - h > limit:
+			gaps += 1
+	# The middle sample is the last of each square (or of the edge).
+	return gaps * 2 >= g.size() or bottom - g[g.size() - 1] > limit
+
+
+## Moves an object on the sand (not on a foundation or floor) to the ground under it.
+func _reseat(rec: Dictionary) -> void:
+	var under := piece_at(cell_key(rec.slot.cx, rec.slot.cz, 0))
+	if not under.is_empty() and under.type in ["foundation", "floor"]:
+		return
+	var y: float = _ground_level(rec.type, rec.slot).y
+	if absf(y - rec.y) > 0.001:
+		rec.y = y
+		rec.node.position.y = y
 
 
 ## Broken boards and chunks tumble to the ground in a puff of dust, with a crash.

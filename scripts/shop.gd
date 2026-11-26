@@ -16,6 +16,7 @@ const CATALOG := [
 	{"cat": "Supplies", "name": "3 canned food", "price": 15, "items": {"canned_food": 3}},
 	{"cat": "Supplies", "name": "3 water bottles", "price": 15, "items": {"water": 3}},
 	{"cat": "Supplies", "name": "3 bandages", "price": 20, "items": {"bandage": 3}},
+	{"cat": "Supplies", "name": "Shovel", "price": 40, "items": {"shovel": 1}},
 	{"cat": "Weapons", "name": "Machete", "price": 50, "items": {"machete": 1}},
 	{"cat": "Weapons", "name": "Pistol", "price": 120, "items": {"pistol": 1}},
 	{"cat": "Weapons", "name": "Shotgun", "price": 260, "items": {"shotgun": 1}},

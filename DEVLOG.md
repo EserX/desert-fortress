@@ -2,6 +2,20 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v0.10.0 (2026-11-26): Material tiers and the hammer
+- **Three tiers** for every building piece, each with hit points: **wood** (250), **scrap metal** (600) and **concrete** (1500). Everything is built in wood, except roofs and ramps, which start as scrap metal. Each tier has its own look: planks, grey sheet metal with rusty posts, and grey concrete.
+- **Hammer:** everyone has one (new games start with it in hotbar slot 1, and older saves get one). Select it and look at a piece within 3.5 m. The prompt shows its tier, hit points and what the hammer will do:
+  - **Left click:** **repair** if damaged (one unit of the piece's material per started quarter of lost hit points), otherwise **upgrade** to the next tier. Wood to scrap metal costs scrap and 2 nails; scrap metal to concrete costs cement bags and 1 scrap.
+  - **Right click twice:** **demolish**. You get back half of everything the piece cost, upgrades included. The first click only arms it, so you don't knock walls down by accident.
+- **Build-mode right click** is now an **undo**: it gives everything back, but only for a piece built in the last minute that hasn't been upgraded or damaged. After that it tells you to use the hammer.
+- **Cracks:** below 2/3 hit points a piece shows cracks, below 1/3 a lot more. At 0 it breaks and is gone. This is ready for mutants to attack walls in v0.15.
+- **New item: cement bag** (2 kg). Found in ruin crates (sometimes) and supply crates (1–3).
+- **Saved:** tier and hit points of every piece. Older saves load as full-health wood (and scrap roofs and ramps).
+- **Tests:** tier hit points, cracks on damage, repair cost and payment, upgrades through both tiers, top tier, prompt text, tier and hit points saved, undo window, half refund, two-click demolish, piece breaking at 0 hp. New screenshot view `14_tiers`.
+
+**Try:** build a wall, then select the hammer (1) and left click it to upgrade to scrap metal. Look for cement in supply crates to make it concrete.
+**Next:** v0.11, the base build zone on the ground, a storage chest and the workbench (hammer, bandage, spike barricade).
+
 ## v0.9.0 (2026-11-25): More building pieces
 - **New pieces** (mouse wheel or 1–8 in build mode):
   - **Doorway with gate** (4 wood, 4 nails): a plank gate on a hinge. Look at it and press **E** to open or close it.

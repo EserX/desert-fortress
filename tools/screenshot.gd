@@ -21,6 +21,7 @@ var shots := [
 	{"name": "11_death", "pos": Vector3(0, 0, 9), "yaw": 0.6, "pitch": -0.05, "hour": 13.0, "death": true},
 	{"name": "12_map", "pos": Vector3(20, 0, 40), "yaw": 0.9, "pitch": 0.0, "hour": 9.0, "map": true},
 	{"name": "13_build", "pos": Vector3(13, 0, 20), "yaw": 0.55, "pitch": -0.2, "hour": 15.5, "build": true},
+	{"name": "14_tiers", "pos": Vector3(7, 0, 16.5), "yaw": 0.0, "pitch": -0.1, "hour": 10.0, "tiers": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -78,6 +79,16 @@ func _process(_d: float) -> bool:
 				main.map_ui.toggle()
 		elif main.map_ui.is_open():
 			main.map_ui.toggle()
+		if s.get("tiers", false):
+			var b = main.building
+			b.load_data([])
+			for i in 3:
+				var slot := {"kind": "edge", "cx": 2 + i, "cz": 6, "dir": 0, "level": 0}
+				var k: String = b.place("wall", slot, b.evaluate("wall", slot).y, false, i)
+				b.damage(k, [60.0, 400.0, 1200.0][i])
+			main.inventory.load_data({})
+			main.inventory.add_all({"hammer": 1, "scrap": 9})
+			main.inventory.selected = 0
 		if s.get("build", false):
 			_build_sample()
 		elif main.build_mode.active:

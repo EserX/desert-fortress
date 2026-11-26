@@ -22,6 +22,7 @@ const BuildMode = preload("res://scripts/build_mode.gd")
 const DISCOVER_RANGE := 45.0
 const REFILLS_PER_MORNING := 4
 const SUPPLY_CHANCE := 0.5
+const HAMMER_REACH := 3.5
 
 ## When true the world is only a backdrop for the title screen:
 ## no player, HUD or pause menu, just a slowly orbiting camera.
@@ -51,6 +52,8 @@ var build_mode: BuildMode
 var places: Array = []
 ## Keys of places you have been near.
 var discovered := {}
+var _demolish_armed := ""
+var _demolish_until := 0
 var sun: DirectionalLight3D
 var moon: DirectionalLight3D
 var env: Environment
@@ -116,6 +119,7 @@ func _ready() -> void:
 
 	inventory = Inventory.new()
 	inventory.changed.connect(func(): player.overloaded = inventory.overloaded())
+	inventory.add("hammer", 1)  # everyone starts with a hammer
 
 	build_mode = BuildMode.new()
 	build_mode.name = "BuildMode"
@@ -179,6 +183,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		hud.show_pickup(["Build mode on" if build_mode.active else "Build mode off"])
 	elif build_mode.active and _build_input(event):
 		get_viewport().set_input_as_handled()
+	elif holding_hammer() and _hammer_input(event):
+		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("interact"):
 		interact(player.interact_target())
 	elif event.is_action_pressed("use_item"):
@@ -202,7 +208,12 @@ func _process(delta: float) -> void:
 			_discover_nearby()
 		survival.tick(delta, day_night.hour, player.sprinting, in_shade)
 	if hud and not get_tree().paused:
-		hud.set_prompt("" if inventory_ui.is_open() else _prompt_for(player.interact_target()))
+		var text := ""
+		if not inventory_ui.is_open():
+			text = _prompt_for(player.interact_target())
+			if text == "" and holding_hammer():
+				text = hammer_prompt(piece_under_crosshair())
+		hud.set_prompt(text)
 		for i in Inventory.HOTBAR:
 			if Input.is_action_just_pressed("hotbar_%d" % (i + 1)) and not inventory_ui.is_open():
 				if build_mode.active:
@@ -244,6 +255,105 @@ func thumbnail_image() -> Image:
 	return _screenshot()
 
 
+func holding_hammer() -> bool:
+	var s := inventory.selected_stack()
+	return not s.is_empty() and s.item == "hammer" and not build_mode.active
+
+
+## Slot key of the built piece under the crosshair (within hammer reach), or "".
+func piece_under_crosshair() -> String:
+	var hit := player.look_hit(HAMMER_REACH)
+	var n: Node = hit.get("collider")
+	while n and n != building:
+		if n.has_meta("piece_key"):
+			return n.get_meta("piece_key")
+		n = n.get_parent()
+	return ""
+
+
+static func _cost_text(cost: Dictionary) -> String:
+	var parts: Array = []
+	for item in cost:
+		parts.append("%d %s" % [cost[item], Items.display_name(item).to_lower()])
+	return ", ".join(parts)
+
+
+## "Scrap metal wall 420/600   [LMB] Upgrade to concrete (3 cement bag, 1 scrap metal)   [RMB] Demolish"
+func hammer_prompt(key: String) -> String:
+	var rec: Dictionary = building.pieces.get(key, {})
+	if rec.is_empty():
+		return ""
+	var text := "%s  %d/%d" % [building.describe(rec), rec.hp, building.max_hp(rec)]
+	var rep := building.repair_cost(rec)
+	var up := building.upgrade_cost(rec)
+	if not rep.is_empty():
+		text += "\n[LMB] Repair (%s)" % _cost_text(rep)
+	elif not up.is_empty():
+		text += "\n[LMB] Upgrade to %s (%s)" % [building.TIER_NAMES[rec.tier + 1], _cost_text(up)]
+	else:
+		text += "\nFully upgraded"
+	if _demolish_armed == key and Time.get_ticks_msec() < _demolish_until:
+		return text + "   [RMB again] Demolish for real"
+	return text + "   [RMB] Demolish"
+
+
+func _pay(cost: Dictionary) -> bool:
+	for item in cost:
+		if inventory.count_of(item) < cost[item]:
+			hud.show_banner("Not enough materials: " + _cost_text(cost))
+			return false
+	for item in cost:
+		inventory.remove(item, cost[item])
+	return true
+
+
+## Hammer: left click repairs or upgrades, right click twice demolishes.
+func hammer_use(key: String) -> void:
+	var rec: Dictionary = building.pieces.get(key, {})
+	if rec.is_empty():
+		return
+	var rep := building.repair_cost(rec)
+	if not rep.is_empty():
+		if _pay(rep):
+			building.repair(key)
+			hud.show_pickup(["Repaired " + building.describe(rec).to_lower()])
+	elif not building.upgrade_cost(rec).is_empty():
+		if _pay(building.upgrade_cost(rec)):
+			building.upgrade(key)
+			hud.show_pickup(["Upgraded to " + building.describe(rec).to_lower()])
+
+
+## First right click arms, a second within 3 seconds demolishes with a half refund.
+func hammer_demolish(key: String) -> bool:
+	if _demolish_armed != key or Time.get_ticks_msec() > _demolish_until:
+		_demolish_armed = key
+		_demolish_until = Time.get_ticks_msec() + 3000
+		return false
+	_demolish_armed = ""
+	var back: Dictionary = building.refund(building.pieces[key])
+	building.remove(key)
+	var left := inventory.add_all(back)
+	if not left.is_empty():
+		loot.spawn_drop(left, _drop_spot())
+	hud.show_pickup(["Demolished, got back " + (_cost_text(back) if not back.is_empty() else "nothing")])
+	return true
+
+
+func _hammer_input(event: InputEvent) -> bool:
+	if not (event is InputEventMouseButton and event.pressed) or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+		return false
+	if event.button_index != MOUSE_BUTTON_LEFT and event.button_index != MOUSE_BUTTON_RIGHT:
+		return false
+	var key := piece_under_crosshair()
+	if key == "":
+		return false
+	if event.button_index == MOUSE_BUTTON_LEFT:
+		hammer_use(key)
+	else:
+		hammer_demolish(key)
+	return true
+
+
 func _prompt_for(id: String) -> String:
 	if id.begins_with("gate:"):
 		return building.prompt(id)
@@ -262,7 +372,9 @@ func _build_input(event: InputEvent) -> bool:
 			build_mode.try_place()
 		MOUSE_BUTTON_RIGHT:
 			var t := build_mode.try_remove()
-			if t != "":
+			if t == "old":
+				hud.show_banner("Too late to undo. Use the hammer (right click) to demolish.")
+			elif t != "":
 				hud.show_pickup(["Took down " + Building.PIECES[t].name.to_lower()])
 		MOUSE_BUTTON_WHEEL_UP:
 			build_mode.cycle(-1)
@@ -432,6 +544,8 @@ func apply_save_data(data: Dictionary) -> void:
 		discovered[str(key)] = true
 	if data.has("inventory"):
 		inventory.load_data(data.inventory)
+		if inventory.count_of("hammer") == 0:
+			inventory.add("hammer", 1)  # saves from before v0.10
 	else:
 		# v0.4 saves kept items as a plain {item: count} list.
 		inventory.load_data({})

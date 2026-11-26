@@ -180,6 +180,14 @@ func interact_target() -> String:
 	return ""
 
 
+## What the crosshair points at within reach: the ray hit dictionary, or {}.
+func look_hit(reach: float) -> Dictionary:
+	var from := camera.global_position
+	var to := from - camera.global_transform.basis.z * reach
+	var q := PhysicsRayQueryParameters3D.create(from, to, 1, [get_rid()])
+	return get_world_3d().direct_space_state.intersect_ray(q)
+
+
 func heading_degrees() -> float:
 	var fwd := -global_transform.basis.z
 	return fposmod(rad_to_deg(atan2(fwd.x, -fwd.z)), 360.0)

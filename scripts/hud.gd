@@ -89,8 +89,8 @@ func _ready() -> void:
 	prompt = _label("", 20)
 	prompt.set_anchors_preset(Control.PRESET_CENTER)
 	prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	prompt.size = Vector2(400, 30)
-	prompt.position = Vector2(-200, 34)
+	prompt.size = Vector2(1000, 50)
+	prompt.position = Vector2(-500, 34)
 	root.add_child(prompt)
 
 	pickups = VBoxContainer.new()

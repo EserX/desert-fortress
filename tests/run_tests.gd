@@ -258,6 +258,7 @@ func _test_building() -> void:
 	bm.looking_at_piece = fkey
 	check(bm.try_remove() == "foundation" and inv.count_of("wood") == 20, "taking a piece down refunds it")
 	_test_more_pieces()
+	_test_tiers()
 	b.load_data([])
 	bm.toggle()
 	inv.load_data({})
@@ -304,6 +305,62 @@ func _test_more_pieces() -> void:
 	b.remove(b.cell_key(6, 3, 0))
 	check(not b.occupied.has(b.cell_key(6, 4, 0)) and not b.pieces.has(sk), "taking down stairs frees both squares")
 	b.load_data([])
+
+
+## v0.10: tiers, hit points, cracks, hammer repair/upgrade/demolish, undo.
+func _test_tiers() -> void:
+	var b = main.building
+	var inv = main.inventory
+	var was_building: bool = main.build_mode.active
+	main.build_mode.active = false
+	b.load_data([])
+	inv.load_data({})
+	var slot := {"kind": "edge", "cx": 3, "cz": 4, "dir": 0, "level": 0}
+	var key: String = b.place("wall", slot, b.evaluate("wall", slot).y)
+	var rec: Dictionary = b.pieces[key]
+	check(rec.tier == 0 and rec.hp == 250.0, "new walls are wood with 250 hp")
+	check(b.base_tier("roof") == 1, "roofs start as scrap metal")
+	b.damage(key, 100.0)
+	check(b.crack_stage(rec) == 1 and rec.cracks.get_child(0).visible, "damage shows cracks")
+	check(b.repair_cost(rec) == {"wood": 2}, "repair costs wood by missing hp %s" % str(b.repair_cost(rec)))
+	inv.add("hammer", 1)
+	inv.selected = 0
+	check(main.holding_hammer(), "holding the hammer")
+	main.hammer_use(key)
+	check(rec.hp == 150.0, "no wood, no repair")
+	inv.add_all({"wood": 5, "scrap": 20, "nails": 10, "cement": 10})
+	main.hammer_use(key)
+	check(rec.hp == 250.0 and inv.count_of("wood") == 3, "hammer repairs for 2 wood")
+	main.hammer_use(key)
+	check(rec.tier == 1 and rec.hp == 600.0 and inv.count_of("scrap") == 16, "hammer upgrades wood to scrap metal (4 scrap)")
+	main.hammer_use(key)
+	check(rec.tier == 2 and rec.hp == 1500.0 and inv.count_of("cement") == 7, "and scrap metal to concrete (3 cement)")
+	check(b.upgrade_cost(rec).is_empty(), "concrete is the top tier")
+	check(main.hammer_prompt(key).contains("Fully upgraded"), "prompt: " + main.hammer_prompt(key).replace("\n", " | "))
+	# Saved with tier and hit points.
+	b.damage(key, 400.0)
+	var data: Array = JSON.parse_string(JSON.stringify(b.save_data()))
+	b.load_data(data)
+	rec = b.pieces[key]
+	check(rec.tier == 2 and rec.hp == 1100.0, "tier and hit points are saved")
+	# Too late to undo in build mode; the hammer demolishes for half back.
+	rec.built_at -= 61000
+	main.build_mode.active = true
+	main.build_mode.looking_at_piece = key
+	check(main.build_mode.try_remove() == "old", "build-mode undo only right after building")
+	main.build_mode.active = false
+	var refund: Dictionary = b.refund(rec)
+	check(refund == {"wood": 1, "nails": 2, "scrap": 2, "cement": 1}, "demolish refunds half %s" % str(refund))
+	check(not main.hammer_demolish(key) and b.pieces.has(key), "first right click only arms demolish")
+	check(main.hammer_demolish(key) and not b.pieces.has(key), "second right click demolishes")
+	# Breaking a piece.
+	var k2: String = b.place("wall", slot, 0.0)
+	var broke := []
+	b.piece_destroyed.connect(func(k, t): broke.append(t), CONNECT_ONE_SHOT)
+	check(b.damage(k2, 999.0) and broke == ["wall"] and not b.pieces.has(k2), "a piece at 0 hp breaks")
+	inv.load_data({})
+	b.load_data([])
+	main.build_mode.active = was_building
 
 
 ## Ramp: walk up it for real.

@@ -30,6 +30,7 @@ var shots := [
 	{"name": "20_wave", "pos": Vector3(2, 0, 14), "yaw": 0.3, "pitch": -0.04, "hour": 21.2, "wave": true},
 	{"name": "21_summary", "pos": Vector3(2, 0, 14), "yaw": 0.3, "pitch": -0.04, "hour": 6.4, "summary": true},
 	{"name": "22_breakin", "pos": Vector3(3.0, 0, -0.5), "yaw": 0.25, "pitch": -0.1, "hour": 19.4, "breakin": true},
+	{"name": "23_types", "pos": Vector3(60, 0, 60), "yaw": 0.4, "pitch": -0.03, "hour": 16.5, "types": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -115,6 +116,8 @@ func _process(_d: float) -> bool:
 			main.hud.show_hitmarker("target")
 		if s.get("walker", false):
 			_walker_sample(p)
+		if s.get("types", false):
+			_types_sample(p)
 		if s.get("breakin", false):
 			_breakin_sample(p)
 		if s.get("wave", false):
@@ -269,3 +272,26 @@ func _breakin_sample(p: Node3D) -> void:
 		w._animate(0.0, 0.3)
 	b.damage(keys[2], 9999.0)
 	main.mutants.night = true
+
+
+## Walker, runner, brute and spitter in a row, and a glob of acid in the air (v0.16).
+func _types_sample(p: Node3D) -> void:
+	var ms = main.mutants
+	ms.clear()
+	var fwd := -p.global_transform.basis.z
+	var right := p.global_transform.basis.x
+	var kinds := ["runner", "walker", "brute", "spitter"]
+	for i in kinds.size():
+		var w = ms.spawn(kinds[i], p.position + fwd * (6.5 + (i % 2) * 1.5) + right * (i - 1.5) * 2.2)
+		w.rotation.y = p.rotation.y + PI
+		w.set_physics_process(false)
+		w._anim_t = i * 1.1
+		w._animate(0.0, 1.5)
+	var sp = ms.alive()[3]
+	ms._on_spat(sp.global_position + Vector3(0, 1.4, 0) + fwd * -1.2, Vector3.ZERO, sp)
+	for g in ms.spits():
+		g.set_physics_process(false)
+	main.inventory.load_data({})
+	main.inventory.add("machete", 1)
+	main.inventory.selected = 0
+	main.melee.set_item("machete")

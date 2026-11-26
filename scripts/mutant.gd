@@ -1,18 +1,41 @@
 extends CharacterBody3D
-## A mutant. The Walker (v0.13) shambles around its home spot, spots you when
-## you come close in plain sight, chases you and claws at you. Takes melee hits
-## through take_hit(); at 0 health it falls over and sinks into the sand.
+## A mutant. Wanders around its home spot (or marches on the base in a wave),
+## spots you when you come close in plain sight, chases you and claws at you.
+## Types: Walker, Runner (fast, weak), Brute (slow, tanky, wrecks walls) and
+## Spitter (keeps its distance and lobs acid). Takes melee hits through
+## take_hit(); at 0 health it falls over and sinks into the sand.
 
 const LowPoly = preload("res://scripts/lowpoly.gd")
 
-enum State { WANDER, CHASE, ATTACK, DEAD, BREAK }
+enum State { WANDER, CHASE, ATTACK, DEAD, BREAK, SPIT }
 
 ## Stats per mutant type. Later versions add more types here.
+## scale: model size (x, y, z); push: how far hits knock it back; spit: ranged acid.
 const TYPES := {
 	"walker": {
 		"name": "Walker", "health": 100.0, "walk": 1.1, "march": 2.2, "run": 3.3,
 		"sight": 24.0, "sight_night": 15.0, "hear": 9.0, "lose": 38.0,
 		"damage": 12.0, "reach": 1.7, "windup": 0.45, "cooldown": 1.4, "wall_damage": 20.0,
+		"skin": Color(0.46, 0.53, 0.38), "scale": Vector3(1, 1, 1), "push": 1.0, "pitch": 1.0,
+	},
+	"runner": {
+		"name": "Runner", "health": 45.0, "walk": 1.6, "march": 3.4, "run": 6.4,
+		"sight": 28.0, "sight_night": 18.0, "hear": 11.0, "lose": 45.0,
+		"damage": 7.0, "reach": 1.6, "windup": 0.25, "cooldown": 0.8, "wall_damage": 8.0,
+		"skin": Color(0.62, 0.42, 0.36), "scale": Vector3(0.82, 0.95, 0.82), "push": 1.6, "pitch": 1.45,
+	},
+	"brute": {
+		"name": "Brute", "health": 420.0, "walk": 0.9, "march": 1.7, "run": 2.5,
+		"sight": 22.0, "sight_night": 14.0, "hear": 8.0, "lose": 34.0,
+		"damage": 30.0, "reach": 2.3, "windup": 0.8, "cooldown": 2.2, "wall_damage": 95.0,
+		"skin": Color(0.48, 0.44, 0.52), "scale": Vector3(1.55, 1.35, 1.45), "push": 0.2, "pitch": 0.62,
+	},
+	"spitter": {
+		"name": "Spitter", "health": 70.0, "walk": 1.0, "march": 2.0, "run": 2.8,
+		"sight": 30.0, "sight_night": 20.0, "hear": 9.0, "lose": 40.0,
+		"damage": 6.0, "reach": 1.6, "windup": 0.45, "cooldown": 1.4, "wall_damage": 10.0,
+		"skin": Color(0.6, 0.62, 0.3), "scale": Vector3(1.05, 0.95, 1.05), "push": 1.0, "pitch": 1.15,
+		"spit": {"range": 17.0, "keep": 9.0, "cooldown": 3.2, "windup": 0.7, "damage": 14.0, "wall_damage": 25.0, "speed": 15.0},
 	},
 }
 const LAYER := 8           # physics layer 4: mutants
@@ -21,7 +44,9 @@ const CORPSE_SECONDS := 25.0
 const SPIKE_DAMAGE := 8.0   # a mutant hurts itself this much clawing at a spike barricade
 const SMELL := 30.0         # wave mutants know where you are this close, walls or not
 
-signal attacked(damage: float, from: Vector3)
+signal attacked(damage: float, from: Vector3, kind: String)
+## Lobbed a glob of acid (the manager adds it to the world).
+signal spat(from: Vector3, velocity: Vector3, mutant: Node)
 signal died(mutant: Node)
 signal spotted(mutant: Node)
 ## Clawed at a building piece.
@@ -39,6 +64,8 @@ var target_dead := func(): return false
 var building  # Building
 var break_key := ""           # the piece it is tearing at in BREAK
 var _blocked_t := 0.0
+var _spit_cd := 0.0
+var _los := false             # line of sight to the target, refreshed a few times a second
 var _wander_to := Vector3.ZERO
 var _wander_wait := 0.0
 var _think := 0.0
@@ -81,10 +108,11 @@ func _ready() -> void:
 	floor_snap_length = 0.4
 	_shape = CollisionShape3D.new()
 	var cap := CapsuleShape3D.new()
-	cap.radius = 0.35
-	cap.height = 1.8
+	var sc: Vector3 = stats.scale
+	cap.radius = 0.35 * maxf(sc.x, sc.z)
+	cap.height = maxf(1.8 * sc.y, cap.radius * 2.0 + 0.1)
 	_shape.shape = cap
-	_shape.position.y = 0.9
+	_shape.position.y = cap.height * 0.5
 	add_child(_shape)
 	_build_model()
 	audio = AudioStreamPlayer3D.new()
@@ -95,7 +123,7 @@ func _ready() -> void:
 
 
 func _build_model() -> void:
-	_skin = LowPoly.material(Color(0.46, 0.53, 0.38))
+	_skin = LowPoly.material(stats.skin)
 	var rags := LowPoly.material(Color(0.33, 0.28, 0.24))
 	var pants := LowPoly.material(Color(0.24, 0.25, 0.28))
 	var eye := StandardMaterial3D.new()
@@ -105,17 +133,20 @@ func _build_model() -> void:
 	eye.emission_energy_multiplier = 3.0
 	_model = Node3D.new()
 	add_child(_model)
+	var body := Node3D.new()  # carries the type's proportions; _model tilts when it falls
+	body.scale = stats.scale
+	_model.add_child(body)
 	for side in [-1.0, 1.0]:
 		var hip := Node3D.new()
 		hip.position = Vector3(0.13 * side, 0.92, 0)
-		_model.add_child(hip)
+		body.add_child(hip)
 		_box(hip, Vector3(0.17, 0.9, 0.19), Vector3(0, -0.45, 0), pants)
 		_box(hip, Vector3(0.15, 0.08, 0.26), Vector3(0, -0.88, -0.04), _skin)
 		_legs.append(hip)
 	var torso := Node3D.new()
 	torso.position.y = 0.92
-	torso.rotation.x = -0.3  # hunched forward
-	_model.add_child(torso)
+	torso.rotation.x = {"runner": -0.6, "brute": -0.4}.get(type, -0.3)  # hunched forward
+	body.add_child(torso)
 	_box(torso, Vector3(0.5, 0.62, 0.28), Vector3(0, 0.33, 0), rags)
 	_box(torso, Vector3(0.3, 0.14, 0.22), Vector3(0.06, 0.08, 0.02), _skin)  # a tear in the shirt
 	var head := Node3D.new()
@@ -132,6 +163,25 @@ func _build_model() -> void:
 		_box(shoulder, Vector3(0.13, 0.13, 0.62), Vector3(0, 0, -0.29), _skin)
 		_box(shoulder, Vector3(0.15, 0.15, 0.24), Vector3(0, 0, -0.06), rags)
 		_arms.append(shoulder)
+		if type == "brute":
+			_box(shoulder, Vector3(0.22, 0.22, 0.24), Vector3(0, 0, -0.62), _skin)  # huge fists
+		elif type == "runner":
+			_box(shoulder, Vector3(0.05, 0.05, 0.14), Vector3(0.03, 0, -0.66), LowPoly.material(Color(0.85, 0.8, 0.7)))  # claws
+	match type:
+		"brute":
+			_box(torso, Vector3(0.62, 0.36, 0.36), Vector3(0, 0.5, 0.02), _skin)  # hulking shoulders
+			_box(torso, Vector3(0.52, 0.12, 0.34), Vector3(0, 0.12, 0), LowPoly.material(Color(0.25, 0.22, 0.2)))  # belt
+		"spitter":
+			var sac := StandardMaterial3D.new()
+			sac.albedo_color = Color(0.6, 0.95, 0.2)
+			sac.emission_enabled = true
+			sac.emission = Color(0.45, 0.9, 0.1)
+			sac.emission_energy_multiplier = 1.4
+			_box(torso, Vector3(0.36, 0.3, 0.2), Vector3(0.05, 0.42, 0.22), sac)   # bulging back
+			_box(torso, Vector3(0.16, 0.18, 0.14), Vector3(-0.14, 0.2, 0.2), sac)
+			_box(head, Vector3(0.22, 0.14, 0.16), Vector3(0, -0.06, -0.08), sac)  # swollen throat
+		"runner":
+			_box(head, Vector3(0.24, 0.05, 0.08), Vector3(0, -0.04, -0.14), LowPoly.material(Color(0.85, 0.8, 0.7)))  # teeth
 
 
 func _box(parent: Node3D, size: Vector3, pos: Vector3, mat: Material) -> void:
@@ -173,7 +223,7 @@ func take_hit(damage: float, point: Vector3, dir: Vector3) -> void:
 		return
 	health = maxf(health - damage, 0.0)
 	_flash = 0.25
-	var push := Vector3(dir.x, 0, dir.z).normalized() * 3.5
+	var push: Vector3 = Vector3(dir.x, 0, dir.z).normalized() * 3.5 * float(stats.push)
 	velocity += push
 	_attack_t = -1.0
 	_cooldown = maxf(_cooldown, 0.5)
@@ -259,7 +309,7 @@ func has_line_of_sight() -> bool:
 
 func _physics_process(delta: float) -> void:
 	_flash = maxf(_flash - delta, 0.0)
-	_skin.albedo_color = Color(0.46, 0.53, 0.38).lerp(Color(1.0, 0.25, 0.2), _flash / 0.25)
+	_skin.albedo_color = (stats.skin as Color).lerp(Color(1.0, 0.25, 0.2), _flash / 0.25)
 	if is_dead():
 		_dead_t += delta
 		if _dead_t > CORPSE_SECONDS:
@@ -271,6 +321,7 @@ func _physics_process(delta: float) -> void:
 	if state == State.WANDER and not hunter and target and global_position.distance_squared_to(target.global_position) > 140.0 * 140.0:
 		return
 	_cooldown = maxf(_cooldown - delta, 0.0)
+	_spit_cd = maxf(_spit_cd - delta, 0.0)
 	_think -= delta
 	var night: bool = get_parent().get("night") == true
 	if _think <= 0.0:
@@ -301,7 +352,22 @@ func _physics_process(delta: float) -> void:
 			var to: Vector3 = target.global_position - global_position
 			to.y = 0
 			want = to.normalized()
-			if to.length() < stats.reach and _cooldown <= 0.0 and has_line_of_sight():
+			if stats.has("spit") and to.length() > stats.reach:
+				# Keep some distance and lob acid when there is a clear shot.
+				var sp: Dictionary = stats.spit
+				var d := to.length()
+				if _los and d <= sp.range and _spit_cd <= 0.0:
+					want = Vector3.ZERO
+					_attack_t = 0.0
+					_play("attack", 1.3)
+					state = State.SPIT
+				elif _los and d < sp.keep:
+					want = -want
+					speed = stats.walk
+				elif _los and d < sp.range * 0.85:
+					want = Vector3.ZERO
+					_face(to, delta * 5.0)
+			elif to.length() < stats.reach and _cooldown <= 0.0 and has_line_of_sight():
 				_attack_t = 0.0
 				_play("attack", 1.0)
 				state = State.ATTACK
@@ -312,13 +378,24 @@ func _physics_process(delta: float) -> void:
 			_face(to, delta * 8.0)
 			if _attack_t >= stats.windup and _attack_t - delta < stats.windup:
 				if to.length() < stats.reach + 0.6 and not target_dead.call() and has_line_of_sight():
-					attacked.emit(stats.damage, global_position)
+					attacked.emit(stats.damage, global_position, type)
 			if _attack_t > stats.windup + 0.35:
 				_attack_t = -1.0
 				_cooldown = stats.cooldown
 				state = State.CHASE
 		State.BREAK:
 			_break(delta)
+		State.SPIT:
+			_attack_t += delta
+			var to: Vector3 = target.global_position - global_position
+			_face(Vector3(to.x, 0, to.z), delta * 8.0)
+			if _attack_t >= stats.spit.windup and _attack_t - delta < stats.spit.windup:
+				var mouth := global_position + Vector3(0, 1.45 * stats.scale.y, 0) - global_transform.basis.z * 0.35
+				spat.emit(mouth, launch_velocity(mouth, target.global_position + Vector3(0, 1.0, 0), stats.spit.speed), self)
+			if _attack_t > stats.spit.windup + 0.4:
+				_attack_t = -1.0
+				_spit_cd = stats.spit.cooldown
+				state = State.CHASE
 	# Walk around whatever is in the way: sidestep for a moment when stuck.
 	if want != Vector3.ZERO and _side_t > 0.0:
 		_side_t -= delta
@@ -410,7 +487,17 @@ func hurt(amount: float) -> void:
 		_die(-global_transform.basis.z)
 
 
+## Lob velocity that lands a glob (falling at 9.8 m/s²) on to, flying at about speed.
+static func launch_velocity(from: Vector3, to: Vector3, speed: float) -> Vector3:
+	var flat := Vector3(to.x - from.x, 0, to.z - from.z)
+	var h := flat.length()
+	var t := clampf(h / speed, 0.25, 1.8)
+	var vy := (to.y - from.y) / t + 0.5 * 9.8 * t
+	return flat / t + Vector3(0, vy, 0)
+
+
 func _decide(night: bool) -> void:
+	_los = state != State.WANDER and target != null and has_line_of_sight()
 	match state:
 		State.BREAK:
 			# Someone in reach and in plain sight? Go for them instead.
@@ -460,7 +547,7 @@ func _play(name: String, pitch: float) -> void:
 	if audio == null or not sounds.has(name):
 		return
 	audio.stream = sounds[name]
-	audio.pitch_scale = pitch * _rng.randf_range(0.92, 1.08)
+	audio.pitch_scale = pitch * stats.pitch * _rng.randf_range(0.92, 1.08)
 	audio.play()
 
 

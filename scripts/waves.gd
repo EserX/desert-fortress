@@ -18,6 +18,7 @@ var world_seed := 1337
 var wave := 0               # number of the last wave that started
 var active := false
 var to_spawn := 0
+var queue: Array = []       # types still to come, in order
 var spawn_timer := 0.0
 var stats := {}             # this wave: kills, damage, lost, deaths
 var _rng := RandomNumberGenerator.new()
@@ -36,6 +37,50 @@ static func wave_size(n: int) -> int:
 	return mini(4 + (n - 1) * 2, MAX_SIZE)
 
 
+## The mutant types of night n, in arrival order. Night 1 is all walkers;
+## runners join on night 2, spitters on night 3 and brutes on night 4,
+## and their share grows each night.
+static func wave_mix(n: int, rng: RandomNumberGenerator) -> Array:
+	var size := wave_size(n)
+	var weights := {"walker": 1.0}
+	if n >= 2:
+		weights.runner = minf(0.25 + 0.05 * n, 0.8)
+	if n >= 3:
+		weights.spitter = minf(0.15 + 0.03 * n, 0.5)
+	if n >= 4:
+		weights.brute = minf(0.08 + 0.02 * n, 0.35)
+	var total := 0.0
+	for k in weights:
+		total += weights[k]
+	var out: Array = []
+	for i in size:
+		var r := rng.randf() * total
+		var pick := "walker"
+		for k in weights:
+			r -= weights[k]
+			if r <= 0.0:
+				pick = k
+				break
+		out.append(pick)
+	# Each new type shows up at least once on the night it is introduced.
+	var intro := {2: "runner", 3: "spitter", 4: "brute"}
+	if intro.has(n) and not out.has(intro[n]):
+		out[size - 1] = intro[n]
+	return out
+
+
+## "6 walkers, 2 runners, 1 brute"
+static func mix_text(types: Array) -> String:
+	var counts := {}
+	for t in types:
+		counts[t] = counts.get(t, 0) + 1
+	var parts: Array = []
+	for t in ["walker", "runner", "spitter", "brute"]:
+		if counts.has(t):
+			parts.append("%d %s%s" % [counts[t], t, "s" if counts[t] > 1 else ""])
+	return ", ".join(parts)
+
+
 func on_dusk(_day: int) -> void:
 	_siren.play()
 	siren.emit()
@@ -44,10 +89,11 @@ func on_dusk(_day: int) -> void:
 func start_wave() -> void:
 	wave += 1
 	active = true
-	to_spawn = wave_size(wave)
+	_rng.seed = hash("wave:%d:%d" % [world_seed, wave])
+	queue = wave_mix(wave, _rng)
+	to_spawn = queue.size()
 	spawn_timer = 1.0
 	stats = {"kills": 0, "damage": 0.0, "lost": 0, "deaths": 0, "size": to_spawn}
-	_rng.seed = hash("wave:%d:%d" % [world_seed, wave])
 	wave_started.emit(wave, to_spawn)
 
 
@@ -80,7 +126,8 @@ func _spawn_group() -> void:
 	var side := out.cross(Vector3.UP)
 	for i in n:
 		var p := out * (SPAWN_RADIUS + _rng.randf_range(-4, 4)) + side * (i - (n - 1) * 0.5) * 2.5
-		var m = mutants.spawn("walker", p)
+		var kind: String = queue.pop_front() if not queue.is_empty() else "walker"
+		var m = mutants.spawn(kind, p)
 		m.make_hunter(Vector3.ZERO)
 	to_spawn -= n
 
@@ -91,6 +138,7 @@ func end_wave(cleared: bool) -> void:
 		return
 	active = false
 	to_spawn = 0
+	queue = []
 	if not cleared:
 		for m in hunters():
 			m.crumble()
@@ -138,13 +186,18 @@ static func summary_lines(s: Dictionary) -> Array:
 
 
 func save_data() -> Dictionary:
-	return {"wave": wave, "active": active, "to_spawn": to_spawn, "stats": stats}
+	return {"wave": wave, "active": active, "to_spawn": to_spawn, "queue": queue, "stats": stats}
 
 
 func load_data(data: Dictionary) -> void:
 	wave = int(data.get("wave", 0))
 	active = bool(data.get("active", false))
 	to_spawn = int(data.get("to_spawn", 0))
+	queue = []
+	for t in data.get("queue", []):
+		queue.append(str(t))
+	while queue.size() < to_spawn:
+		queue.append("walker")  # saves from v0.14
 	stats = data.get("stats", {})
 	for k in ["kills", "lost", "deaths", "size"]:
 		stats[k] = int(stats.get(k, 0))

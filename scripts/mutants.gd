@@ -3,13 +3,14 @@ extends Node3D
 ## shares their generated sounds and saves where they are.
 
 const Mutant = preload("res://scripts/mutant.gd")
+const Spit = preload("res://scripts/spit.gd")
 
 const WANDERERS := 5         # walkers roaming the desert by day
 const MIN_BASE_DIST := 70.0  # never spawn closer than this to the flag
 const MIN_PLAYER_DIST := 45.0
 const MIX_RATE := 22050.0
 
-signal player_hit(damage: float, from: Vector3)
+signal player_hit(damage: float, from: Vector3, kind: String)
 signal mutant_killed(mutant: Node)
 signal piece_hit(key: String)
 
@@ -52,7 +53,8 @@ func spawn(kind: String, pos: Vector3, hp := -1.0) -> Mutant:
 	m.piece_hit.connect(func(k): piece_hit.emit(k))
 	m.sounds = _sounds
 	m.rotation.y = _rng.randf() * TAU
-	m.attacked.connect(func(dmg, from): player_hit.emit(dmg, from))
+	m.attacked.connect(func(dmg, from, k): player_hit.emit(dmg, from, k))
+	m.spat.connect(_on_spat)
 	m.died.connect(_on_died)
 	add_child(m)
 	return m
@@ -81,6 +83,24 @@ func top_up(day: int) -> int:
 	return n
 
 
+## A Spitter's glob of acid flies off on its own.
+func _on_spat(from: Vector3, vel: Vector3, m: Node) -> void:
+	var g := Spit.new()
+	g.velocity = vel
+	g.damage = m.stats.spit.damage
+	g.wall_damage = m.stats.spit.wall_damage
+	g.target = player
+	g.building = building
+	g.exclude = [m.get_rid()]
+	g.hit_player.connect(func(dmg, origin): player_hit.emit(dmg, origin, "spitter"))
+	add_child(g)
+	g.global_position = from
+
+
+func spits() -> Array:
+	return get_children().filter(func(c): return c is Spit)
+
+
 func _on_died(m: Node) -> void:
 	kills += 1
 	mutant_killed.emit(m)
@@ -88,7 +108,7 @@ func _on_died(m: Node) -> void:
 
 func clear() -> void:
 	for c in get_children():
-		if c is Mutant:
+		if c is Mutant or c is Spit:
 			remove_child(c)
 			c.queue_free()
 

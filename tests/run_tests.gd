@@ -371,6 +371,7 @@ var ramp_top := 0.0
 var chase_walker: Node
 var march_walker: Node
 var break_wall := ""
+var spit_seen := false
 var ramp_base := 0.0
 ## v0.11: base zone, storage chest, workbench crafting, bandages, spike barricade.
 func _test_base() -> void:
@@ -664,6 +665,81 @@ func _test_breaking() -> void:
 	b.load_data([])
 
 
+## v0.16: runner, brute and spitter stats, wave mixes, acid arcs, saving types.
+func _test_types() -> void:
+	var ms = main.mutants
+	var T: Dictionary = ms.Mutant.TYPES
+	check(T.has("runner") and T.has("brute") and T.has("spitter"), "four mutant types")
+	check(T.runner.run > main.player.WALK_SPEED and T.runner.run < main.player.SPRINT_SPEED, "runners outrun your walk but not your sprint")
+	check(T.runner.health < T.walker.health and T.brute.health >= 4.0 * T.walker.health, "runners are weak, brutes are tanky")
+	check(T.brute.wall_damage >= 4.0 * T.walker.wall_damage and T.brute.run < T.walker.run, "brutes are slow and wreck walls")
+	var Waves = load("res://scripts/waves.gd")
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 3
+	var m1: Array = Waves.wave_mix(1, rng)
+	check(m1.size() == 4 and m1.all(func(t): return t == "walker"), "night 1 is all walkers")
+	check(Waves.wave_mix(2, rng).has("runner"), "runners join on night 2")
+	check(Waves.wave_mix(3, rng).has("spitter"), "spitters join on night 3")
+	var m4: Array = Waves.wave_mix(4, rng)
+	check(m4.has("brute") and m4.size() == Waves.wave_size(4), "brutes join on night 4: " + Waves.mix_text(m4))
+	var late: Array = Waves.wave_mix(12, rng)
+	check(late.filter(func(t): return t != "walker").size() > late.size() / 3, "later waves are mostly the nasty ones: " + Waves.mix_text(late))
+	check(Waves.mix_text(["walker", "walker", "brute"]) == "2 walkers, 1 brute", "wave banner text")
+	# The lob lands where it aims.
+	var from := Vector3(0, 3, 0)
+	var to := Vector3(11, 2, -6)
+	var v: Vector3 = ms.Mutant.launch_velocity(from, to, 15.0)
+	var p := from
+	var best := 99.0
+	for i in 240:
+		v.y -= 9.8 / 120.0
+		p += v / 120.0
+		best = minf(best, p.distance_to(to))
+	check(best < 0.3, "acid arcs land on target (misses by %.2f m)" % best)
+	# Brutes barely flinch.
+	ms.clear()
+	var b = ms.spawn("brute", Vector3(60, 0, 60))
+	var w = ms.spawn("walker", Vector3(64, 0, 60))
+	b.take_hit(25.0, b.global_position, Vector3.FORWARD)
+	w.take_hit(25.0, w.global_position, Vector3.FORWARD)
+	check(b.velocity.length() < w.velocity.length() * 0.5, "brutes barely flinch when hit")
+	check(b.get_child_count() > 2 and b._shape.shape.radius > w._shape.shape.radius, "brutes are bigger")
+	ms.spawn("spitter", Vector3(70, 0, 60))
+	ms.spawn("runner", Vector3(74, 0, 60))
+	var data: Dictionary = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	ms.clear()
+	main.apply_save_data(data)
+	var kinds: Array = ms.alive().map(func(m): return m.type)
+	kinds.sort()
+	check(kinds == ["brute", "runner", "spitter", "walker"], "mutant types are saved: " + str(kinds))
+	# Wave queue saved.
+	main.day_night.restore(main.day_night.day, 21.0)
+	main.waves.start_wave()
+	var q: Array = main.waves.queue.duplicate()
+	data = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	main.waves.end_wave(true)
+	main.apply_save_data(data)
+	check(main.waves.queue == q and main.waves.active, "the wave's lineup is saved")
+	main.waves.end_wave(true)
+	main.day_night.restore(main.day_night.day, 10.0)
+	main.survival.health = 5.0
+	main._on_player_hit(30.0, main.player.global_position, "brute")
+	check(main.death_screen._cause.text == "A brute got you.", "death screen names the brute: " + main.death_screen._cause.text)
+	main.respawn()
+	ms.clear()
+
+
+func _start_spitter() -> void:
+	var player = main.player
+	var py: float = main.terrain.surface_height(8, -8)
+	player.position = Vector3(8, py, -8)
+	player.velocity = Vector3.ZERO
+	main.survival.health = 100.0
+	chase_walker = main.mutants.spawn("spitter", Vector3(8, 0, -21))
+	chase_walker.make_hunter(Vector3.ZERO)
+	chase_walker.rotation.y = PI
+
+
 ## A wave mutant smells you behind a wall and breaks through it.
 func _start_break_in() -> void:
 	var b = main.building
@@ -710,6 +786,8 @@ func _process(_delta: float) -> bool:
 	frame += 1
 	var player = main.player
 	var terrain = main.terrain
+	if frame > 2010 and frame < 2250 and not main.mutants.spits().is_empty():
+		spit_seen = true
 	if frame > 720 and frame < 811:
 		ramp_top = maxf(ramp_top, player.position.y - ramp_base)
 	match frame:
@@ -857,7 +935,26 @@ func _process(_delta: float) -> bool:
 			main.mutants.clear()
 			main.building.load_data([])
 			main.survival.health = 100.0
-		2010:
+			_test_types()
+			_start_spitter()
+		2250:
+			check(spit_seen, "the spitter lobs acid from a distance")
+			check(main.survival.health < 100.0, "the acid burns you (health %.0f)" % main.survival.health)
+			var d: float = chase_walker.global_position.distance_to(main.player.global_position)
+			check(d > 5.0, "the spitter keeps its distance (%.1f m)" % d)
+			main.mutants.clear()
+			main.survival.health = 100.0
+			var py: float = main.terrain.surface_height(8, -8)
+			main.player.position = Vector3(8, py, -8)
+			chase_walker = main.mutants.spawn("runner", Vector3(8, 0, -28))
+			chase_walker.make_hunter(Vector3.ZERO)
+			chase_walker.rotation.y = PI
+		2350:
+			var d: float = chase_walker.global_position.distance_to(main.player.global_position)
+			check(d < 13.0, "a runner closes 20 m in under 2 seconds (%.1f m left)" % d)
+			main.mutants.clear()
+			main.survival.health = 100.0
+		2360:
 			if failures.is_empty():
 				print("== ALL TESTS PASSED ==")
 				quit(0)

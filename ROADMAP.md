@@ -29,7 +29,7 @@ One version per development run, in this order. The full plan with reasons is in
 - [x] v0.13: First mutant, the Walker: wanders, spots you, chases and attacks. Health, death and a fall
 - [x] v0.14: Wave system: siren at dusk, mutants come from the map edge at night, wave counter, night ends at dawn or when all are dead, end-of-wave summary
 - [x] v0.15: Mutants head for the base, attack walls in their way and break in. Walls collapse
-- [ ] v0.16: Runner (fast, weak), Brute (slow, tanky, wrecks walls) and Spitter (ranged acid). Waves mix types and scale up each night
+- [x] v0.16: Runner (fast, weak), Brute (slow, tanky, wrecks walls) and Spitter (ranged acid). Waves mix types and scale up each night
 
 ### M5: Defence
 - [ ] v0.17: Pistol: aim down sights, recoil, muzzle flash, reload, ammo as an item, sound

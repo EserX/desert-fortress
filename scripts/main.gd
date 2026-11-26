@@ -216,7 +216,7 @@ func _ready() -> void:
 
 	survival.died.connect(_on_died)
 	survival.died.connect(waves.note_death)
-	waves.wave_started.connect(func(n, size): hud.show_banner("Wave %d: %d mutants are coming. Defend the base!" % [n, size]))
+	waves.wave_started.connect(func(n, _size): hud.show_banner("Wave %d is coming: %s. Defend the base!" % [n, Waves.mix_text(waves.queue)]))
 	waves.wave_ended.connect(func(s): hud.show_summary(Waves.summary_lines(s)))
 	waves.siren.connect(func(): hud.show_banner("Siren! Mutants come at nightfall. Get back to the base."))
 	mutants.player_hit.connect(_on_player_hit)
@@ -595,10 +595,11 @@ func _on_died() -> void:
 
 
 ## A mutant clawed you: lose health, red flash on the side it came from.
-func _on_player_hit(dmg: float, from: Vector3) -> void:
+func _on_player_hit(dmg: float, from: Vector3, kind := "walker") -> void:
 	if survival.dead:
 		return
-	survival.damage(dmg, "A walker got you.")
+	var who: String = Mutants.Mutant.TYPES.get(kind, {}).get("name", "mutant").to_lower()
+	survival.damage(dmg, ("Acid from a spitter got you." if kind == "spitter" and dmg > 10.0 else "A %s got you." % who))
 	waves.note_damage(dmg)
 	var to: Vector3 = from - player.global_position
 	var local: Vector3 = player.global_transform.basis.inverse() * to

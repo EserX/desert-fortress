@@ -2,6 +2,20 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v0.16.0 (2026-11-26): Runner, Brute and Spitter
+- **Runner:** lean, reddish, with claws and bared teeth, bent almost double. 45 health (two machete hits), but it runs at 6.4 m/s, faster than you walk, so only sprinting gets you away. Small, quick swipes (7 damage). Weak against walls.
+- **Brute:** a big grey-purple hulk with huge fists. 420 health (11 machete hits) and barely flinches. Slow (2.5 m/s), with a long reach and a slow, heavy swing (30 damage). It **wrecks walls**: 95 per hit, so a wooden wall lasts about three swings. Kill brutes before they reach your walls, or upgrade.
+- **Spitter:** yellowish, with glowing green sacs on its back and throat. 70 health. It keeps its distance (backs off inside 9 m, holds around 14 m) and **lobs globs of acid** in an arc every 3 seconds when it has a clear line to you: 14 damage on a hit, and 25 to any building piece it hits instead. Hide behind walls, then rush it.
+- **Mixed waves:** night 1 is all walkers. Runners join on night 2, spitters on night 3 and brutes on night 4, each guaranteed to show up on its first night. Their share grows every night (by night 12 more than half the wave is runners, spitters and brutes). The wave banner says what is coming: "Wave 4 is coming: 6 walkers, 3 runners, 1 brute."
+- Each type has its own voice pitch (shrill runners, deep brutes). The death screen names what got you.
+- Day wanderers are still just walkers.
+- **Saved:** each mutant's type (already part of v0.13 saves) and the order of the rest of the wave. v0.14 saves with a wave half-done fill up with walkers.
+- **Code:** stats per type in `Mutant.TYPES` (size, skin, knockback, voice, ranged attack), new `spit.gd` (acid glob with a ray-checked arc), `Waves.wave_mix()` and `mix_text()`.
+- **Tests:** type stats against your walk and sprint speed, wave mixes per night, the acid arc landing on target, brutes flinching less and being bigger, types and the wave lineup saved, the death screen naming the brute, and two real fights over many frames: a spitter keeps its distance and hits you with acid, and a runner closes 20 m in under 2 seconds. New screenshot view `23_types`.
+
+**Try:** survive to night 4 and meet your first brute. Watch out for spitters lobbing acid over your walls.
+**Next:** v0.17, the pistol: aim down sights, recoil, muzzle flash, reload, ammo as an item, and sound.
+
 ## v0.15.0 (2026-11-26): Mutants break in
 - **They smell you:** a wave mutant within 30 m of you knows where you are, walls or not, and heads straight for you. Further away it keeps marching on the base.
 - **Breaking walls:** a mutant that walks into a building piece (wall, gate, window wall, barricade, chest...) stops and **claws at it**: 20 damage per swipe, about one every 2 seconds. A wooden wall (250 hp) holds one walker off for about 25 seconds, scrap metal for a minute, and concrete for over two minutes. More mutants on the same wall break it faster.

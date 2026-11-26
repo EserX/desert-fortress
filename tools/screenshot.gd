@@ -38,6 +38,8 @@ var shots := [
 	{"name": "28_traps", "pos": Vector3(5, 0, -0.5), "yaw": 0.55, "pitch": -0.3, "hour": 16.5, "traps": true},
 	{"name": "29_power", "pos": Vector3(6, 0, 10), "yaw": 0.35, "pitch": -0.12, "hour": 22.0, "power": true},
 	{"name": "30_turret", "pos": Vector3(7, 0, -1), "yaw": -0.15, "pitch": -0.3, "hour": 17.0, "turret": true},
+	{"name": "31_terminal", "pos": Vector3(-0.6, 0, 4.2), "yaw": 0.5, "pitch": -0.2, "hour": 10.0, "terminal": true},
+	{"name": "32_shop", "pos": Vector3(-0.6, 0, 4.2), "yaw": 0.5, "pitch": -0.2, "hour": 10.0, "shop": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -127,6 +129,16 @@ func _process(_d: float) -> bool:
 			_gun_sample(p, s.gun, s.aim)
 		elif main.guns.item != "":
 			main.guns.set_item("")
+		if s.get("terminal", false) or s.get("shop", false):
+			main.building.load_data([])
+			main.mutants.clear()
+			main.shop.cash = 340
+			main.inventory.load_data({})
+			main.inventory.add_all({"hammer": 1, "pistol": 1})
+		if s.get("shop", false):
+			main.shop_ui.open()
+		elif main.shop_ui.is_open():
+			main.shop_ui.close()
 		if s.get("turret", false):
 			_turret_sample()
 		elif main.build_mode.range_ring.visible and not s.get("build", false):

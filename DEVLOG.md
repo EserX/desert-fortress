@@ -2,6 +2,27 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v0.22.0 (2026-11-26): Cash and the shop terminal
+- **Cash:** you start with $50 and are paid at the end of every night. Your cash is shown in the top right, next to the day and time.
+  - **Kills:** a bounty on every mutant of the wave you kill: walker $10, runner $12, spitter $15, brute $40.
+  - **The night:** $25 plus $10 per wave number, for surviving it.
+  - **Base condition:** up to $60, for the share of your building pieces still standing at dawn (only if you have built something).
+  - **Clearing the whole wave** before dawn pays a quarter more on top.
+  - The end-of-wave summary now ends with "Cash earned: $…".
+- **Shop terminal:** a green screen on a post just west of the flag. **E** opens the shop, with what you can't afford greyed out:
+  - Materials: 10 wood $20, 10 scrap $30, 25 nails $15, 5 cloth $10, 3 cement $30, 2 fuel cans $25
+  - Supplies: 3 canned food $15, 3 water $15, 3 bandages $20
+  - Weapons: machete $50, pistol $120, shotgun $260, hunting rifle $380
+  - Ammo: 24 9mm $20, 12 shells $25, 10 7.62 $30
+  - Traps: spike barricade $25, and parts kits for a spike strip ($20), barbed wire ($20) and a landmine ($30)
+  If your pockets are full, the rest drops in a bag at your feet. E, Tab or Esc closes it.
+- **Saved:** your cash. Older saves start with $50 plus $40 for each night already survived.
+- **Code:** new `shop.gd` (the terminal, cash and catalogue) and `shop_ui.gd`. `Waves.cash_for()` works out the pay and `BOUNTY` holds the kill prices.
+- **Tests:** the terminal prompt, opening and closing the shop, greyed-out buttons, buying, not affording a rifle, the pay formula (kills, night, base condition, clear bonus, no base), a real wave paying out with the right bounty, the summary and HUD showing cash, cash saved, and older saves. New screenshot views `31_terminal` and `32_shop`.
+
+**Try:** survive the first two nights, then spend the cash on a shotgun or a stack of nails for more walls.
+**Next:** v0.23, drone delivery to a landing pad, and blueprints that unlock new builds.
+
 ## v0.21.0 (2026-11-26): Auto-turret
 - **Auto-turret** (18 scrap, 10 nails, 2 wood), the last piece in the build list: a gun on a swivel atop a post, with an ammo box at its foot. It needs no power, only **9mm rounds**: look at it and press **E** to load everything you carry (it holds 240). The prompt shows how many rounds are left and says EMPTY when it runs dry.
 - It swings toward the **nearest mutant it can see within 22 m** (walls, wrecks and dunes block its view) and fires short bursts: a round every 0.22 s, 16 damage each, slightly spread. Walkers drop in about 7 rounds, brutes need a whole belt, so turrets are best behind walls and wire. With no target it slowly looks around.

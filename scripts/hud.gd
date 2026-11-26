@@ -15,6 +15,7 @@ var banner: Label
 var day_night  # DayNight
 var waves  # Waves
 var guns  # Guns
+var shop  # Shop
 var ammo_label: Label
 var scope: Control
 var _cross: Label
@@ -196,6 +197,8 @@ func _process(delta: float) -> void:
 		base_label.text = "Base: %d m  %s" % [int(dist), DIRS[int(round(bdeg / 45.0)) % 8]]
 	if day_night:
 		var text: String = "Day %d  %s" % [day_night.day, day_night.clock_text()]
+		if shop:
+			text = "$%d     " % shop.cash + text
 		var left: float = day_night.seconds_until_night()
 		if day_night.is_night():
 			text += "\nNight"

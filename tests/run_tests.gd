@@ -1056,6 +1056,62 @@ func _start_turret() -> void:
 	player.position = Vector3(20, main.terrain.surface_height(20, 20), 20)
 
 
+## v0.22: cash per wave and the shop terminal.
+func _test_shop() -> void:
+	var sh = main.shop
+	var ui = main.shop_ui
+	var inv = main.inventory
+	var Waves = load("res://scripts/waves.gd")
+	sh.cash = sh.START_CASH
+	check(main._prompt_for("shop") == "[E] Use the shop terminal   ($%d)" % sh.START_CASH, "the terminal by the flag: " + main._prompt_for("shop"))
+	main.interact("shop")
+	check(ui.is_open() and ui._cash.text == "Cash: $%d" % sh.START_CASH, "E opens the shop with your cash")
+	var water: int = sh.CATALOG.map(func(e): return e.name).find("3 water bottles")
+	var rifle: int = sh.CATALOG.map(func(e): return e.name).find("Hunting rifle")
+	check(ui._buttons[rifle].disabled and not ui._buttons[water].disabled, "things you can't afford are greyed out")
+	inv.load_data({})
+	ui.buy(water)
+	check(inv.count_of("water") == 3 and sh.cash == sh.START_CASH - 15, "buying 3 water bottles for $15")
+	check(sh.buy(rifle, inv) == null and inv.count_of("rifle") == 0, "no rifle without $380")
+	ui.close()
+	check(not ui.is_open(), "the shop closes")
+	# Cash for a night.
+	var c: Dictionary = Waves.cash_for({"wave": 3, "bounty": 50, "pieces": 10, "lost": 2, "cleared": false})
+	check(c.cash == 50 + 55 + 48 and c.cash_base == 48, "a night pays kills + survival + base condition ($%d)" % c.cash)
+	check(Waves.cash_for({"wave": 3, "bounty": 50, "pieces": 10, "lost": 2, "cleared": true}).cash == int(round(153 * 1.25)), "clearing the whole wave pays a quarter more")
+	check(Waves.cash_for({"wave": 1, "bounty": 0, "pieces": 0, "lost": 0, "cleared": false}).cash == 35, "even with no base, surviving pays")
+	# A real (short) wave.
+	var wv = main.waves
+	main.mutants.clear()
+	main.day_night.restore(main.day_night.day, 21.0)
+	wv.start_wave()
+	for i in 40:
+		wv._process(1.0)
+	var size: int = wv.hunters().size()
+	var bounty := 0
+	for m in wv.hunters():
+		bounty += wv.BOUNTY[m.type]
+		m.take_hit(9999.0, m.global_position, Vector3.FORWARD)
+	var before: int = sh.cash
+	var ended := []
+	wv.wave_ended.connect(func(s): ended.append(s), CONNECT_ONE_SHOT)
+	wv._process(0.1)
+	check(ended.size() == 1 and ended[0].cash_kills == bounty and sh.cash == before + ended[0].cash, "clearing wave %d (%d mutants) pays $%d" % [wv.wave, size, ended[0].get("cash", 0)])
+	check(Waves.summary_lines(ended[0])[-1] == "Cash earned: $%d" % ended[0].cash, "the summary shows the cash")
+	main.hud._process(0.0)
+	check(main.hud.clock.text.begins_with("$%d" % sh.cash), "the HUD shows your cash: " + main.hud.clock.text.split("\n")[0])
+	var data: Dictionary = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	var cash: int = sh.cash
+	sh.cash = 0
+	main.apply_save_data(data)
+	check(sh.cash == cash, "cash is saved")
+	data.erase("shop")
+	main.apply_save_data(data)
+	check(sh.cash == sh.START_CASH + 40 * wv.wave, "older saves get pay for the nights already survived")
+	main.day_night.restore(main.day_night.day, 10.0)
+	inv.load_data({})
+
+
 func _start_spitter() -> void:
 	var player = main.player
 	var py: float = main.terrain.surface_height(8, -8)
@@ -1292,6 +1348,7 @@ func _process(_delta: float) -> bool:
 			_test_long_guns()
 			_test_traps()
 			_test_power()
+			_test_shop()
 		2370:
 			_start_turret()
 		2490:

@@ -27,6 +27,8 @@ const Guns = preload("res://scripts/guns.gd")
 const Traps = preload("res://scripts/traps.gd")
 const Power = preload("res://scripts/power.gd")
 const Turrets = preload("res://scripts/turrets.gd")
+const Shop = preload("res://scripts/shop.gd")
+const ShopUI = preload("res://scripts/shop_ui.gd")
 
 const DISCOVER_RANGE := 45.0
 const REFILLS_PER_MORNING := 4
@@ -67,6 +69,8 @@ var guns: Guns
 var traps: Traps
 var power: Power
 var turrets: Turrets
+var shop: Shop
+var shop_ui: ShopUI
 ## Wrecks and ruins: {"key": "w3", "kind": "wreck", "pos": Vector3}.
 var places: Array = []
 ## Keys of places you have been near.
@@ -108,6 +112,12 @@ func _ready() -> void:
 	base_zone.name = "BaseZone"
 	base_zone.terrain = terrain
 	add_child(base_zone)
+
+	shop = Shop.new()
+	shop.name = "ShopTerminal"
+	shop.position = Vector3(-2.2, terrain.surface_height(-2.2, 1.6), 1.6)
+	shop.rotation.y = PI + 0.5  # screen towards the spawn point
+	add_child(shop)
 
 	dummy = Dummy.new()
 	dummy.name = "TrainingDummy"
@@ -241,6 +251,17 @@ func _ready() -> void:
 	building.spilled.connect(func(items, pos): loot.spawn_drop(items, Vector3(pos.x, terrain.surface_height(pos.x, pos.z), pos.z)))
 	add_child(inventory_ui)
 
+	shop_ui = ShopUI.new()
+	shop_ui.name = "ShopUI"
+	shop_ui.shop = shop
+	shop_ui.inventory = inventory
+	shop_ui.bought.connect(func(i, left):
+		hud.show_pickup(["Bought " + Shop.CATALOG[i].name.to_lower()])
+		if not left.is_empty():
+			loot.spawn_drop(left, _drop_spot())
+			hud.show_banner("Inventory full: the rest is in a bag at your feet"))
+	add_child(shop_ui)
+
 	death_screen = DeathScreen.new()
 	death_screen.name = "DeathScreen"
 	death_screen.respawn_pressed.connect(respawn)
@@ -253,7 +274,11 @@ func _ready() -> void:
 	survival.died.connect(_on_died)
 	survival.died.connect(waves.note_death)
 	waves.wave_started.connect(func(n, _size): hud.show_banner("Wave %d is coming: %s. Defend the base!" % [n, Waves.mix_text(waves.queue)]))
-	waves.wave_ended.connect(func(s): hud.show_summary(Waves.summary_lines(s)))
+	waves.wave_ended.connect(func(s):
+		shop.add_cash(int(s.get("cash", 0)))
+		hud.show_summary(Waves.summary_lines(s)))
+	waves.wave_started.connect(func(_n, _size): waves.stats.pieces = building.pieces.size())
+	hud.shop = shop
 	waves.siren.connect(func(): hud.show_banner("Siren! Mutants come at nightfall. Get back to the base."))
 	mutants.player_hit.connect(_on_player_hit)
 	mutants.piece_hit.connect(_on_piece_attacked)
@@ -284,7 +309,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event.is_action_pressed("quick_save"):
 		Game.save_game("quick", _screenshot())
-	elif inventory_ui.is_open():
+	elif inventory_ui.is_open() or shop_ui.is_open():
 		return
 	elif event.is_action_pressed("build"):
 		build_mode.toggle()
@@ -324,7 +349,7 @@ func _process(delta: float) -> void:
 		mutants.night = day_night.is_night()
 	if hud and not get_tree().paused:
 		var text := ""
-		if not inventory_ui.is_open():
+		if not inventory_ui.is_open() and not shop_ui.is_open():
 			text = _prompt_for(player.interact_target())
 			if text == "" and holding_hammer():
 				text = hammer_prompt(piece_under_crosshair())
@@ -498,6 +523,8 @@ func _gun_input(event: InputEvent) -> bool:
 
 
 func _prompt_for(id: String) -> String:
+	if id == "shop":
+		return "[E] Use the shop terminal   ($%d)" % shop.cash
 	for prefix in ["gate:", "chest:", "bench:", "gen:", "fire:", "turret:"]:
 		if id.begins_with(prefix):
 			return building.prompt(id)
@@ -532,6 +559,9 @@ func _build_input(event: InputEvent) -> bool:
 ## E on a container or a dropped bag: put what fits in the inventory.
 func interact(id: String) -> void:
 	if id == "":
+		return
+	if id == "shop":
+		shop_ui.open()
 		return
 	if id.begins_with("gate:"):
 		building.toggle_gate(id.trim_prefix("gate:"))
@@ -684,6 +714,8 @@ func _on_died() -> void:
 		cause = "You starved."
 	if inventory_ui.is_open():
 		inventory_ui.close()
+	if shop_ui.is_open():
+		shop_ui.close()
 	death_screen.open(cause)
 
 
@@ -757,6 +789,7 @@ func collect_save_data() -> Dictionary:
 		"mutants": mutants.save_data(),
 		"waves": waves.save_data(),
 		"guns": guns.save_data(),
+		"shop": shop.save_data(),
 	}
 
 
@@ -768,6 +801,8 @@ func apply_save_data(data: Dictionary) -> void:
 	building.load_data(data.get("buildings", []))
 	waves.load_data(data.get("waves", {"wave": maxi(day_night.day - 1, 0)}))
 	guns.load_data(data.get("guns", {}))
+	# Older saves: a little starting cash plus pay for the nights already survived.
+	shop.load_data(data.get("shop", {"cash": Shop.START_CASH + 40 * waves.wave}))
 	if waves.active and not day_night.is_night():
 		waves.active = false  # never carry a wave into the day
 	if data.has("mutants"):

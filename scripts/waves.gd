@@ -8,6 +8,8 @@ const MIX_RATE := 22050.0
 const SPAWN_RADIUS := 205.0
 const GROUP_GAP := 9.0      # seconds between groups
 const MAX_SIZE := 30
+## Cash for each mutant of the wave you kill.
+const BOUNTY := {"walker": 10, "runner": 12, "spitter": 15, "brute": 40}
 
 signal wave_started(n: int, size: int)
 signal wave_ended(summary: Dictionary)
@@ -93,7 +95,7 @@ func start_wave() -> void:
 	queue = wave_mix(wave, _rng)
 	to_spawn = queue.size()
 	spawn_timer = 1.0
-	stats = {"kills": 0, "damage": 0.0, "lost": 0, "deaths": 0, "size": to_spawn}
+	stats = {"kills": 0, "damage": 0.0, "lost": 0, "deaths": 0, "size": to_spawn, "bounty": 0, "pieces": 0}
 	wave_started.emit(wave, to_spawn)
 
 
@@ -145,6 +147,7 @@ func end_wave(cleared: bool) -> void:
 	var s := stats.duplicate()
 	s.wave = wave
 	s.cleared = cleared
+	s.merge(cash_for(s), true)
 	wave_ended.emit(s)
 
 
@@ -155,6 +158,23 @@ func on_dawn(_day: int) -> void:
 func note_kill(m: Node) -> void:
 	if active:
 		stats.kills += 1
+		stats.bounty += int(BOUNTY.get(m.type, 10))
+
+
+## Cash for a night: the bounty on kills, a payment for surviving it, and a
+## bonus for how much of the base is still standing; a quarter more if you
+## killed the whole wave. Returns {"cash", "cash_kills", "cash_night", "cash_base"}.
+static func cash_for(s: Dictionary) -> Dictionary:
+	var kills: int = int(s.get("bounty", 0))
+	var night: int = 25 + 10 * int(s.get("wave", 1))
+	var base := 0
+	var pieces: int = int(s.get("pieces", 0))
+	if pieces > 0:
+		base = int(round(60.0 * clampf(1.0 - float(s.get("lost", 0)) / pieces, 0.0, 1.0)))
+	var total := kills + night + base
+	if s.get("cleared", false):
+		total = int(round(total * 1.25))
+	return {"cash": total, "cash_kills": kills, "cash_night": night, "cash_base": base}
 
 
 func note_damage(amount: float) -> void:
@@ -182,6 +202,8 @@ static func summary_lines(s: Dictionary) -> Array:
 		lines.append("Building pieces lost: %d" % s.lost)
 	if s.deaths > 0:
 		lines.append("Times you died: %d" % s.deaths)
+	if s.has("cash"):
+		lines.append("Cash earned: $%d" % s.cash)
 	return lines
 
 
@@ -199,7 +221,7 @@ func load_data(data: Dictionary) -> void:
 	while queue.size() < to_spawn:
 		queue.append("walker")  # saves from v0.14
 	stats = data.get("stats", {})
-	for k in ["kills", "lost", "deaths", "size"]:
+	for k in ["kills", "lost", "deaths", "size", "bounty", "pieces"]:
 		stats[k] = int(stats.get(k, 0))
 	stats.damage = float(stats.get("damage", 0.0))
 	spawn_timer = 2.0

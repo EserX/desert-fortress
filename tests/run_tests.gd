@@ -372,6 +372,9 @@ var chase_walker: Node
 var march_walker: Node
 var break_wall := ""
 var spit_seen := false
+var turret_key := ""
+var turret_near: Node
+var turret_far: Node
 var ramp_base := 0.0
 ## v0.11: base zone, storage chest, workbench crafting, bandages, spike barricade.
 func _test_base() -> void:
@@ -1014,6 +1017,45 @@ func _test_power() -> void:
 	b.load_data([])
 
 
+## v0.21: a turret with a range circle while placing, loading and a real fight.
+func _start_turret() -> void:
+	var b = main.building
+	var bm = main.build_mode
+	var inv = main.inventory
+	b.load_data([])
+	main.mutants.clear()
+	inv.load_data({})
+	inv.add_all({"scrap": 18, "nails": 10, "wood": 2, "ammo_9mm": 30})
+	var player = main.player
+	player.position = Vector3(-3, main.terrain.surface_height(-3, -10), -10)
+	player.rotation.y = PI
+	player.head.rotation.x = -0.5
+	bm.active = true
+	bm.select(b.ORDER.find("turret"))
+	bm.update_preview()
+	check(bm.range_ring.visible, "placing a turret shows its range circle")
+	var t0: Vector3 = bm.ring_points[0]
+	var c: Vector3 = bm._ghost.global_position
+	check(absf(Vector2(t0.x - c.x, t0.z - c.z).length() - b.TURRET_RANGE) < 0.1, "the circle is %d m round the turret" % int(b.TURRET_RANGE))
+	bm.toggle()
+	check(not bm.range_ring.visible, "and hides when you stop building")
+	var slot := {"kind": "obj", "cx": -2, "cz": -8, "dir": 0, "level": 0}
+	turret_key = b.place("turret", slot, b.evaluate("turret", slot).y)
+	check(main._prompt_for("turret:" + turret_key).contains("0/%d rounds, EMPTY" % b.TURRET_AMMO), "turret prompt: " + main._prompt_for("turret:" + turret_key))
+	main.interact("turret:" + turret_key)
+	check(b.pieces[turret_key].ammo == 30 and inv.count_of("ammo_9mm") == 0, "E loads your 9mm rounds into it")
+	var data: Array = b.save_data()
+	b.load_data(data)
+	turret_key = b.slot_key(slot)
+	check(b.pieces[turret_key].ammo == 30, "its rounds are saved")
+	var tp: Vector3 = b.pieces[turret_key].node.global_position
+	turret_near = main.mutants.spawn("walker", tp + Vector3(4, 0, -11))
+	turret_near.set_physics_process(false)
+	turret_far = main.mutants.spawn("walker", tp + Vector3(-10, 0, 28))
+	turret_far.set_physics_process(false)
+	player.position = Vector3(20, main.terrain.surface_height(20, 20), 20)
+
+
 func _start_spitter() -> void:
 	var player = main.player
 	var py: float = main.terrain.surface_height(8, -8)
@@ -1251,6 +1293,22 @@ func _process(_delta: float) -> bool:
 			_test_traps()
 			_test_power()
 		2370:
+			_start_turret()
+		2490:
+			var b = main.building
+			var rec: Dictionary = b.pieces[turret_key]
+			check(turret_near.health < 100.0, "the turret shoots a walker 12 m away (%.0f left)" % turret_near.health)
+			check(rec.ammo < 30, "using rounds from its ammo box (%d left)" % rec.ammo)
+			check(is_equal_approx(turret_far.health, 100.0), "but leaves one 30 m away alone")
+			main.mutants.clear()
+			rec.ammo = 0
+			turret_near = main.mutants.spawn("walker", rec.node.global_position + Vector3(0, 0, -8))
+			turret_near.set_physics_process(false)
+		2560:
+			check(is_equal_approx(turret_near.health, 100.0), "an empty turret doesn't shoot")
+			main.mutants.clear()
+			main.building.load_data([])
+		2570:
 			if failures.is_empty():
 				print("== ALL TESTS PASSED ==")
 				quit(0)

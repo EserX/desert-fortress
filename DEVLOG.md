@@ -2,6 +2,19 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v0.21.0 (2026-11-26): Auto-turret
+- **Auto-turret** (18 scrap, 10 nails, 2 wood), the last piece in the build list: a gun on a swivel atop a post, with an ammo box at its foot. It needs no power, only **9mm rounds**: look at it and press **E** to load everything you carry (it holds 240). The prompt shows how many rounds are left and says EMPTY when it runs dry.
+- It swings toward the **nearest mutant it can see within 22 m** (walls, wrecks and dunes block its view) and fires short bursts: a round every 0.22 s, 16 damage each, slightly spread. Walkers drop in about 7 rounds, brutes need a whole belt, so turrets are best behind walls and wire. With no target it slowly looks around.
+- **Range circle:** while placing a turret in build mode, a dashed orange circle on the sand shows its 22 m reach.
+- Turret fire is loud: it draws mutants within 35 m, like your own guns.
+- Mutants can claw turrets down like any piece (250 hp); the hammer repairs them.
+- **Saved:** rounds in each turret.
+- **Code:** new `turrets.gd` (targeting with line of sight, turning, firing). The turret's head is built in `building.gd`.
+- **Tests:** the range circle showing at the right size and hiding when you leave build mode, the prompt, loading rounds with E, rounds saved, a real fight over two seconds (the turret shoots a walker 12 m away and uses rounds, and leaves one 30 m away alone), and an empty turret holding fire. New screenshot view `30_turret`.
+
+**Try:** put two turrets behind your walls covering the side the waves come from, load them up, and watch the first night from the roof.
+**Next:** v0.22, cash for each wave (kills, waves survived, base condition) and a shop terminal at the base.
+
 ## v0.20.0 (2026-11-26): Fire, power and light
 Four new build pieces (mouse wheel in build mode, after the landmine):
 - **Fire pit** (4 wood): a ring of stones with crossed logs. **E** puts in a piece of wood: each one burns for a minute (up to 5 minutes' worth). It lights up the area with a warm flickering glow, and mutants walking through it burn (12 damage a second). The prompt shows how long it has left.

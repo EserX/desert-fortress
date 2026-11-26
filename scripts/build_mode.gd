@@ -25,6 +25,11 @@ var _ghost: Node3D
 var _ghost_type := ""
 var _ok_mat: StandardMaterial3D
 var _bad_mat: StandardMaterial3D
+## Dashed circle on the sand showing a turret's reach while placing one.
+var range_ring: MultiMeshInstance3D
+var _ring_at := Vector3.INF
+var ring_points := PackedVector3Array()  # where the dashes are (kept here, headless can't read a MultiMesh back)
+const RING_DASHES := 90
 
 
 func _ready() -> void:
@@ -33,6 +38,21 @@ func _ready() -> void:
 	_ghost = Node3D.new()
 	_ghost.visible = false
 	add_child(_ghost)
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	var dash := BoxMesh.new()
+	dash.size = Vector3(0.12, 0.06, 0.8)
+	mm.mesh = dash
+	mm.instance_count = RING_DASHES
+	range_ring = MultiMeshInstance3D.new()
+	range_ring.multimesh = mm
+	var rm := StandardMaterial3D.new()
+	rm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	rm.albedo_color = Color(1.0, 0.75, 0.25)
+	range_ring.material_override = rm
+	range_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	range_ring.visible = false
+	add_child(range_ring)
 
 
 func _ghost_mat(c: Color) -> StandardMaterial3D:
@@ -51,6 +71,7 @@ func current_type() -> String:
 func toggle() -> void:
 	active = not active
 	_ghost.visible = false
+	range_ring.visible = false
 
 
 func select(i: int) -> void:
@@ -109,6 +130,26 @@ func update_preview() -> void:
 	_ghost.visible = true
 	for mi in _ghost.get_children():
 		mi.material_override = _ok_mat if can_build else _bad_mat
+	_update_ring(type)
+
+
+## Lays the dashes of the range circle on the sand around the previewed turret.
+func _update_ring(type: String) -> void:
+	range_ring.visible = type == "turret"
+	if not range_ring.visible:
+		return
+	var c := _ghost.global_position
+	if c.distance_to(_ring_at) < 0.01:
+		return
+	_ring_at = c
+	var r: float = Building.TURRET_RANGE
+	ring_points.resize(RING_DASHES)
+	for i in RING_DASHES:
+		var a := i * TAU / RING_DASHES
+		var p := c + Vector3(cos(a) * r, 0, sin(a) * r)
+		p.y = maxf(building.terrain.surface_height(p.x, p.z), c.y) + 0.06
+		ring_points[i] = p
+		range_ring.multimesh.set_instance_transform(i, Transform3D(Basis(Vector3.UP, -a), p))
 
 
 func _rebuild_ghost(type: String) -> void:

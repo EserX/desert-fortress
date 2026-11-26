@@ -57,8 +57,11 @@ const PIECES := {
 	"generator": {"name": "Fuel generator", "slot": "obj", "cost": {"scrap": 12, "nails": 8}, "dirs": 4, "fixed": true},
 	"electric_fence": {"name": "Electric fence", "slot": "edge", "cost": {"scrap": 5, "nails": 6}, "dirs": 2, "fixed": true},
 	"floodlight": {"name": "Floodlight", "slot": "obj", "cost": {"scrap": 4, "wood": 2, "nails": 2}, "dirs": 4, "fixed": true},
+	"turret": {"name": "Auto-turret", "slot": "obj", "cost": {"scrap": 18, "nails": 10, "wood": 2}, "dirs": 4, "fixed": true},
 }
-const ORDER := ["foundation", "wall", "doorway", "window", "floor", "stairs", "ramp", "roof", "chest", "workbench", "spikes", "spike_strip", "barbed_wire", "landmine", "fire_pit", "generator", "electric_fence", "floodlight"]
+const ORDER := ["foundation", "wall", "doorway", "window", "floor", "stairs", "ramp", "roof", "chest", "workbench", "spikes", "spike_strip", "barbed_wire", "landmine", "fire_pit", "generator", "electric_fence", "floodlight", "turret"]
+const TURRET_RANGE := 22.0
+const TURRET_AMMO := 240     # 9mm rounds its ammo box holds
 const FENCE_H := 1.7
 const GEN_TANK := 10.0       # fuel cans a generator holds
 const FIRE_MAX := 300.0      # seconds of burning a fire pit holds
@@ -431,6 +434,12 @@ static func piece_boxes(type: String) -> Array:
 			for sx in [-1.0, 1.0]:
 				out.append([Vector3(0.3, 0.22, 0.18), Vector3(sx * 0.28, 3.2, -0.15), "metal"])
 				out.append([Vector3(0.26, 0.18, 0.02), Vector3(sx * 0.28, 3.2, -0.25), "lamp"])
+		"turret":
+			out.append([Vector3(0.9, 0.1, 0.9), Vector3(0, 0.05, 0), "concrete_dark"])
+			out.append([Vector3(0.2, 0.85, 0.2), Vector3(0, 0.5, 0), "metal"])
+			out.append([Vector3(0.45, 0.32, 0.3), Vector3(0.0, 0.26, 0.42), "rust"])   # ammo box
+			out.append([Vector3(0.36, 0.04, 0.26), Vector3(0.0, 0.44, 0.42), "metal"])
+			out.append([Vector3(0.04, 0.5, 0.04), Vector3(0.0, 0.7, 0.3), "metal"])     # feed belt
 	return out
 
 
@@ -484,6 +493,8 @@ static func piece_colliders(type: String) -> Array:
 			return [[Vector3(CELL, FENCE_H, 0.15), Vector3(0, FENCE_H * 0.5, 0), 0.0]]
 		"floodlight":
 			return [[Vector3(0.5, 3.4, 0.5), Vector3(0, 1.7, 0), 0.0]]
+		"turret":
+			return [[Vector3(0.9, 1.3, 1.0), Vector3(0, 0.65, 0.1), 0.0]]
 	return []
 
 
@@ -572,9 +583,47 @@ func place(type: String, slot: Dictionary, y: float, gate_open := false, tier :=
 		spot.visible = false
 		body.add_child(spot)
 		rec.light = spot
+	elif type == "turret":
+		rec.ammo = 0
+		body.set_meta("interact_id", "turret:" + key)
+		_add_turret_head(rec)
 	if type in ["floodlight", "electric_fence"]:
 		rec.powered = false
 	return key
+
+
+## The part that turns: a swivel with a gun on it and a muzzle flash.
+func _add_turret_head(rec: Dictionary) -> void:
+	var head := Node3D.new()
+	head.name = "Head"
+	head.position.y = 1.0
+	head.scale = Vector3.ONE * 1.4
+	rec.node.add_child(head)
+	var gun := Node3D.new()
+	head.add_child(gun)
+	for b in [[Vector3(0.34, 0.24, 0.5), Vector3(0, 0.05, 0.02), "metal"], [Vector3(0.07, 0.07, 0.7), Vector3(0, 0.07, -0.55), "rust"],
+			[Vector3(0.1, 0.1, 0.12), Vector3(0, 0.07, -0.88), "metal"], [Vector3(0.3, 0.03, 0.3), Vector3(0, 0.19, 0.0), "rust"],
+			[Vector3(0.36, 0.22, 0.04), Vector3(0, 0.12, -0.24), "metal"]]:
+		var mi := MeshInstance3D.new()
+		mi.mesh = _box_mesh(b[0])
+		mi.position = b[1]
+		mi.set_meta("mat", b[2])
+		mi.material_override = _mats[b[2]]
+		gun.add_child(mi)
+	var flash := MeshInstance3D.new()
+	var fm := BoxMesh.new()
+	fm.size = Vector3(0.18, 0.18, 0.25)
+	flash.mesh = fm
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = Color(1.0, 0.85, 0.4)
+	flash.material_override = mat
+	flash.position = Vector3(0, 0.07, -1.05)
+	flash.visible = false
+	gun.add_child(flash)
+	rec.head = head
+	rec.gun = gun
+	rec.flash = flash
 
 
 ## Lamps glow and fence wires look live while the piece has power.
@@ -684,6 +733,8 @@ func prompt(id: String) -> String:
 	if id.begins_with("gen:"):
 		var state := "running" if rec.running else ("idle, runs at night" if rec.fuel > 0.0 else "out of fuel")
 		return "[E] Add a fuel can   Generator %d/%d cans, %s" % [ceili(rec.fuel), int(GEN_TANK), state]
+	if id.begins_with("turret:"):
+		return "[E] Load 9mm rounds   Auto-turret %d/%d rounds%s" % [rec.ammo, TURRET_AMMO, "" if rec.ammo > 0 else ", EMPTY"]
 	if id.begins_with("fire:"):
 		if rec.burn <= 0.0:
 			return "[E] Light the fire (1 wood)"
@@ -1064,7 +1115,7 @@ func save_data() -> Array:
 		var d := {"type": p.type, "kind": p.slot.kind, "cx": p.slot.cx, "cz": p.slot.cz, "dir": p.slot.dir, "level": p.slot.level, "y": p.y, "open": p.open, "tier": p.tier, "hp": p.hp}
 		if p.has("storage"):
 			d.items = p.storage.save_data()
-		for k in ["fuel", "burn"]:
+		for k in ["fuel", "burn", "ammo"]:
 			if p.has(k):
 				d[k] = p[k]
 		out.append(d)
@@ -1082,5 +1133,7 @@ func load_data(data: Array) -> void:
 				pieces[key].storage.load_data(p.items)
 			if pieces[key].has("fuel"):
 				pieces[key].fuel = clampf(float(p.get("fuel", 0.0)), 0.0, GEN_TANK)
+			if pieces[key].has("ammo"):
+				pieces[key].ammo = clampi(int(p.get("ammo", 0)), 0, TURRET_AMMO)
 			if pieces[key].has("burn"):
 				pieces[key].burn = clampf(float(p.get("burn", 0.0)), 0.0, FIRE_MAX)

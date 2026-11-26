@@ -26,6 +26,7 @@ const Waves = preload("res://scripts/waves.gd")
 const Guns = preload("res://scripts/guns.gd")
 const Traps = preload("res://scripts/traps.gd")
 const Power = preload("res://scripts/power.gd")
+const Turrets = preload("res://scripts/turrets.gd")
 
 const DISCOVER_RANGE := 45.0
 const REFILLS_PER_MORNING := 4
@@ -65,6 +66,7 @@ var waves: Waves
 var guns: Guns
 var traps: Traps
 var power: Power
+var turrets: Turrets
 ## Wrecks and ruins: {"key": "w3", "kind": "wreck", "pos": Vector3}.
 var places: Array = []
 ## Keys of places you have been near.
@@ -162,6 +164,13 @@ func _ready() -> void:
 	traps.player = player
 	add_child(traps)
 	traps.exploded.connect(func(pos): mutants.alert(pos, 60.0))
+
+	turrets = Turrets.new()
+	turrets.name = "Turrets"
+	turrets.building = building
+	turrets.mutants = mutants
+	add_child(turrets)
+	turrets.fired.connect(mutants.alert)
 
 	power = Power.new()
 	power.name = "Power"
@@ -489,7 +498,7 @@ func _gun_input(event: InputEvent) -> bool:
 
 
 func _prompt_for(id: String) -> String:
-	for prefix in ["gate:", "chest:", "bench:", "gen:", "fire:"]:
+	for prefix in ["gate:", "chest:", "bench:", "gen:", "fire:", "turret:"]:
 		if id.begins_with(prefix):
 			return building.prompt(id)
 	return loot.prompt(id)
@@ -540,6 +549,13 @@ func interact(id: String) -> void:
 		if not power.add_fuel(id.trim_prefix("gen:"), inventory):
 			hud.show_banner("The tank is full" if inventory.count_of("fuel") > 0 else "You have no fuel cans. Search car trunks.")
 		return
+	if id.begins_with("turret:"):
+		var n := load_turret(id.trim_prefix("turret:"))
+		if n > 0:
+			hud.show_pickup(["Loaded %d rounds into the turret" % n])
+		else:
+			hud.show_banner("The turret is full" if inventory.count_of("ammo_9mm") > 0 else "You have no 9mm rounds to load")
+		return
 	if id.begins_with("fire:"):
 		if not power.add_wood(id.trim_prefix("fire:"), inventory):
 			hud.show_banner("The fire pit is full" if inventory.count_of("wood") > 0 else "You need wood for the fire")
@@ -564,6 +580,16 @@ func interact(id: String) -> void:
 		loot.spawn_drop(left, _drop_spot())
 	if not left.is_empty():
 		hud.show_banner("Inventory full")
+
+
+## Moves your 9mm rounds into a turret's ammo box. Returns how many went in.
+func load_turret(key: String) -> int:
+	var rec: Dictionary = building.pieces.get(key, {})
+	if rec.is_empty():
+		return 0
+	var n := inventory.remove("ammo_9mm", Building.TURRET_AMMO - rec.ammo)
+	rec.ammo += n
+	return n
 
 
 ## Closes the chest or workbench screen when you walk off or it is taken down.

@@ -37,6 +37,7 @@ var shots := [
 	{"name": "27_rifle_scope", "pos": Vector3(60, 0, 60), "yaw": 0.4, "pitch": -0.0, "hour": 9.0, "gun": "rifle", "aim": true},
 	{"name": "28_traps", "pos": Vector3(5, 0, -0.5), "yaw": 0.55, "pitch": -0.3, "hour": 16.5, "traps": true},
 	{"name": "29_power", "pos": Vector3(6, 0, 10), "yaw": 0.35, "pitch": -0.12, "hour": 22.0, "power": true},
+	{"name": "30_turret", "pos": Vector3(7, 0, -1), "yaw": -0.15, "pitch": -0.3, "hour": 17.0, "turret": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -126,6 +127,10 @@ func _process(_d: float) -> bool:
 			_gun_sample(p, s.gun, s.aim)
 		elif main.guns.item != "":
 			main.guns.set_item("")
+		if s.get("turret", false):
+			_turret_sample()
+		elif main.build_mode.range_ring.visible and not s.get("build", false):
+			main.build_mode.range_ring.visible = false
 		if s.get("power", false):
 			_power_sample()
 		if s.get("traps", false):
@@ -145,7 +150,7 @@ func _process(_d: float) -> bool:
 		elif s.get("zone", false):
 			main.build_mode.active = true
 			main.build_mode.select(10)
-		elif main.build_mode.active:
+		elif main.build_mode.active and not s.get("turret", false):
 			main.build_mode.toggle()
 		if s.get("menu", false):
 			main.pause_menu.open()
@@ -373,3 +378,27 @@ func _power_sample() -> void:
 		w.rotation.y = PI
 		w.set_physics_process(false)
 		w._animate(0.0, 1.0)
+
+
+## A turret firing at a walker, and build mode placing a second with its range circle (v0.21).
+func _turret_sample() -> void:
+	var b = main.building
+	var ms = main.mutants
+	b.load_data([])
+	ms.clear()
+	var slot := {"kind": "obj", "cx": 4, "cz": -3, "dir": 0, "level": 0}
+	var k: String = b.place("turret", slot, b.evaluate("turret", slot).y)
+	var rec: Dictionary = b.pieces[k]
+	rec.ammo = 120
+	rec.head.rotation.y = -0.35
+	rec.gun.rotation.x = 0.02
+	rec.flash.visible = true
+	var w = ms.spawn("walker", rec.node.global_position + Vector3(4.5, 0, -12))
+	w.rotation.y = PI - 0.4
+	w.set_physics_process(false)
+	w._animate(0.0, 2.0)
+	main.turrets.set_physics_process(false)
+	main.inventory.load_data({})
+	main.inventory.add_all({"scrap": 40, "nails": 20, "wood": 4})
+	main.build_mode.active = true
+	main.build_mode.select(b.ORDER.find("turret"))

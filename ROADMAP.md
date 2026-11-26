@@ -40,7 +40,7 @@ One version per development run, in this order. The full plan with reasons is in
 
 ### M6: Economy and v1.0
 - [x] v0.22: Cash per wave (kills, waves survived, base condition). Shop terminal at the base: materials, weapons, ammo, traps
-- [ ] v0.23: Drone delivery to a landing pad. Blueprints unlock new builds
+- [x] v0.23: Drone delivery to a landing pad. Blueprints unlock new builds
 - [ ] v0.24: Base upgrades: bigger build zone, storage, workbench tiers, a radio warning which mutant types are coming
 - [ ] v1.0: Balance and polish: difficulty settings, first-time hints, performance pass, standalone Linux export, README as a short manual
 

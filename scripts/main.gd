@@ -29,6 +29,7 @@ const Power = preload("res://scripts/power.gd")
 const Turrets = preload("res://scripts/turrets.gd")
 const Shop = preload("res://scripts/shop.gd")
 const ShopUI = preload("res://scripts/shop_ui.gd")
+const Drone = preload("res://scripts/drone.gd")
 
 const DISCOVER_RANGE := 45.0
 const REFILLS_PER_MORNING := 4
@@ -71,6 +72,7 @@ var power: Power
 var turrets: Turrets
 var shop: Shop
 var shop_ui: ShopUI
+var drone: Drone
 ## Wrecks and ruins: {"key": "w3", "kind": "wreck", "pos": Vector3}.
 var places: Array = []
 ## Keys of places you have been near.
@@ -118,6 +120,12 @@ func _ready() -> void:
 	shop.position = Vector3(-2.2, terrain.surface_height(-2.2, 1.6), 1.6)
 	shop.rotation.y = PI + 0.5  # screen towards the spawn point
 	add_child(shop)
+
+	drone = Drone.new()
+	drone.name = "Drone"
+	drone.building = building
+	add_child(drone)
+	shop.drone = drone
 
 	dummy = Dummy.new()
 	dummy.name = "TrainingDummy"
@@ -222,6 +230,7 @@ func _ready() -> void:
 	build_mode.building = building
 	build_mode.inventory = inventory
 	build_mode.player = player
+	build_mode.shop = shop
 	add_child(build_mode)
 
 	survival = Survival.new()
@@ -260,7 +269,9 @@ func _ready() -> void:
 		if not left.is_empty():
 			loot.spawn_drop(left, _drop_spot())
 			hud.show_banner("Inventory full: the rest is in a bag at your feet"))
+	shop_ui.ordered.connect(func(i): hud.show_pickup(["Ordered " + Shop.DRONE[i].name.to_lower() + " by drone"]))
 	add_child(shop_ui)
+	drone.delivered.connect(_on_delivery)
 
 	death_screen = DeathScreen.new()
 	death_screen.name = "DeathScreen"
@@ -612,6 +623,16 @@ func interact(id: String) -> void:
 		hud.show_banner("Inventory full")
 
 
+## The drone lowered a parcel: blueprints are learned on the spot, the rest is in a bag on the pad.
+func _on_delivery(items: Dictionary, pos: Vector3) -> void:
+	var learned: Array = shop.learn_blueprints(items)
+	for t in learned:
+		hud.show_pickup(["Blueprint learned: " + Building.PIECES[t].name])
+	if not items.is_empty():
+		loot.spawn_drop(items, pos)
+	hud.show_banner("Drone delivery on the landing pad" + (": new builds unlocked" if not learned.is_empty() else ""))
+
+
 ## Moves your 9mm rounds into a turret's ammo box. Returns how many went in.
 func load_turret(key: String) -> int:
 	var rec: Dictionary = building.pieces.get(key, {})
@@ -790,6 +811,7 @@ func collect_save_data() -> Dictionary:
 		"waves": waves.save_data(),
 		"guns": guns.save_data(),
 		"shop": shop.save_data(),
+		"drone": drone.save_data(),
 	}
 
 
@@ -803,6 +825,12 @@ func apply_save_data(data: Dictionary) -> void:
 	guns.load_data(data.get("guns", {}))
 	# Older saves: a little starting cash plus pay for the nights already survived.
 	shop.load_data(data.get("shop", {"cash": Shop.START_CASH + 40 * waves.wave}))
+	if not data.get("shop", {}).has("unlocked"):
+		# Saves from before blueprints keep every build they had.
+		for t in Building.PIECES:
+			if Building.PIECES[t].get("blueprint", false):
+				shop.unlocked[t] = true
+	drone.load_data(data.get("drone", {}))
 	if waves.active and not day_night.is_night():
 		waves.active = false  # never carry a wave into the day
 	if data.has("mutants"):

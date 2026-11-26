@@ -2,6 +2,19 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v0.23.0 (2026-11-26): Drone deliveries and blueprints
+- **Drone landing pad** (4 wood, 2 scrap, 4 nails): a concrete pad with a painted H, in build mode after the turret.
+- **Drone orders:** the shop terminal has a second page, **Drone orders**, with bigger loads at better prices: 40 wood $60, 40 scrap $90, 100 nails $45, 10 cement $80, 120 9mm rounds $80, 6 fuel cans $60, plus **blueprints**. Orders need a landing pad. A white quadcopter with an orange stripe flies in from the edge of the map, comes down over the pad, lowers the parcel and flies off, about 25 seconds in all, buzzing as it goes. The parcel is a bag on the pad with everything ordered since the last flight; orders placed while it is in the air go on the next one.
+- **Blueprints unlock builds.** The **auto-turret** ($150) and the **electric fence** ($120) now need a blueprint, and there is a new **sandbag wall** ($60): a waist-high edge piece of stacked sandbags (4 cloth, 2 cement) with **900 hit points** that you can shoot over. A blueprint is learned the moment its parcel lands. Build mode says "Locked: order its blueprint by drone…" until then, and the shop shows blueprints you own or have ordered as "Owned".
+- **Older saves keep every build** (all blueprints count as learned), so nothing you already use gets locked.
+- **Saved:** learned blueprints, and orders not yet delivered (a parcel in the air when you save is flown again after loading).
+- Pieces can now have their own hit points (`"hp"` in the piece table), used by the sandbags.
+- **Code:** new `drone.gd` (order queue, flight, delivery). `shop.gd` has the drone catalogue, blueprints and `is_unlocked()`. `shop_ui.gd` has two pages.
+- **Tests:** turret locked and walls not, the locked reason in build mode, no orders without a pad, building a pad, the drone page opening up, ordering a blueprint only once, a whole flight (take-off with two orders, arrival, the blueprint learned, the wood in a bag on the pad), turrets then buildable, undelivered orders saved and delivered after loading, older saves keeping every build, and sandbag hit points. New screenshot views `33_drone` and `34_drone_shop`.
+
+**Try:** build a landing pad, order the sandbag-wall blueprint and a load of wood, and watch the drone come in. Save up for the turret blueprint.
+**Next:** v0.24, base upgrades: a bigger build zone, more storage, workbench tiers, and a radio that warns which mutant types are coming.
+
 ## v0.22.0 (2026-11-26): Cash and the shop terminal
 - **Cash:** you start with $50 and are paid at the end of every night. Your cash is shown in the top right, next to the day and time.
   - **Kills:** a bounty on every mutant of the wave you kill: walker $10, runner $12, spitter $15, brute $40.

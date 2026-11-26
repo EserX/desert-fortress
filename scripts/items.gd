@@ -22,6 +22,9 @@ const ITEMS := {
 	"shells": {"name": "Shotgun shells", "weight": 0.04, "stack": 30},
 	"ammo_762": {"name": "7.62 rounds", "weight": 0.025, "stack": 40},
 	"fuel": {"name": "Fuel can", "weight": 1.2, "stack": 10},
+	"bp_turret": {"name": "Blueprint: Auto-turret", "weight": 0.0, "stack": 1},
+	"bp_fence": {"name": "Blueprint: Electric fence", "weight": 0.0, "stack": 1},
+	"bp_sandbags": {"name": "Blueprint: Sandbag wall", "weight": 0.0, "stack": 1},
 }
 
 ## What each kind of container can hold: item -> [min, max]. A negative min

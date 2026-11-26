@@ -40,6 +40,8 @@ var shots := [
 	{"name": "30_turret", "pos": Vector3(7, 0, -1), "yaw": -0.15, "pitch": -0.3, "hour": 17.0, "turret": true},
 	{"name": "31_terminal", "pos": Vector3(-0.6, 0, 4.2), "yaw": 0.5, "pitch": -0.2, "hour": 10.0, "terminal": true},
 	{"name": "32_shop", "pos": Vector3(-0.6, 0, 4.2), "yaw": 0.5, "pitch": -0.2, "hour": 10.0, "shop": true},
+	{"name": "33_drone", "pos": Vector3(4.5, 0, 12.5), "yaw": 0.17, "pitch": 0.28, "hour": 15.0, "drone": true},
+	{"name": "34_drone_shop", "pos": Vector3(4, 0, 9), "yaw": 0.6, "pitch": 0.0, "hour": 15.0, "drone_shop": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -135,8 +137,13 @@ func _process(_d: float) -> bool:
 			main.shop.cash = 340
 			main.inventory.load_data({})
 			main.inventory.add_all({"hammer": 1, "pistol": 1})
+		if s.get("drone", false) or s.get("drone_shop", false):
+			_drone_sample()
 		if s.get("shop", false):
 			main.shop_ui.open()
+		elif s.get("drone_shop", false):
+			main.shop_ui.open()
+			main.shop_ui.show_page(true)
 		elif main.shop_ui.is_open():
 			main.shop_ui.close()
 		if s.get("turret", false):
@@ -414,3 +421,25 @@ func _turret_sample() -> void:
 	main.inventory.add_all({"scrap": 40, "nails": 20, "wood": 4})
 	main.build_mode.active = true
 	main.build_mode.select(b.ORDER.find("turret"))
+
+
+## A landing pad with the drone coming down over it, and sandbag walls (v0.23).
+func _drone_sample() -> void:
+	var b = main.building
+	b.load_data([])
+	main.mutants.clear()
+	main.shop.cash = 420
+	main.shop.unlocked = {"sandbags": true}
+	var pad := {"kind": "obj", "cx": 1, "cz": 1, "dir": 0, "level": 0}
+	b.place("landing_pad", pad, b.evaluate("landing_pad", pad).y)
+	for cx in [0, 1, 2]:
+		var sb := {"kind": "edge", "cx": cx, "cz": 0, "dir": 0, "level": 0}
+		b.place("sandbags", sb, b.evaluate("sandbags", sb).y)
+	var dr = main.drone
+	dr.load_data({})
+	dr.order({"wood": 40, "bp_turret": 1})
+	dr._process(0.0)
+	dr.phase = "down"
+	dr._t = 2.4
+	dr._process(0.0)
+	dr.set_process(false)

@@ -1112,6 +1112,76 @@ func _test_shop() -> void:
 	inv.load_data({})
 
 
+## v0.23: landing pad, drone orders and flights, blueprints unlocking builds.
+func _test_drone() -> void:
+	var sh = main.shop
+	var dr = main.drone
+	var b = main.building
+	var bm = main.build_mode
+	var ui = main.shop_ui
+	b.load_data([])
+	main.loot.load_data({})
+	sh.unlocked = {}
+	sh.cash = 1000
+	dr.load_data({})
+	check(not sh.is_unlocked("turret", b.PIECES) and sh.is_unlocked("wall", b.PIECES), "turrets need a blueprint, walls don't")
+	var player = main.player
+	player.position = Vector3(-3, main.terrain.surface_height(-3, -10), -10)
+	player.rotation.y = PI
+	player.head.rotation.x = -0.5
+	main.inventory.load_data({})
+	main.inventory.add_all({"scrap": 40, "nails": 20, "wood": 6})
+	bm.active = true
+	bm.select(b.ORDER.find("turret"))
+	bm.update_preview()
+	check(not bm.can_build and bm.reason.begins_with("Locked"), "a locked piece can't be built: " + bm.reason)
+	bm.toggle()
+	var bp: int = sh.DRONE.map(func(e): return e.name).find("Blueprint: Auto-turret")
+	var wood: int = sh.DRONE.map(func(e): return e.name).find("40 wood")
+	check(not sh.can_order(bp), "no drone orders without a landing pad")
+	var slot := {"kind": "obj", "cx": 6, "cz": 6, "dir": 0, "level": 0}
+	var ev: Dictionary = b.evaluate("landing_pad", slot)
+	check(ev.ok, "a landing pad can be built (%s)" % ev.reason)
+	b.place("landing_pad", slot, ev.y)
+	ui.open()
+	ui.show_page(true)
+	check(not ui.drone_buttons[bp].disabled and ui._drone_note.text.begins_with("Orders are flown"), "with a pad the drone page opens up")
+	ui.order(bp)
+	check(sh.cash == 850 and sh.blueprint_owned("bp_turret") and not sh.can_order(bp), "ordering a blueprint ($150), only once")
+	ui.order(wood)
+	ui.close()
+	var data: Dictionary = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	# Fly it for real (in big steps).
+	var got := []
+	dr.delivered.connect(func(items, pos): got.append(items.duplicate()), CONNECT_ONE_SHOT)
+	var t := 0.0
+	dr._process(0.1)
+	check(dr.phase == "in", "the drone takes off with both orders")
+	while dr.phase != "idle" and t < 60.0:
+		dr._process(0.1)
+		t += 0.1
+	check(got.size() == 1 and got[0].has("wood"), "it arrives and lowers a parcel (%.0f s)" % t)
+	check(sh.unlocked.has("turret"), "the blueprint is learned on delivery")
+	check(main.loot.drops.size() == 1 and main.loot.drops.values()[0].items.get("wood", 0) == 40, "the wood is in a bag on the pad")
+	check(sh.is_unlocked("turret", b.PIECES), "now turrets can be built")
+	# A parcel still in the air is saved.
+	main.loot.load_data({})
+	main.apply_save_data(data)
+	check(dr.orders.size() == 2 and not sh.unlocked.has("turret"), "orders not yet delivered are saved")
+	dr.finish_now()
+	check(sh.unlocked.has("turret") and main.loot.drops.size() == 1, "and delivered after loading")
+	data.erase("shop")
+	main.apply_save_data(data)
+	check(sh.unlocked.has("sandbags") and sh.unlocked.has("electric_fence"), "older saves keep every build")
+	var sb := {"kind": "edge", "cx": 4, "cz": 6, "dir": 0, "level": 0}
+	var sk: String = b.place("sandbags", sb, b.evaluate("sandbags", sb).y)
+	check(b.max_hp(b.pieces[sk]) == 900.0, "a sandbag wall has 900 hit points")
+	b.load_data([])
+	main.loot.load_data({})
+	dr.load_data({})
+	main.inventory.load_data({})
+
+
 func _start_spitter() -> void:
 	var player = main.player
 	var py: float = main.terrain.surface_height(8, -8)
@@ -1349,6 +1419,7 @@ func _process(_delta: float) -> bool:
 			_test_traps()
 			_test_power()
 			_test_shop()
+			_test_drone()
 		2370:
 			_start_turret()
 		2490:

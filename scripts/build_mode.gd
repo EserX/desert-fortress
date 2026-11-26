@@ -11,6 +11,7 @@ const Items = preload("res://scripts/items.gd")
 var building: Building
 var inventory  # Inventory
 var player  # Player
+var shop  # Shop: which blueprint pieces are unlocked
 var active := false
 var type_index := 0
 var dir := 0
@@ -123,6 +124,9 @@ func update_preview() -> void:
 	if can_build and (not building.space_free(type, slot, base_y) or building.blocks_person(type, slot, base_y, player.global_position)):
 		can_build = false
 		reason = "Something is in the way"
+	if can_build and shop and not shop.is_unlocked(type, Building.PIECES):
+		can_build = false
+		reason = "Locked: order its blueprint by drone from the shop terminal"
 	if can_build and not has_materials(type):
 		can_build = false
 		reason = "Not enough materials"

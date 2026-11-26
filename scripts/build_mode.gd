@@ -8,6 +8,8 @@ extends Node3D
 const Building = preload("res://scripts/building.gd")
 const Items = preload("res://scripts/items.gd")
 
+## Support the previewed piece would get (upper levels), or -INF.
+var support_preview := -INF
 var building: Building
 var inventory  # Inventory
 var player  # Player
@@ -118,6 +120,7 @@ func update_preview() -> void:
 	slot = Building.slot_for(type, p, dir)
 	slot.level = building.level_for(type, slot, p.y)
 	var ev := building.evaluate(type, slot)
+	support_preview = float(ev.get("support", -INF))
 	base_y = ev.y
 	reason = ev.reason
 	can_build = ev.ok
@@ -206,6 +209,7 @@ func try_remove() -> String:
 	if not building.can_undo(rec):
 		return "old"
 	var type := building.remove(looking_at_piece)
+	building.collapse_unsupported()  # whatever it held up comes down too
 	if type != "":
 		var left: Dictionary = inventory.add_all(Building.PIECES[type].cost)
 		if not left.is_empty():
@@ -225,4 +229,6 @@ func status_text() -> String:
 	var line := "BUILD: %s   %s" % [info.name, ", ".join(parts)]
 	if not can_build and reason != "":
 		line += "\n" + reason
+	elif slot.get("level", 0) > 0 and support_preview > -INF:
+		line += "\nSupport here: %d%%" % int(support_preview)
 	return line

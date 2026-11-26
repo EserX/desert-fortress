@@ -1814,6 +1814,68 @@ func _test_well() -> void:
 	inv.load_data({})
 
 
+## v1.5: structural support: overhangs, heavier tiers, collapse with rigid debris.
+func _test_stability() -> void:
+	var b = main.building
+	main.terrain.load_data({})
+	b.load_data([])
+	for e in b.cell_edges(6, -6, 0):
+		b.place("wall", e, b.evaluate("wall", e).y)
+	var keys := []
+	for i in 4:
+		var s := {"kind": "cell", "cx": 6 + i, "cz": -6, "dir": 0, "level": 1}
+		var ev: Dictionary = b.evaluate("floor", s)
+		check(ev.ok, "floor %d out can be built (%s)" % [i, ev.reason])
+		keys.append(b.place("floor", s, ev.y))
+	var sup: Array = keys.map(func(k): return b.support[k])
+	check(is_equal_approx(sup[0], 90.0) and is_equal_approx(sup[1], 90.0) and is_equal_approx(sup[2], 65.0) and is_equal_approx(sup[3], 40.0), "support: 90%% on walls, then 65%% and 40%% further out (%s)" % str(sup))
+	var far := {"kind": "cell", "cx": 10, "cz": -6, "dir": 0, "level": 1}
+	var ev5: Dictionary = b.evaluate("floor", far)
+	check(not ev5.ok and ev5.reason.begins_with("Too far from support (15%)"), "the next floor out is too far: " + ev5.reason)
+	var up := {"kind": "edge", "cx": 6, "cz": -6, "dir": 0, "level": 1}
+	check(is_equal_approx(b.evaluate("wall", up).support, 90.0), "a wall on a wall: 90%")
+	check(main.hammer_prompt(keys[2]).contains("support 65%"), "the hammer shows support: " + main.hammer_prompt(keys[2]).replace("\n", " | "))
+	# Heavier tiers need more support.
+	for i in 2:
+		b.upgrade(keys[1])
+		b.upgrade(keys[2])
+	b.upgrade(keys[3])
+	keys = keys.slice(1)
+	sup = keys.map(func(k): return b.support[k])
+	check(is_equal_approx(sup[0], 86.0) and is_equal_approx(sup[1], 51.0) and is_equal_approx(sup[2], 22.25), "stone floors weigh more: 86%%, 51%%, 22%% (%s)" % str(sup))
+	var problem: String = b.upgrade_problem(keys[2])
+	check(problem.begins_with("Too heavy"), "a stone floor that far out would fall: " + problem)
+	var inv = main.inventory
+	inv.load_data({})
+	inv.add_all({"hammer": 1, "stone": 20, "clay": 5})
+	inv.selected = 0
+	main.hammer_use(keys[2])
+	check(b.pieces[keys[2]].tier == 1 and inv.count_of("stone") == 20, "so the hammer won't upgrade it, and takes nothing")
+	check(b.upgrade_problem(keys[0]) == "", "the stone floor on the walls can go up to concrete")
+	# Take a wall down: the floors still stand on the other three... until they don't.
+	var walls: Array = b.keys_of(["wall"])
+	var collapsed := []
+	b.piece_collapsed.connect(func(k, _t): collapsed.append(k))
+	for k in walls:
+		b.damage(k, 99999.0)
+	check(b.pieces.is_empty() and collapsed.size() == 4, "with the walls gone, all four floors come down (%d)" % collapsed.size())
+	var chunks: Array = main.get_tree().get_nodes_in_group("debris")
+	check(chunks.size() > 0 and chunks[0] is RigidBody3D, "collapses throw rigid debris (%d chunks)" % chunks.size())
+	check(chunks.size() <= b.MAX_DEBRIS, "but never more than %d at once" % b.MAX_DEBRIS)
+	inv.load_data({})
+
+
+## A few seconds later: the debris has landed on the ground and lies still.
+func _check_debris() -> void:
+	var chunks: Array = main.get_tree().get_nodes_in_group("debris").filter(func(c): return not c.is_queued_for_deletion())
+	var worst := 0.0
+	var fastest := 0.0
+	for c in chunks:
+		worst = maxf(worst, main.terrain.surface_height(c.global_position.x, c.global_position.z) - c.global_position.y)
+		fastest = maxf(fastest, c.linear_velocity.length())
+	check(chunks.size() > 0 and worst < 0.3 and fastest < 1.5, "debris settles on the sand (%d chunks, deepest %.2f m under, fastest %.2f m/s)" % [chunks.size(), worst, fastest])
+
+
 func _process(_delta: float) -> bool:
 	frame += 1
 	var player = main.player
@@ -2029,8 +2091,10 @@ func _process(_delta: float) -> bool:
 			_test_trench_pieces()
 			_test_mining()
 			_test_well()
+			_test_stability()
 			_start_ladder()
 		3300:
+			_check_debris()
 			_check_ladder()
 		3310:
 			if failures.is_empty():

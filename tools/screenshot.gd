@@ -53,6 +53,7 @@ var shots := [
 	{"name": "43_layers", "pos": Vector3(-10, 0, -1.5), "yaw": 0.0, "pitch": -0.75, "hour": 14.0, "layers": true},
 	{"name": "44_detector", "pos": Vector3(0, 0, 9), "yaw": 0.4, "pitch": -0.3, "hour": 10.0, "detector": true},
 	{"name": "45_well", "pos": Vector3(-11, 0, -1.6), "yaw": 0.0, "pitch": -0.3, "hour": 10.0, "well": true},
+	{"name": "46_support", "pos": Vector3(15, 0, -1.5), "yaw": 0.0, "pitch": 0.12, "hour": 16.0, "support": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -141,6 +142,16 @@ func _process(_d: float) -> bool:
 			_digging_sample()
 		if s.get("layers", false):
 			_layers_sample()
+		if s.get("support", false):
+			var b = main.building
+			main.terrain.load_data({})
+			b.load_data([])
+			for e in b.cell_edges(6, -6, 0):
+				b.place("wall", e, b.evaluate("wall", e).y)
+			for i in 5:
+				var fs := {"kind": "cell", "cx": 6 + i, "cz": -6, "dir": 0, "level": 1}
+				b.place("floor", fs, b.evaluate("floor", fs).y)
+			b.collapse_unsupported()  # the fifth, at 15%, comes down
 		if s.get("well", false):
 			main.building.load_data([])
 			main.terrain.load_data({})

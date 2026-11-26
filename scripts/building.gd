@@ -29,6 +29,14 @@ const REFUND := 0.5          # share of what a piece cost you get back when demo
 const UNDO_SECONDS := 60.0   # build-mode right click gives everything back this soon after building
 const ZONE_RADIUS := 26.0    # base build zone around the flag at the origin (before upgrades)
 const CHEST_SLOTS := 20      # before upgrades
+## Structural support, counted from the ground: pieces at ground level have 100%.
+## Resting on what is below costs LOSS_UP, hanging off a floor next to it
+## LOSS_SIDE, times the piece's tier weight (heavier tiers need more support).
+## Below MIN_SUPPORT a piece comes down.
+const MIN_SUPPORT := 20.0
+const LOSS_UP := 10.0
+const LOSS_SIDE := 25.0
+const TIER_WEIGHT := [1.0, 1.15, 1.4, 1.3]
 ## A spiked pit goes in a hole at least this deep. A ladder is this tall.
 const PIT_DEPTH := 0.9
 const LADDER_H := 4.2
@@ -83,6 +91,10 @@ const FENCE_H := 1.7
 const GEN_TANK := 10.0       # fuel cans a generator holds
 const FIRE_MAX := 300.0      # seconds of burning a fire pit holds
 const FIRE_PER_WOOD := 60.0
+## Collapse debris: rigid chunks on their own physics layer (6), gone after a while.
+const DEBRIS_LAYER := 32
+const DEBRIS_SECONDS := 4.0
+const MAX_DEBRIS := 72
 ## Traps don't block anyone: their bodies sit on their own physics layer (5),
 ## which only the hammer's aim ray looks at.
 const TRAP_LAYER := 16
@@ -102,6 +114,9 @@ var chest_slots := CHEST_SLOTS
 var pieces := {}
 ## every slot key a piece takes up (stairs take two) -> main slot key
 var occupied := {}
+## main slot key -> support in % (see MIN_SUPPORT), kept up to date
+var support := {}
+var _bulk := false  # loading: work out support once at the end
 var _mats := {}
 
 
@@ -336,7 +351,10 @@ func evaluate(type: String, slot: Dictionary) -> Dictionary:
 		var sy := _support_y(slot)
 		if is_nan(sy):
 			return {"y": _ground_level(type, slot).y + slot.level * WALL_H, "ok": false, "reason": "Needs a wall or floor to hold it up"}
-		return {"y": sy, "ok": true, "reason": ""}
+		var s := support_for({"type": type, "slot": slot, "tier": base_tier(type)})
+		if s < MIN_SUPPORT:
+			return {"y": sy, "ok": false, "reason": "Too far from support (%d%%): build closer to walls" % maxi(int(s), 0), "support": s}
+		return {"y": sy, "ok": true, "reason": "", "support": s}
 	var g := _ground_level(type, slot)
 	if g.steep and not PIECES[type].get("steep_ok", false):
 		return {"y": g.y, "ok": false, "reason": "Ground too steep"}
@@ -699,6 +717,8 @@ func place(type: String, slot: Dictionary, y: float, gate_open := false, tier :=
 		_add_turret_head(rec)
 	if type in ["floodlight", "electric_fence"]:
 		rec.powered = false
+	if not _bulk:
+		_refresh_support()
 	return key
 
 
@@ -876,6 +896,7 @@ func remove(key: String, spill := true) -> String:
 	for k in slot_keys(rec.type, rec.slot):
 		occupied.erase(k)
 	pieces.erase(key)
+	support.erase(key)
 	if _by_type.has(rec.type):
 		_by_type[rec.type].erase(key)
 	return rec.type
@@ -978,6 +999,7 @@ func upgrade(key: String) -> void:
 	rec.tier += 1
 	rec.hp = max_hp(rec)
 	_apply_tier(rec)
+	_refresh_support()
 
 
 func repair(key: String) -> void:
@@ -1052,27 +1074,89 @@ func _supporters(slot: Dictionary) -> Array:
 	return out
 
 
-## Upstairs pieces with no chain of support down to the ground fall down
-## (two floors can't hold each other up in the air). Returns how many fell.
-func collapse_unsupported() -> int:
-	var grounded := {}
+## What resting on sup costs a piece rec, in support points.
+static func support_loss(rec: Dictionary, sup: Dictionary) -> float:
+	var w: float = 1.0 if PIECES[rec.type].get("fixed", false) else TIER_WEIGHT[clampi(int(rec.tier), 0, TIER_WEIGHT.size() - 1)]
+	if sup.slot.level < rec.slot.level:
+		return LOSS_UP * w
+	if rec.slot.kind == "cell":
+		return LOSS_SIDE * w  # a floor hanging off the one next to it
+	return LOSS_UP * 0.5 * w  # standing on a floor
+
+
+## Support every piece gets, worked out from the ground up: key -> %. With
+## tier_override {key: tier}, as if those pieces had other tiers.
+func compute_support(tier_override := {}) -> Dictionary:
+	var out := {}
 	for key in pieces:
 		if pieces[key].slot.level == 0:
-			grounded[key] = true
+			out[key] = 100.0
 	var changed := true
-	while changed:
+	var passes := 0
+	while changed and passes < 64:
 		changed = false
+		passes += 1
 		for key in pieces:
-			if grounded.has(key):
+			var rec: Dictionary = pieces[key]
+			if rec.slot.level == 0:
 				continue
-			for k in _supporters(pieces[key].slot):
-				if grounded.has(k):
-					grounded[key] = true
-					changed = true
-					break
+			if tier_override.has(key):
+				rec = rec.merged({"tier": tier_override[key]}, true)
+			var best := -INF
+			for k in _supporters(rec.slot):
+				if out.has(k):
+					best = maxf(best, out[k] - support_loss(rec, pieces[k]))
+			if best > out.get(key, -INF) + 0.001:
+				out[key] = best
+				changed = true
+	return out
+
+
+## Support a new piece {type, slot, tier} would get where it stands (-INF if none).
+func support_for(rec: Dictionary) -> float:
+	if rec.slot.get("level", 0) == 0:
+		return 100.0
+	var best := -INF
+	for k in _supporters(rec.slot):
+		if support.has(k):
+			best = maxf(best, support[k] - support_loss(rec, pieces[k]))
+	return best
+
+
+func _refresh_support() -> void:
+	support = compute_support()
+	for key in pieces:
+		pieces[key].support = support.get(key, 0.0)
+
+
+## Why upgrading a piece must wait ("" if it can go ahead): a heavier tier must
+## not bring down what it holds up, or itself.
+func upgrade_problem(key: String) -> String:
+	var rec: Dictionary = pieces.get(key, {})
+	if rec.is_empty() or upgrade_cost(rec).is_empty():
+		return ""
+	var after := compute_support({key: rec.tier + 1})
+	for k in pieces:
+		if after.get(k, 0.0) < MIN_SUPPORT:
+			return "Too heavy: a %s %s would bring %s down" % [TIER_NAMES[rec.tier + 1], PIECES[rec.type].name.replace("Wooden ", "").replace("Scrap ", "").to_lower(), "itself" if k == key else "what it holds up"]
+	return ""
+
+
+## Pieces without enough support (see MIN_SUPPORT) fall down, and then what
+## they held up, with debris. Returns how many fell.
+func collapse_unsupported() -> int:
 	var fell := 0
-	for key in pieces.keys():
-		if not grounded.has(key):
+	for round_i in 16:
+		_refresh_support()
+		var weak: Array = []
+		for key in pieces:
+			if support.get(key, 0.0) < MIN_SUPPORT:
+				weak.append(key)
+		if weak.is_empty():
+			break
+		for key in weak:
+			if not pieces.has(key):
+				continue
 			var rec: Dictionary = pieces[key]
 			_debris(rec)
 			remove(key)
@@ -1185,25 +1269,39 @@ func _debris(rec: Dictionary) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(slot_key(rec.slot)) + Time.get_ticks_msec()
 	var mat: Material = _tier_mat(rec.tier, "plank")
-	var ground: float = terrain.surface_height(xf.origin.x, xf.origin.z) if terrain else xf.origin.y
+	# Rigid chunks that tumble, bounce, settle and then shrink away. They sit on
+	# their own layer (6), so nobody trips over them, and only hit the world.
 	for i in 9:
+		var chunk := RigidBody3D.new()
+		chunk.collision_layer = DEBRIS_LAYER
+		chunk.collision_mask = 1  # not each other: they start out overlapping
+		chunk.add_collision_exception_with(rec.node)
+		chunk.mass = 4.0
+		chunk.continuous_cd = true  # thin chunks falling from upstairs mustn't pass through the sand
+		var csize := Vector3(rng.randf_range(0.2, 0.7), rng.randf_range(0.12, 0.3), rng.randf_range(0.14, 0.3))
 		var mi := MeshInstance3D.new()
-		mi.mesh = _box_mesh(Vector3(rng.randf_range(0.2, 0.7), rng.randf_range(0.08, 0.3), rng.randf_range(0.1, 0.3)))
+		mi.mesh = _box_mesh(csize)
 		mi.material_override = mat
-		add_child(mi)
+		chunk.add_child(mi)
+		var col := CollisionShape3D.new()
+		col.shape = BoxShape3D.new()
+		col.shape.size = csize
+		chunk.add_child(col)
+		add_child(chunk)
+		chunk.add_to_group("debris")
 		var local: Vector3 = b[1] + Vector3(rng.randf_range(-0.5, 0.5) * size.x, rng.randf_range(-0.4, 0.4) * size.y, rng.randf_range(-0.5, 0.5) * size.z)
-		mi.global_position = xf * local
-		mi.rotation = Vector3(rng.randf() * TAU, rng.randf() * TAU, 0)
-		var land := mi.global_position + Vector3(rng.randf_range(-1.2, 1.2), 0, rng.randf_range(-1.2, 1.2))
-		land.y = maxf(ground, xf.origin.y) + 0.1
-		var t := rng.randf_range(0.45, 0.8)
-		var tw := mi.create_tween()
-		tw.set_parallel(true)
-		tw.tween_property(mi, "global_position", land, t).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
-		tw.tween_property(mi, "rotation", mi.rotation + Vector3(rng.randf_range(-3, 3), rng.randf_range(-3, 3), 0), t)
-		tw.chain().tween_interval(2.0)
-		tw.chain().tween_property(mi, "scale", Vector3.ONE * 0.01, 0.6)
-		tw.chain().tween_callback(mi.queue_free)
+		chunk.global_position = xf * local
+		chunk.rotation = Vector3(rng.randf() * TAU, rng.randf() * TAU, 0)
+		chunk.linear_velocity = Vector3(rng.randf_range(-2.0, 2.0), rng.randf_range(0.5, 2.5), rng.randf_range(-2.0, 2.0))
+		chunk.angular_velocity = Vector3(rng.randf_range(-6, 6), rng.randf_range(-6, 6), rng.randf_range(-6, 6))
+		var tw := chunk.create_tween()
+		tw.tween_interval(DEBRIS_SECONDS + rng.randf_range(0.0, 1.0))
+		tw.tween_property(mi, "scale", Vector3.ONE * 0.01, 0.6)
+		tw.tween_callback(chunk.queue_free)
+	# Too many at once (a big collapse): the oldest go first.
+	var all := get_tree().get_nodes_in_group("debris")
+	for j in maxi(all.size() - MAX_DEBRIS, 0):
+		all[j].queue_free()
 	var dust := CPUParticles3D.new()
 	dust.one_shot = true
 	dust.emitting = true
@@ -1349,6 +1447,7 @@ func save_data() -> Array:
 
 ## old_tiers: the save is from before the stone tier, so its concrete (2) is now 3.
 func load_data(data: Array, old_tiers := false) -> void:
+	_bulk = true
 	for key in pieces.keys():
 		remove(key, false)
 	for p in data:
@@ -1368,3 +1467,5 @@ func load_data(data: Array, old_tiers := false) -> void:
 				pieces[key].water = clampf(float(p.get("water", 0.0)), 0.0, WELL_MAX)
 			if pieces[key].has("burn"):
 				pieces[key].burn = clampf(float(p.get("burn", 0.0)), 0.0, FIRE_MAX)
+	_bulk = false
+	_refresh_support()

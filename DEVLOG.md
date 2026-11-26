@@ -2,6 +2,19 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v1.5.0 (2026-11-26): Structural stability
+- **Support:** every piece now has a support value counted from the ground. Ground-level pieces have **100%**. Resting on what is below (a floor on walls, a wall on a wall, a stair on a floor) costs **10 points**, a floor hanging off the floor next to it **25**, and anything standing on a floor 5. Heavier tiers cost more: scrap metal ×1.15, stone ×1.4, concrete ×1.3 (reinforced). Below **20%** a piece can't stand.
+  - With wooden floors: 90% on the walls, then 65%, 40%, and a fourth square out (15%) is refused with "Too far from support (15%): build closer to walls".
+  - Build mode shows "Support here: 65%" for an upstairs piece, and the hammer prompt shows the support of built ones.
+  - The hammer refuses an upgrade that would bring something down ("Too heavy: a stone floor would bring itself down") and takes nothing for it.
+  - When a wall breaks, or a piece is demolished or undone in build mode, everything left below 20% collapses, then whatever that held, and so on. Undoing a piece in build mode now brings down what it held too (before, it could leave floors in the air).
+- **Physics debris:** collapsing and broken pieces throw **rigid chunks** that tumble, bounce, settle on the sand and shrink away after about 4 seconds. They are on their own physics layer (you and mutants walk through them), use continuous collision so they never fall through the ground, and at most 72 are around at once.
+- **Code:** `building.compute_support()`, `support_for()`, `support_loss()`, `upgrade_problem()` and a rewritten `collapse_unsupported()`. Support is kept up to date in `building.support` (worked out once after loading a save).
+- **Tests (16 new):** the 90/90/65/40% chain, the too-far floor refused, a wall on a wall, the hammer showing support, stone floors weighing more (86/51/22%), the refused upgrade that takes nothing, an upgrade that is fine, all four floors falling when the walls go, rigid debris (and its limit), and the debris settled on the sand a few seconds later. New screenshot view `46_support`.
+
+**Try:** build a balcony off your walls and see how far it reaches, then try it in stone.
+**Next:** v1.6, more pieces: half and low walls, a gun slit wall, a corner pillar, a ladder piece for walls, a trapdoor, triangle foundations and roofs, and a metal door.
+
 ## v1.4.0 (2026-11-26): The water well (M7 done)
 - **Water well** (8 stone, 4 wood, 2 scrap, last in the build list): dig a shaft at least **3.5 m** deep (a single 1 m square is enough; the last metre is stone, so it takes the pickaxe), then build the well on the 2 m square whose middle is a corner of the shaft. It stands at the original ground level with a stone ring, posts, a crank bar and a bucket, and fills the sand round the shaft inside its footprint. It fills **a bottle of water every 75 s, up to 6**. **E** takes them ("Well: 3 bottles, the next in 40 s"). Water in a well is saved. Digging next to it doesn't drop it into its own shaft.
 - **Reaching down holes:** looking steeply down, the shovel and pickaxe reach further (about 4 m out, up to 6.4 m along the line of sight), so you can dig a shaft from its edge.

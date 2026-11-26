@@ -794,6 +794,8 @@ func hammer_prompt(key: String) -> String:
 	if rec.is_empty():
 		return ""
 	var text := "%s  %d/%d" % [building.describe(rec), rec.hp, building.max_hp(rec)]
+	if rec.slot.level > 0:
+		text += "   support %d%%" % int(building.support.get(key, 0.0))
 	var rep := building.repair_cost(rec)
 	var up := building.upgrade_cost(rec)
 	if not rep.is_empty():
@@ -831,6 +833,10 @@ func hammer_use(key: String) -> void:
 			building.repair(key)
 			hud.show_pickup(["Repaired " + building.describe(rec).to_lower()])
 	elif not building.upgrade_cost(rec).is_empty():
+		var problem := building.upgrade_problem(key)
+		if problem != "":
+			hud.show_banner(problem)
+			return
 		if _pay(building.upgrade_cost(rec)):
 			building.upgrade(key)
 			hud.show_pickup(["Upgraded to " + building.describe(rec).to_lower()])

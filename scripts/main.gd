@@ -52,6 +52,7 @@ const STAMINA_DIG := 7.0
 const STAMINA_PICK := 9.0
 const STAMINA_BUILD := 6.0
 const STAMINA_HAMMER := 5.0
+const AREA_R := 8.0  # hammer R / G: repair or upgrade everything this close
 const CHEST_REACH := 4.0  # walk further than this from an open chest or bench and it closes
 
 ## When true the world is only a backdrop for the title screen:
@@ -278,6 +279,7 @@ func _ready() -> void:
 	build_mode.inventory = inventory
 	build_mode.player = player
 	build_mode.shop = shop
+	build_mode.pay_stamina = func() -> bool: return use_stamina(STAMINA_BUILD)
 	add_child(build_mode)
 
 	survival = Survival.new()
@@ -860,6 +862,18 @@ func hammer_demolish(key: String) -> bool:
 
 
 func _hammer_input(event: InputEvent) -> bool:
+	if event.is_action_pressed("rotate"):
+		var n := area_repair(player.global_position)
+		hud.show_pickup(["Repaired %d pieces" % n] if n > 0 else ["Nothing nearby needs repairing (or you lack materials)"])
+		return true
+	if event.is_action_pressed("move_piece"):
+		var key := piece_under_crosshair()
+		if key == "":
+			hud.show_banner("Look at a piece: G upgrades everything like it nearby")
+			return true
+		var n := area_upgrade(key)
+		hud.show_pickup(["Upgraded %d pieces" % n] if n > 0 else ["Nothing nearby to upgrade (or you lack materials)"])
+		return true
 	if not (event is InputEventMouseButton and event.pressed) or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		return false
 	if event.button_index != MOUSE_BUTTON_LEFT and event.button_index != MOUSE_BUTTON_RIGHT:
@@ -910,12 +924,27 @@ func _build_input(event: InputEvent) -> bool:
 	if event.is_action_pressed("rotate"):
 		build_mode.rotate_piece()
 		return true
+	if event.is_action_pressed("move_piece"):
+		if not build_mode.carrying.is_empty():
+			build_mode.cancel_carry()
+			hud.show_pickup(["Put it back"])
+		else:
+			var why: String = build_mode.pick_up(build_mode.piece_under_crosshair())
+			if why != "":
+				hud.show_banner(why)
+			else:
+				hud.show_pickup(["Picked up " + Building.PIECES[build_mode.carrying.type].name.to_lower()])
+		return true
+	if event is InputEventMouseButton and not event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		var n: int = build_mode.end_drag()
+		if n > 1:
+			hud.show_pickup(["Built %d pieces" % n])
+		return true
 	if not (event is InputEventMouseButton and event.pressed) or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		return false
 	match event.button_index:
 		MOUSE_BUTTON_LEFT:
-			if build_mode.can_build and use_stamina(STAMINA_BUILD):
-				build_mode.try_place()
+			build_mode.begin_drag()
 		MOUSE_BUTTON_RIGHT:
 			var t := build_mode.try_remove()
 			if t == "old":
@@ -1015,6 +1044,90 @@ func apply_upgrades() -> void:
 	building.set_chest_slots(shop.upgrade_value("storage", Building.CHEST_SLOTS))
 	inventory_ui.bench_tier = shop.upgrade_value("bench", 1)
 	inventory_ui.refresh()
+
+
+## Storage of every chest within reach (hammer work can be paid from them).
+func _nearby_storages() -> Array:
+	var out: Array = []
+	for key in building.keys_of(["chest"]):
+		var rec: Dictionary = building.pieces[key]
+		if rec.node.global_position.distance_to(player.global_position) <= CHEST_REACH + 2.0:
+			out.append(rec.storage)
+	return out
+
+
+## True if your pockets and the chests within reach hold all of cost.
+func has_near(cost: Dictionary) -> bool:
+	var stores: Array = [inventory] + _nearby_storages()
+	for item in cost:
+		var n := 0
+		for st in stores:
+			n += st.count_of(item)
+		if n < cost[item]:
+			return false
+	return true
+
+
+## Takes cost from your pockets first, then from the chests within reach.
+func pay_near(cost: Dictionary) -> bool:
+	if not has_near(cost):
+		return false
+	var stores: Array = [inventory] + _nearby_storages()
+	for item in cost:
+		var left: int = cost[item]
+		for st in stores:
+			left -= st.remove(item, left)
+			if left <= 0:
+				break
+	return true
+
+
+## Pieces within AREA_R of a point, nearest first.
+func _pieces_near(center: Vector3) -> Array:
+	var keys: Array = building.pieces.keys().filter(func(k): return building.pieces[k].node.global_position.distance_to(center) <= AREA_R)
+	keys.sort_custom(func(a, b): return building.pieces[a].node.global_position.distance_to(center) < building.pieces[b].node.global_position.distance_to(center))
+	return keys
+
+
+## Hammer R: repairs every damaged piece nearby, nearest first, until the
+## materials (pockets and chests in reach) or your stamina run out. Returns how many.
+func area_repair(center: Vector3) -> int:
+	var n := 0
+	for key in _pieces_near(center):
+		var cost := building.repair_cost(building.pieces[key])
+		if cost.is_empty() or not has_near(cost):
+			continue
+		if not use_stamina(STAMINA_HAMMER):
+			break
+		pay_near(cost)
+		building.repair(key)
+		n += 1
+	if n > 0:
+		melee.play_swing(0.45)
+	return n
+
+
+## Hammer G: upgrades every piece near the one you look at that has its tier,
+## nearest first, while you can pay. Returns how many.
+func area_upgrade(key: String) -> int:
+	var rec: Dictionary = building.pieces.get(key, {})
+	if rec.is_empty():
+		return 0
+	var tier: int = rec.tier
+	var n := 0
+	for k in _pieces_near(rec.node.global_position):
+		var r: Dictionary = building.pieces[k]
+		var cost := building.upgrade_cost(r)
+		if r.tier != tier or cost.is_empty() or not building.repair_cost(r).is_empty() or building.upgrade_problem(k) != "" or not has_near(cost):
+			continue
+		if not use_stamina(STAMINA_HAMMER):
+			break
+		pay_near(cost)
+		building.upgrade(k)
+		n += 1
+	if n > 0:
+		melee.play_swing(0.45)
+	return n
 
 
 ## Takes the full bottles out of a well. Returns how many you got.
@@ -1253,6 +1366,7 @@ func _drop_spot() -> Vector3:
 # --- Save / load ---------------------------------------------------------------
 
 func collect_save_data() -> Dictionary:
+	build_mode.cancel_carry()  # a piece being moved goes back in its place first
 	return {
 		"player": {
 			"position": [player.position.x, player.position.y, player.position.z],

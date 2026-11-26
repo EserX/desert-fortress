@@ -2,6 +2,18 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v1.7.0 (2026-11-26): Faster building
+- **Lines:** in build mode, hold left click and let go somewhere else to build a straight **line** (up to 12) of the piece: squares (foundations, floors, roofs) along the longer direction, walls and fences along their own edge, and pillars from corner to corner. Each piece is checked and paid on its own (and costs its stamina), so the line simply stops when the materials or your breath run out, skipping spots that are blocked. A plain click still builds one piece. While dragging, the build line shows "Line: 5 pieces (let go to build)".
+- **Area hammer:** with the hammer, **R** repairs every damaged piece within 8 m, nearest first, and **G** upgrades every piece within 8 m that has the same tier as the one you look at (except damaged ones and upgrades that would bring something down). Both are paid from your pockets **and any chest within reach**, and cost 5 stamina a piece.
+- **Moving pieces:** in build mode, **G** picks up the piece you look at (traps and ladders too). A chest keeps everything in it, a turret its ammo, a generator its fuel, a well its water, and damage stays. Left click puts it down anywhere it fits, for free. G again, leaving build mode or saving puts it back where it was. Foundations, stairs, ramps, wells and anything that holds up another piece can't be moved ("Something rests on it").
+- New key **G** (on the controls page and in the README).
+- Fix: a debris chunk could now and then start inside the sand (from the bottom of a wall or a foundation) and drop through the ground; chunks now start at least 45 cm above it (the debris test passed 3 runs in a row after).
+- **Code:** `building.piece_data()` / `restore_piece()` (saves use them too), `move_problem()`; build mode `begin_drag()` / `end_drag()` / `line_slots()` / `place_line()` / `pick_up()` / `cancel_carry()`; `main.area_repair()` / `area_upgrade()` / `has_near()` / `pay_near()`.
+- **Tests (18 new):** line geometry (walls, squares along the longer way, the 12 limit, objects not making lines), a line stopping when the wood runs out, chests counting as yours for the hammer, area repair paid from a chest, area upgrade while the scrap lasts, picking up a chest and putting it down elsewhere with its contents, a wall holding a floor refusing to move, and a carried piece going back when you leave build mode.
+
+**Try:** drag out a ring of foundations, then a ring of walls on top. When the night has battered them, stand in the middle with the hammer and press R.
+**Next:** v1.8, doors, switches and wiring: gates that close by themselves at night, a lockable metal gate, and cables carrying power from the generator.
+
 ## v1.6.0 (2026-11-26): More pieces
 Eight new pieces at the end of the build list (scroll the mouse wheel in build mode). All take material tiers unless said otherwise.
 - **Half wall** (2 wood, 2 nails): 1.2 m high, under your eyes (1.65 m), so you can shoot over it. **Low wall** (1 wood, 2 nails): 0.7 m. Neither holds anything up.

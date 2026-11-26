@@ -11,8 +11,8 @@ var _shot: Image  # the game frame from just before the menu opened
 
 const CONTROLS := [
 	["W A S D", "Move"], ["Shift", "Sprint"], ["Space", "Jump"], ["Ctrl / C", "Crouch (quieter)"],
-	["Left click", "Swing, shoot, build, hammer, dig"], ["Right click", "Aim; hammer: demolish; shovel: fill; build: undo"],
-	["R", "Reload; build mode: turn piece"], ["E", "Search, open, use"], ["Tab / I", "Inventory"],
+	["Left click", "Swing, shoot, build (drag for a line), hammer, dig"], ["Right click", "Aim; hammer: demolish; shovel: fill; build: undo"],
+	["R", "Reload; build mode: turn piece; hammer: repair all nearby"], ["G", "Build mode: move a piece; hammer: upgrade all like it nearby"], ["E", "Search, open, use"], ["Tab / I", "Inventory"],
 	["1-9, wheel", "Hotbar (build mode: piece)"], ["F", "Eat, drink, bandage, medkit"], ["Q", "Drop stack"],
 	["B", "Build mode"], ["M", "Map"], ["F5 / F9", "Quicksave / quickload"], ["F11", "Fullscreen"],
 ]

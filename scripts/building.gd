@@ -1485,7 +1485,11 @@ func _debris(rec: Dictionary) -> void:
 		add_child(chunk)
 		chunk.add_to_group("debris")
 		var local: Vector3 = b[1] + Vector3(rng.randf_range(-0.5, 0.5) * size.x, rng.randf_range(-0.4, 0.4) * size.y, rng.randf_range(-0.5, 0.5) * size.z)
-		chunk.global_position = xf * local
+		var at: Vector3 = xf * local
+		if terrain:
+			# Never start inside the sand (foundations reach below it), or it drops through.
+			at.y = maxf(at.y, terrain.surface_height(at.x, at.z) + 0.45)
+		chunk.global_position = at
 		chunk.rotation = Vector3(rng.randf() * TAU, rng.randf() * TAU, 0)
 		chunk.linear_velocity = Vector3(rng.randf_range(-2.0, 2.0), rng.randf_range(0.5, 2.5), rng.randf_range(-2.0, 2.0))
 		chunk.angular_velocity = Vector3(rng.randf_range(-6, 6), rng.randf_range(-6, 6), rng.randf_range(-6, 6))
@@ -1626,41 +1630,80 @@ func _update_cracks(rec: Dictionary) -> void:
 		rec.cracks.get_child(i).visible = i < shown
 
 
+## One piece as plain data (for saves, and for carrying it to a new spot).
+func piece_data(key: String) -> Dictionary:
+	var p: Dictionary = pieces[key]
+	var d := {"type": p.type, "kind": p.slot.kind, "cx": p.slot.cx, "cz": p.slot.cz, "dir": p.slot.dir, "level": p.slot.level, "y": p.y, "open": p.open, "tier": p.tier, "hp": p.hp}
+	if p.has("storage"):
+		d.items = p.storage.save_data()
+	for k in ["fuel", "burn", "ammo", "water"]:
+		if p.has(k):
+			d[k] = p[k]
+	return d
+
+
+## Builds a piece back from piece_data(), at its own slot or at another one.
+## Returns its key ("" for an unknown type).
+func restore_piece(p: Dictionary, slot := {}, y := NAN, old_tiers := false) -> String:
+	if not PIECES.has(p.get("type", "")):
+		return ""
+	if slot.is_empty():
+		slot = {"kind": str(p.kind), "cx": int(p.cx), "cz": int(p.cz), "dir": int(p.dir), "level": int(p.get("level", 0))}
+	if is_nan(y):
+		y = float(p.y)
+	var tier := int(p.get("tier", -1))
+	if old_tiers and tier >= 2:
+		tier += 1
+	var key := place(p.type, slot, y, bool(p.get("open", false)), tier, float(p.get("hp", -1.0)))
+	var rec: Dictionary = pieces[key]
+	if rec.has("storage") and p.has("items"):
+		rec.storage.load_data(p.items)
+	if rec.has("fuel"):
+		rec.fuel = clampf(float(p.get("fuel", 0.0)), 0.0, GEN_TANK)
+	if rec.has("ammo"):
+		rec.ammo = clampi(int(p.get("ammo", 0)), 0, TURRET_AMMO)
+	if rec.has("water"):
+		rec.water = clampf(float(p.get("water", 0.0)), 0.0, WELL_MAX)
+	if rec.has("burn"):
+		rec.burn = clampf(float(p.get("burn", 0.0)), 0.0, FIRE_MAX)
+	return key
+
+
+## Why a piece can't be picked up and moved ("" if it can): foundations stay,
+## and so does anything that holds another piece up.
+func move_problem(key: String) -> String:
+	var rec: Dictionary = pieces.get(key, {})
+	if rec.is_empty():
+		return "Nothing to move"
+	if rec.type in FOUNDATIONS:
+		return "Foundations can't be moved"
+	if PIECES[rec.type].get("long", false) or rec.type == "well":
+		return "This can't be moved"
+	for k in pieces:
+		if k != key and key in _supporters(pieces[k].slot):
+			return "Something rests on it"
+	if rec.slot.level == 0:
+		# What stands on a foundation or floor square (walls on its edges, objects on it).
+		if rec.slot.kind == "cell":
+			for k in pieces:
+				var o: Dictionary = pieces[k]
+				if o.slot.level == 0 and o.slot.kind == "obj" and o.slot.cx == rec.slot.cx and o.slot.cz == rec.slot.cz:
+					return "Something rests on it"
+	return ""
+
+
 func save_data() -> Array:
 	var out: Array = []
 	for key in pieces:
-		var p: Dictionary = pieces[key]
-		var d := {"type": p.type, "kind": p.slot.kind, "cx": p.slot.cx, "cz": p.slot.cz, "dir": p.slot.dir, "level": p.slot.level, "y": p.y, "open": p.open, "tier": p.tier, "hp": p.hp}
-		if p.has("storage"):
-			d.items = p.storage.save_data()
-		for k in ["fuel", "burn", "ammo", "water"]:
-			if p.has(k):
-				d[k] = p[k]
-		out.append(d)
+		out.append(piece_data(key))
 	return out
 
 
-## old_tiers: the save is from before the stone tier, so its concrete (2) is now 3.
 func load_data(data: Array, old_tiers := false) -> void:
 	_bulk = true
 	for key in pieces.keys():
 		remove(key, false)
 	for p in data:
-		if PIECES.has(p.get("type", "")):
-			var slot := {"kind": str(p.kind), "cx": int(p.cx), "cz": int(p.cz), "dir": int(p.dir), "level": int(p.get("level", 0))}
-			var tier := int(p.get("tier", -1))
-			if old_tiers and tier >= 2:
-				tier += 1
-			var key := place(p.type, slot, float(p.y), bool(p.get("open", false)), tier, float(p.get("hp", -1.0)))
-			if pieces[key].has("storage") and p.has("items"):
-				pieces[key].storage.load_data(p.items)
-			if pieces[key].has("fuel"):
-				pieces[key].fuel = clampf(float(p.get("fuel", 0.0)), 0.0, GEN_TANK)
-			if pieces[key].has("ammo"):
-				pieces[key].ammo = clampi(int(p.get("ammo", 0)), 0, TURRET_AMMO)
-			if pieces[key].has("water"):
-				pieces[key].water = clampf(float(p.get("water", 0.0)), 0.0, WELL_MAX)
-			if pieces[key].has("burn"):
-				pieces[key].burn = clampf(float(p.get("burn", 0.0)), 0.0, FIRE_MAX)
+		restore_piece(p, {}, NAN, old_tiers)
 	_bulk = false
 	_refresh_support()

@@ -1972,6 +1972,84 @@ func _test_more_pieces_2() -> void:
 	b.load_data([])
 
 
+## v1.7: lines of pieces, area repair and upgrade, moving pieces.
+func _test_fast_building() -> void:
+	var b = main.building
+	var bm = main.build_mode
+	var inv = main.inventory
+	var player = main.player
+	main.terrain.load_data({})
+	b.load_data([])
+	inv.load_data({})
+	player.position = Vector3(-14, main.terrain.surface_height(-14, 12), 12)
+	player.stamina = player.STAMINA_MAX
+	# Line geometry.
+	var a := {"kind": "edge", "cx": -8, "cz": 2, "dir": 0, "level": 0}
+	var e := {"kind": "edge", "cx": -4, "cz": 2, "dir": 0, "level": 0}
+	var line: Array = bm.line_slots("wall", a, e)
+	check(line.size() == 5 and line[4].cx == -4 and line[2].cz == 2, "a dragged wall line covers every edge between (5)")
+	var c1 := {"kind": "cell", "cx": -8, "cz": 0, "dir": 0, "level": 0}
+	var c2 := {"kind": "cell", "cx": -6, "cz": -5, "dir": 0, "level": 0}
+	line = bm.line_slots("foundation", c1, c2)
+	check(line.size() == 6 and line.all(func(s): return s.cx == -8), "squares go along the longer way (%d)" % line.size())
+	check(bm.line_slots("wall", a, {"kind": "edge", "cx": 40, "cz": 2, "dir": 0, "level": 0}).size() == bm.LINE_MAX, "at most %d in a line" % bm.LINE_MAX)
+	check(bm.line_slots("chest", c1, c2).size() == 1, "objects don't make lines")
+	# Building a line: paid piece by piece, stops when the materials run out.
+	bm.toggle()
+	bm.select(Building_index("wall"))
+	inv.add_all({"wood": 9, "nails": 9})
+	bm.drag_start = a
+	bm.slot = e
+	var built: int = bm.end_drag()
+	check(built == 3 and inv.count_of("wood") == 0, "a line of 5 walls with wood for 3 builds 3 (%d)" % built)
+	check(b.pieces.has(b.slot_key(a)) and b.pieces.has(b.slot_key({"kind": "edge", "cx": -6, "cz": 2, "dir": 0, "level": 0})), "starting at the first one")
+	# Area repair, paid from a chest within reach.
+	var walls: Array = b.keys_of(["wall"])
+	for k in walls:
+		b.damage(k, 120.0)
+	var cs := {"kind": "obj", "cx": -7, "cz": 5, "dir": 0, "level": 0}
+	var ck: String = b.place("chest", cs, b.evaluate("chest", cs).y)
+	b.storage_of(ck).add("wood", 20)
+	player.position = Vector3(-13, main.terrain.surface_height(-13, 9), 9)
+	check(main.has_near({"wood": 20}) and not main.has_near({"wood": 21}), "chests within reach count as yours for the hammer")
+	bm.toggle()
+	var fixed: int = main.area_repair(player.global_position)
+	check(fixed == 3 and walls.all(func(k): return b.pieces[k].hp == b.max_hp(b.pieces[k])), "R with the hammer repairs all 3 walls (%d)" % fixed)
+	check(b.storage_of(ck).count_of("wood") == 14, "paid with wood from the chest (%d left)" % b.storage_of(ck).count_of("wood"))
+	# Area upgrade.
+	inv.add_all({"scrap": 8, "nails": 4})
+	var up: int = main.area_upgrade(walls[0])
+	check(up == 2 and inv.count_of("scrap") == 0, "G upgrades every wood wall near it while the scrap lasts (%d)" % up)
+	check(main.area_upgrade(walls[0]) == 0, "and nothing without materials")
+	# Moving a piece: a chest keeps what is in it, and it costs nothing.
+	b.storage_of(ck).add("nails", 7)
+	bm.toggle()
+	inv.load_data({})
+	check(bm.pick_up(ck) == "" and not b.pieces.has(ck) and bm.current_type() == "chest", "G picks up the chest")
+	check(bm.status_text().begins_with("MOVING"), "build mode says so")
+	var to := {"kind": "obj", "cx": -9, "cz": 5, "dir": 0, "level": 0}
+	bm.slot = to
+	bm.base_y = b.evaluate("chest", to).y
+	bm.can_build = true
+	check(bm.try_place() and bm.carrying.is_empty(), "left click puts it down")
+	var nk: String = b.slot_key(to)
+	check(b.pieces.has(nk) and b.storage_of(nk).count_of("nails") == 7 and b.storage_of(nk).count_of("wood") == 14, "with everything still in it, for free")
+	# A wall holding up a floor stays; a carried piece goes back when you stop.
+	var f1 := {"kind": "cell", "cx": -8, "cz": 2, "dir": 0, "level": 1}
+	b.place("floor", f1, b.evaluate("floor", f1).y)
+	check(bm.pick_up(b.slot_key(a)) == "Something rests on it", "a wall holding up a floor can't be moved")
+	check(bm.pick_up(nk) == "", "picked up the chest again")
+	bm.toggle()
+	check(b.pieces.has(nk) and b.storage_of(nk).count_of("nails") == 7, "leaving build mode puts it back")
+	b.load_data([])
+	inv.load_data({})
+	player.stamina = player.STAMINA_MAX
+
+
+func Building_index(t: String) -> int:
+	return main.building.ORDER.find(t)
+
+
 func _process(_delta: float) -> bool:
 	frame += 1
 	var player = main.player
@@ -2189,6 +2267,7 @@ func _process(_delta: float) -> bool:
 			_test_well()
 			_test_stability()
 			_test_more_pieces_2()
+			_test_fast_building()
 			_start_ladder()
 		3300:
 			_check_debris()

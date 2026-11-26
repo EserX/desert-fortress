@@ -10,6 +10,13 @@ const Items = preload("res://scripts/items.gd")
 
 ## Support the previewed piece would get (upper levels), or -INF.
 var support_preview := -INF
+## Left button held: where the line of pieces started ({} when not dragging).
+var drag_start := {}
+## A piece picked up with G to put down elsewhere: its piece_data(), or {}.
+var carrying := {}
+## Pays stamina for each piece built (set by the world; returns false when too tired).
+var pay_stamina := Callable()
+const LINE_MAX := 12
 var building: Building
 var inventory  # Inventory
 var player  # Player
@@ -68,10 +75,15 @@ func _ghost_mat(c: Color) -> StandardMaterial3D:
 
 
 func current_type() -> String:
+	if not carrying.is_empty():
+		return carrying.type
 	return Building.ORDER[type_index]
 
 
 func toggle() -> void:
+	if active:
+		cancel_carry()
+		drag_start = {}
 	active = not active
 	_ghost.visible = false
 	range_ring.visible = false
@@ -127,10 +139,10 @@ func update_preview() -> void:
 	if can_build and (not building.space_free(type, slot, base_y) or building.blocks_person(type, slot, base_y, player.global_position)):
 		can_build = false
 		reason = "Something is in the way"
-	if can_build and shop and not shop.is_unlocked(type, Building.PIECES):
+	if can_build and carrying.is_empty() and shop and not shop.is_unlocked(type, Building.PIECES):
 		can_build = false
 		reason = "Locked: order its blueprint by drone from the shop terminal"
-	if can_build and not has_materials(type):
+	if can_build and carrying.is_empty() and not has_materials(type):
 		can_build = false
 		reason = "Not enough materials"
 	_ghost.transform = Building.piece_transform(type, slot, base_y)
@@ -194,6 +206,10 @@ func has_materials(type: String) -> bool:
 func try_place() -> bool:
 	if not active or slot.is_empty() or not can_build:
 		return false
+	if not carrying.is_empty():
+		building.restore_piece(carrying, slot, base_y)
+		carrying = {}
+		return true
 	var type := current_type()
 	var cost: Dictionary = Building.PIECES[type].cost
 	for item in cost:
@@ -201,6 +217,111 @@ func try_place() -> bool:
 	var key: String = building.place(type, slot, base_y)
 	building.level_under(key)
 	return true
+
+
+## Left button down: a line of pieces may start here.
+func begin_drag() -> void:
+	drag_start = slot.duplicate() if active and not slot.is_empty() else {}
+
+
+## Left button up: builds the line from where it was pressed to here (one piece
+## if the mouse didn't move). Returns how many pieces were built.
+func end_drag() -> int:
+	var start := drag_start
+	drag_start = {}
+	if not active or slot.is_empty():
+		return 0
+	if start.is_empty() or not carrying.is_empty() or start.get("level", 0) != slot.get("level", 0):
+		if can_build and (not pay_stamina.is_valid() or pay_stamina.call()):
+			return 1 if try_place() else 0
+		return 0
+	return place_line(line_slots(current_type(), start, slot))
+
+
+## Slots in a straight line from a to b: squares along the longer way, edges
+## along their own direction, corners like squares. At most LINE_MAX.
+static func line_slots(type: String, a: Dictionary, b: Dictionary) -> Array:
+	if a.is_empty():
+		return []
+	var info: Dictionary = Building.PIECES[type]
+	if b.is_empty() or info.slot == "obj" or info.get("long", false) or a.kind != b.kind:
+		return [a.duplicate()]
+	var vary_x: bool
+	if a.kind == "edge":
+		if b.dir != a.dir:
+			return [a.duplicate()]
+		vary_x = a.dir == 0
+	else:
+		vary_x = absi(b.cx - a.cx) >= absi(b.cz - a.cz)
+	var n0: int = a.cx if vary_x else a.cz
+	var n1: int = b.cx if vary_x else b.cz
+	var step := 1 if n1 >= n0 else -1
+	var out: Array = []
+	for i in mini(absi(n1 - n0), LINE_MAX - 1) + 1:
+		var s: Dictionary = a.duplicate()
+		if vary_x:
+			s.cx = n0 + i * step
+		else:
+			s.cz = n0 + i * step
+		out.append(s)
+	return out
+
+
+## Builds the current piece in each slot that takes it, paying for each, until
+## the materials (or your breath) run out. Returns how many were built.
+func place_line(slots: Array) -> int:
+	var type := current_type()
+	var cost: Dictionary = Building.PIECES[type].cost
+	var n := 0
+	for s in slots:
+		var ev: Dictionary = building.evaluate(type, s)
+		if not ev.ok or not building.space_free(type, s, ev.y) or building.blocks_person(type, s, ev.y, player.global_position):
+			continue
+		if shop and not shop.is_unlocked(type, Building.PIECES):
+			break
+		if not has_materials(type):
+			break
+		if pay_stamina.is_valid() and not pay_stamina.call():
+			break
+		for item in cost:
+			inventory.remove(item, cost[item])
+		building.level_under(building.place(type, s, ev.y))
+		n += 1
+	return n
+
+
+## G: picks up the piece under the crosshair to put it down elsewhere (its
+## contents, fuel, damage and so on go with it). Returns "" or why not.
+func pick_up(key: String) -> String:
+	if not carrying.is_empty():
+		return "You are already carrying a piece"
+	var why := building.move_problem(key)
+	if why != "":
+		return why
+	key = building.occupied.get(key, key)
+	carrying = building.piece_data(key)
+	carrying.home = key
+	building.remove(key, false)
+	dir = int(carrying.dir)
+	return ""
+
+
+## Puts a carried piece back where it came from.
+func cancel_carry() -> void:
+	if carrying.is_empty():
+		return
+	var c := carrying
+	carrying = {}
+	building.restore_piece(c)
+
+
+## The piece under the crosshair, traps and ladders included (for G).
+func piece_under_crosshair() -> String:
+	var cam: Camera3D = player.camera
+	var from := cam.global_position
+	var q := PhysicsRayQueryParameters3D.create(from, from - cam.global_transform.basis.z * Building.REACH, 1 | Building.TRAP_LAYER, [player.get_rid()])
+	var hit := get_world_3d().direct_space_state.intersect_ray(q)
+	return building.piece_key_of(hit.collider) if not hit.is_empty() else ""
 
 
 ## Undoes a freshly built piece under the crosshair with a full refund.
@@ -232,6 +353,10 @@ func status_text() -> String:
 	for item in info.cost:
 		parts.append("%d %s (%d)" % [info.cost[item], Items.display_name(item).to_lower(), inventory.count_of(item)])
 	var line := "BUILD: %s   %s" % [info.name, ", ".join(parts)]
+	if not carrying.is_empty():
+		line = "MOVING: %s   left click puts it down, G puts it back" % info.name
+	elif not drag_start.is_empty():
+		line += "\nLine: %d pieces (let go to build)" % line_slots(current_type(), drag_start, slot).size()
 	if not can_build and reason != "":
 		line += "\n" + reason
 	elif slot.get("level", 0) > 0 and support_preview > -INF:

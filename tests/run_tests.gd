@@ -114,6 +114,57 @@ func _test_inventory() -> void:
 	check(real.count_of("wood") == 7, "v0.4 saves keep their items")
 	real.load_data({})
 	main.loot.load_data({})
+	_test_survival()
+
+
+## Hunger, thirst, heat, shade, eating, damage, death and respawn.
+func _test_survival() -> void:
+	var Survival = load("res://scripts/survival.gd")
+	var a = Survival.new()
+	var b = Survival.new()
+	a.tick(60.0, 13.0, false, false)
+	b.tick(60.0, 13.0, false, true)
+	check(a.water < b.water and a.hot and not b.hot, "midday sun drains water faster than shade (%.1f vs %.1f)" % [a.water, b.water])
+	var c = Survival.new()
+	c.tick(60.0, 9.0, true, false)
+	check(c.food < b.food, "sprinting makes you hungrier")
+	a.water = 0.0
+	a.tick(10.0, 9.0, false, false)
+	check(a.health < Survival.MAX, "no water hurts")
+	a.consume("water")
+	check(a.water >= 40.0, "drinking restores water")
+	a.fall(20.0)
+	check(a.health < 20.0, "a long fall hurts a lot (%.0f)" % a.health)
+	a.free(); b.free(); c.free()
+	# Eat from the hotbar.
+	var inv = main.inventory
+	inv.load_data({})
+	inv.add("canned_food", 2)
+	inv.selected = 0
+	main.survival.food = 30.0
+	main.use_selected()
+	check(main.survival.food > 60.0 and inv.count_of("canned_food") == 1, "eating from the hotbar uses one can")
+	inv.add("scrap", 1)
+	inv.selected = 1
+	main.use_selected()
+	check(inv.count_of("scrap") == 1, "scrap can't be eaten")
+	# Shade: under a wreck at noon vs open sand.
+	main.day_night.restore(1, 13.0)
+	main.player.position = Vector3(0, main.terrain.surface_height(0, 20), 20)
+	check(not main._check_shade(), "open sand at noon is in the sun")
+	# Die and respawn with items.
+	main.survival.damage(500.0)
+	check(main.survival.dead and main.death_screen.is_open() and paused, "dying shows the death screen")
+	main.respawn()
+	check(not paused and main.survival.health == Survival.MAX, "respawn restores health")
+	check(main.player.position.distance_to(main.player.spawn_point) < 0.1, "respawn at the base")
+	check(inv.count_of("scrap") == 1, "items kept after death")
+	var saved: Dictionary = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	main.survival.water = 10.0
+	saved.survival.water = 42.0
+	main.apply_save_data(saved)
+	check(absf(main.survival.water - 42.0) < 0.01, "needs are saved")
+	inv.load_data({})
 
 
 func _process(_delta: float) -> bool:

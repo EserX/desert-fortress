@@ -16,6 +16,9 @@ var day_night  # DayNight
 var prompt: Label
 var pickups: VBoxContainer
 var inventory  # Inventory
+var survival  # Survival
+var _need_bars: Array[ProgressBar] = []
+var heat_label: Label
 var hotbar: HBoxContainer
 var _hotbar_labels: Array[Label] = []
 var _hotbar_panels: Array[Panel] = []
@@ -70,7 +73,7 @@ func _ready() -> void:
 	stamina_bar.add_theme_stylebox_override("fill", fill)
 	root.add_child(stamina_bar)
 
-	help = _label("WASD move   Shift sprint   Space jump   Mouse look   Ctrl crouch   E search   Tab inventory   1-9 hotbar   Q drop   F5 quicksave   Esc menu", 16)
+	help = _label("WASD move   Shift sprint   Space jump   Mouse look   Ctrl crouch   E search   Tab inventory   1-9 hotbar   Q drop   F eat/drink   F5 quicksave   Esc menu", 16)
 	help.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	help.position = Vector2(20, -36)
 	root.add_child(help)
@@ -98,6 +101,7 @@ func _ready() -> void:
 	root.add_child(pickups)
 
 	_build_hotbar(root)
+	_build_needs(root)
 
 	banner = _label("", 34)
 	banner.set_anchors_preset(Control.PRESET_CENTER_TOP)
@@ -128,6 +132,7 @@ func _label(text: String, size: int) -> Label:
 
 
 func _process(delta: float) -> void:
+	_update_needs()
 	if player == null:
 		return
 	var deg: float = player.heading_degrees()
@@ -195,6 +200,54 @@ func _build_hotbar(root: Control) -> void:
 	if inventory:
 		inventory.changed.connect(refresh_hotbar)
 	refresh_hotbar()
+
+
+## Health, food and water bars in the bottom-left corner.
+func _build_needs(root: Control) -> void:
+	var box := VBoxContainer.new()
+	box.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	box.position = Vector2(20, -150)
+	box.size = Vector2(230, 90)
+	box.add_theme_constant_override("separation", 4)
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(box)
+	heat_label = _label("Hot sun: find shade", 15)
+	heat_label.add_theme_color_override("font_color", Color(1.0, 0.75, 0.4))
+	heat_label.visible = false
+	box.add_child(heat_label)
+	for spec in [["Health", Color(0.85, 0.22, 0.18)], ["Food", Color(0.9, 0.6, 0.25)], ["Water", Color(0.3, 0.6, 0.95)]]:
+		var row := HBoxContainer.new()
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		box.add_child(row)
+		var l := _label(spec[0], 14)
+		l.custom_minimum_size = Vector2(60, 0)
+		row.add_child(l)
+		var bar := ProgressBar.new()
+		bar.show_percentage = false
+		bar.custom_minimum_size = Vector2(160, 12)
+		bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var bg := StyleBoxFlat.new()
+		bg.bg_color = Color(0, 0, 0, 0.45)
+		var fill := StyleBoxFlat.new()
+		fill.bg_color = spec[1]
+		bar.add_theme_stylebox_override("background", bg)
+		bar.add_theme_stylebox_override("fill", fill)
+		row.add_child(bar)
+		_need_bars.append(bar)
+	box.visible = survival != null
+
+
+func _update_needs() -> void:
+	if survival == null:
+		return
+	var values := [survival.health, survival.food, survival.water]
+	for i in 3:
+		_need_bars[i].value = values[i]
+		# Blink when low.
+		var low: bool = values[i] < 25.0
+		_need_bars[i].modulate.a = 0.4 + 0.6 * absf(sin(Time.get_ticks_msec() * 0.006)) if low else 1.0
+	heat_label.visible = survival.hot
 
 
 func refresh_hotbar() -> void:

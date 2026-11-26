@@ -2,6 +2,19 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v0.6.0 (2026-11-25): Health, hunger and thirst
+- **Three needs**, shown as bars in the bottom-left: **health**, **food** and **water**. Gentle by default: food lasts about 40 minutes and water about 25. Sprinting makes both go faster; night is cooler and slower.
+- **Midday heat (11:00–16:00):** out in the sun, water drains 1.8× faster and the HUD says "Hot sun: find shade". Standing where a wall, wreck, rock or dune blocks the sun counts as shade.
+- **Eat and drink (F):** uses one of the selected hotbar item. Canned food: +35 food. Water bottle: +40 water. Banners warn you when you get hungry or thirsty, and the bar blinks when low.
+- **Damage:** an empty food or water bar slowly hurts you; a long fall hurts (jumping off a dune is fine, a cliff isn't). Health slowly comes back while you are fed and watered.
+- **Death screen:** shows what killed you, then **Respawn at base** (full health, food and water back up to at least 60%), keeping everything you carry. Main menu also respawns you first, so the autosave isn't a dead player.
+- **Saved:** health, food and water. Older saves start full.
+- Eating is only on F for now: left click is kept free for the melee weapon in v0.12.
+- **Tests:** survival checks (heat vs shade, sprint hunger, thirst damage, drinking, fall damage, eat from hotbar, can't eat scrap, sun check on open sand, death screen, respawn at base with items, needs saved). New screenshot view `11_death`.
+
+**Try:** stand in the open at noon and watch the water bar, then step behind a ruin wall. Eat a can with F.
+**Next:** v0.7, the map (M) and loot that refills each morning.
+
 ## v0.5.0 (2026-11-25): Inventory and hotbar
 - **Inventory (Tab or I):** a 30-slot grid. Items stack (nails up to 50, most things 20, food and water 10). Click a stack, then another slot to move it; dropping it on the same item merges, on a different one swaps. Right-click drops the whole stack. Esc or Tab closes it.
 - **Weight limit:** 50 kg. Over that you can't sprint; the inventory screen shows your weight. Scrap is heavy (1.5 kg), nails are light. I chose 50 instead of a tighter limit so a few trunks of scrap don't stop you sprinting before building arrives.

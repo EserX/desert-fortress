@@ -64,6 +64,8 @@ var target_dead := func(): return false
 var building  # Building
 var break_key := ""           # the piece it is tearing at in BREAK
 var _blocked_t := 0.0
+var _wreck_key := ""          # the piece a wave mutant has picked to wreck
+var _wreck_t := 0.0
 var _spit_cd := 0.0
 var slow_mult := 1.0          # barbed wire and spike strips slow it down for a moment
 var _los := false             # line of sight to the target, refreshed a few times a second
@@ -352,6 +354,12 @@ func _physics_process(delta: float) -> void:
 				speed = stats.march
 				_wander_to = home
 				want = to.normalized()
+			elif hunter and _wreck_target(delta):
+				# At the base with nobody about: go and wreck the nearest building.
+				speed = stats.march
+				var tw := _wander_to - global_position
+				tw.y = 0
+				want = tw.normalized() if tw.length() > 0.3 else -global_transform.basis.z
 			elif to.length() < 0.6 or _wander_wait > 0.0:
 				if _wander_wait <= 0.0:
 					_wander_wait = _rng.randf_range(2.0, 6.0)
@@ -448,6 +456,31 @@ func _physics_process(delta: float) -> void:
 	if _groan_t <= 0.0:
 		_groan_t = _rng.randf_range(5.0, 12.0) * (0.5 if state != State.WANDER else 1.0)
 		_play("groan", _rng.randf_range(0.85, 1.05))
+
+
+## A wave mutant at the base picks the nearest building piece (not a trap)
+## to tear down and heads for it. Returns false when there is none.
+func _wreck_target(delta: float) -> bool:
+	if building == null:
+		return false
+	_wreck_t -= delta
+	if _wreck_t > 0.0 and _wreck_key != "" and building.pieces.has(_wreck_key):
+		return true
+	_wreck_t = 2.0
+	_wreck_key = ""
+	var best := 30.0
+	for key in building.pieces:
+		var rec: Dictionary = building.pieces[key]
+		if building.PIECES[rec.type].get("trap", false) or rec.slot.level > 0:
+			continue
+		var d: float = rec.node.global_position.distance_to(global_position)
+		if d < best:
+			best = d
+			_wreck_key = key
+	if _wreck_key == "":
+		return false
+	_wander_to = building.pieces[_wreck_key].node.global_position
+	return true
 
 
 ## The building piece it is pushing against while walking in direction want, or "".

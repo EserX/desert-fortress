@@ -2,6 +2,12 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v1.0.3 (2026-11-26): No skipping the night
+- **Fix: you could dodge every night by staying out in the desert.** Wave mutants that reached an empty base just milled about until dawn. Now, with nobody within smelling range, each one picks the **nearest building piece** at the base (not traps and not upstairs pieces) and tears it down, then the next. Leave your base alone at night and you come back to rubble, unless your turrets, traps and fences deal with them.
+- Soak test options: `away=1` (the player spends the night 190 m out in the desert) and `walls=1` (only a ring of walls, no traps or turrets). With both, wave 4 now flattens the 24 walls before dawn. With the full fortress and you away, the turrets and traps still clear it.
+- Note: this container has no Vulkan, so the Forward+ renderer can't be tried here (Godot falls back to OpenGL). The game only uses standard nodes and materials, so Forward+ should be fine, but tell me if anything looks wrong with `./play.sh` (Forward+) compared with `./play.sh --compat`.
+- **Tests:** a wave mutant at an empty base heading for the nearest wall.
+
 ## v1.0.2 (2026-11-26): Controls page and the wave on the map
 - **Pause menu → Controls:** every key on one page (the help line at the bottom of the screen fades after a few seconds). The pause menu also shows the game's difficulty.
 - **Map during a wave:** red dots show tonight's mutants on their way (brutes as bigger dots), and a thin red ring shows your build zone (it grows with the zone upgrade).

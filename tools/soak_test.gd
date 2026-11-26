@@ -15,6 +15,8 @@ var _worst := 0.0
 var _total := 0.0
 var _max_alive := 0
 var _kills0 := 0
+var walls_only := false  # -- walls=1: just the ring of walls, no traps or turrets
+var away := false   # -- away=1: the player is far out in the desert all night
 
 
 func _initialize() -> void:
@@ -23,6 +25,10 @@ func _initialize() -> void:
 			wave = int(arg.substr(5))
 		elif arg.begins_with("frames="):
 			frames = int(arg.substr(7))
+		elif arg == "walls=1":
+			walls_only = true
+		elif arg == "away=1":
+			away = true
 	main = load("res://scenes/main.tscn").instantiate()
 	root.add_child(main)
 
@@ -42,6 +48,9 @@ func _fortress() -> void:
 		place.call("wall" if i != 0 else "doorway", "edge", i, 3)
 		place.call("wall", "edge", -3, i, 1)
 		place.call("wall", "edge", 3, i, 1)
+	if walls_only:
+		print("fortress: %d pieces (walls only)" % b.pieces.size())
+		return
 	for i in range(-3, 3):
 		place.call("barbed_wire", "obj", i, -6)
 		place.call("sandbags", "edge", i, -8)
@@ -68,6 +77,8 @@ func _process(delta: float) -> bool:
 		main.survival.set_process(false)
 		_fortress()
 		player.position = Vector3(0.5, main.terrain.surface_height(0.5, 0.5) + 0.2, 0.5)
+		if away:
+			player.position = Vector3(150, main.terrain.surface_height(150, 120) + 0.5, 120)
 		main.waves.wave = wave - 1
 		main.day_night.restore(1, 20.0)
 		main.waves.start_wave()

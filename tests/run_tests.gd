@@ -664,6 +664,13 @@ func _test_breaking() -> void:
 	b.remove(sk)
 	m._break(0.05)
 	check(m.state != m.State.BREAK, "when the piece is gone it moves on")
+	# Nobody home: a wave mutant at the base goes for the nearest building.
+	var lone := {"kind": "edge", "cx": 1, "cz": 1, "dir": 0, "level": 0}
+	var lk: String = b.place("wall", lone, b.evaluate("wall", lone).y)
+	var h = ms.spawn("walker", Vector3(6, 0, 4))
+	h.make_hunter(Vector3.ZERO)
+	check(h._wreck_target(0.1) and h._wreck_key == lk, "a wave mutant at an empty base heads for the nearest wall")
+	b.remove(lk)
 	ms.clear()
 	b.load_data([])
 

@@ -142,6 +142,7 @@ func _ready() -> void:
 	mutants = Mutants.new()
 	mutants.name = "Mutants"
 	mutants.terrain = terrain
+	mutants.building = building
 	mutants.player = player
 	mutants.world_seed = world_seed
 	mutants.player_dead = func(): return survival == null or survival.dead
@@ -158,6 +159,7 @@ func _ready() -> void:
 	day_night.day_started.connect(waves.on_dawn)
 	mutants.mutant_killed.connect(waves.note_kill)
 	building.piece_destroyed.connect(func(_k, _t): waves.note_lost())
+	building.piece_collapsed.connect(func(_k, _t): waves.note_lost())
 
 	inventory = Inventory.new()
 	inventory.changed.connect(func(): player.overloaded = inventory.overloaded())
@@ -218,6 +220,9 @@ func _ready() -> void:
 	waves.wave_ended.connect(func(s): hud.show_summary(Waves.summary_lines(s)))
 	waves.siren.connect(func(): hud.show_banner("Siren! Mutants come at nightfall. Get back to the base."))
 	mutants.player_hit.connect(_on_player_hit)
+	mutants.piece_hit.connect(_on_piece_attacked)
+	building.piece_destroyed.connect(func(_k, t): hud.show_pickup(["%s was destroyed!" % Building.PIECES[t].name]))
+	building.piece_collapsed.connect(func(_k, t): hud.show_pickup(["%s collapsed" % Building.PIECES[t].name]))
 	melee.hit_landed.connect(hud.show_hitmarker)
 	survival.warning.connect(hud.show_banner)
 
@@ -402,6 +407,7 @@ func hammer_demolish(key: String) -> bool:
 	_demolish_armed = ""
 	var back: Dictionary = building.refund(building.pieces[key])
 	building.remove(key)
+	building.collapse_unsupported()  # whatever it held up comes down too
 	var left := inventory.add_all(back)
 	if not left.is_empty():
 		loot.spawn_drop(left, _drop_spot())
@@ -597,6 +603,20 @@ func _on_player_hit(dmg: float, from: Vector3) -> void:
 	var to: Vector3 = from - player.global_position
 	var local: Vector3 = player.global_transform.basis.inverse() * to
 	hud.show_damage(atan2(local.x, -local.z))
+
+
+var _attack_warned_at := -100000
+
+## Mutants clawing at the base: a warning now and then, saying which way.
+func _on_piece_attacked(key: String) -> void:
+	if Time.get_ticks_msec() - _attack_warned_at < 20000 or not building.pieces.has(key):
+		return
+	_attack_warned_at = Time.get_ticks_msec()
+	var rec: Dictionary = building.pieces[key]
+	var p: Vector3 = rec.node.global_position
+	var deg := fposmod(rad_to_deg(atan2(p.x, -p.z)), 360.0)
+	var side: String = Hud.DIRS[int(round(deg / 45.0)) % 8]
+	hud.show_banner("Mutants are breaking in! (%s side of the base)" % side)
 
 
 ## Back at the base flag with your items.

@@ -5,23 +5,27 @@ extends CharacterBody3D
 
 const LowPoly = preload("res://scripts/lowpoly.gd")
 
-enum State { WANDER, CHASE, ATTACK, DEAD }
+enum State { WANDER, CHASE, ATTACK, DEAD, BREAK }
 
 ## Stats per mutant type. Later versions add more types here.
 const TYPES := {
 	"walker": {
 		"name": "Walker", "health": 100.0, "walk": 1.1, "march": 2.2, "run": 3.3,
 		"sight": 24.0, "sight_night": 15.0, "hear": 9.0, "lose": 38.0,
-		"damage": 12.0, "reach": 1.7, "windup": 0.45, "cooldown": 1.4,
+		"damage": 12.0, "reach": 1.7, "windup": 0.45, "cooldown": 1.4, "wall_damage": 20.0,
 	},
 }
 const LAYER := 8           # physics layer 4: mutants
 const GRAVITY := 18.0
 const CORPSE_SECONDS := 25.0
+const SPIKE_DAMAGE := 8.0   # a mutant hurts itself this much clawing at a spike barricade
+const SMELL := 30.0         # wave mutants know where you are this close, walls or not
 
 signal attacked(damage: float, from: Vector3)
 signal died(mutant: Node)
 signal spotted(mutant: Node)
+## Clawed at a building piece.
+signal piece_hit(key: String)
 
 var type := "walker"
 var stats: Dictionary = TYPES.walker
@@ -32,6 +36,9 @@ var home := Vector3.ZERO
 var hunter := false
 var target: Node3D            # the player
 var target_dead := func(): return false
+var building  # Building
+var break_key := ""           # the piece it is tearing at in BREAK
+var _blocked_t := 0.0
 var _wander_to := Vector3.ZERO
 var _wander_wait := 0.0
 var _think := 0.0
@@ -294,7 +301,7 @@ func _physics_process(delta: float) -> void:
 			var to: Vector3 = target.global_position - global_position
 			to.y = 0
 			want = to.normalized()
-			if to.length() < stats.reach and _cooldown <= 0.0:
+			if to.length() < stats.reach and _cooldown <= 0.0 and has_line_of_sight():
 				_attack_t = 0.0
 				_play("attack", 1.0)
 				state = State.ATTACK
@@ -304,12 +311,14 @@ func _physics_process(delta: float) -> void:
 			to.y = 0
 			_face(to, delta * 8.0)
 			if _attack_t >= stats.windup and _attack_t - delta < stats.windup:
-				if to.length() < stats.reach + 0.6 and not target_dead.call():
+				if to.length() < stats.reach + 0.6 and not target_dead.call() and has_line_of_sight():
 					attacked.emit(stats.damage, global_position)
 			if _attack_t > stats.windup + 0.35:
 				_attack_t = -1.0
 				_cooldown = stats.cooldown
 				state = State.CHASE
+		State.BREAK:
+			_break(delta)
 	# Walk around whatever is in the way: sidestep for a moment when stuck.
 	if want != Vector3.ZERO and _side_t > 0.0:
 		_side_t -= delta
@@ -325,6 +334,16 @@ func _physics_process(delta: float) -> void:
 	else:
 		velocity.y -= GRAVITY * delta
 	move_and_slide()
+	# Walked into a wall, gate or barricade: tear it down.
+	var slow := Vector2(get_real_velocity().x, get_real_velocity().z).length() < speed * 0.4
+	if want != Vector3.ZERO and building and slow and (state == State.CHASE or state == State.WANDER):
+		var key := _blocking_piece(want)
+		_blocked_t = _blocked_t + delta if key != "" else 0.0
+		if _blocked_t > 0.35:
+			_blocked_t = 0.0
+			break_key = key
+			_attack_t = -1.0
+			state = State.BREAK
 	if want != Vector3.ZERO:
 		_stuck_t += delta
 		if _stuck_t > 0.8:
@@ -340,10 +359,67 @@ func _physics_process(delta: float) -> void:
 		_play("groan", _rng.randf_range(0.85, 1.05))
 
 
+## The building piece it is pushing against while walking in direction want, or "".
+func _blocking_piece(want: Vector3) -> String:
+	var space := get_world_3d().direct_space_state
+	for h in [1.1, 0.4]:
+		var from := global_position + Vector3(0, h, 0)
+		var q := PhysicsRayQueryParameters3D.create(from, from + want * 0.9, 1, [get_rid()])
+		var hit := space.intersect_ray(q)
+		if not hit.is_empty():
+			var key: String = building.piece_key_of(hit.collider)
+			if key != "":
+				return key
+	return ""
+
+
+## Clawing at a piece: the same swing as an attack, but the damage goes to the piece.
+func _break(delta: float) -> void:
+	if not building.pieces.has(break_key):
+		break_key = ""
+		_attack_t = -1.0
+		state = State.CHASE if hunter and not target_dead.call() else State.WANDER
+		return
+	var to: Vector3 = building.pieces[break_key].node.global_position - global_position
+	to.y = 0
+	_face(to, delta * 6.0)
+	if _attack_t < 0.0:
+		if _cooldown <= 0.0:
+			_attack_t = 0.0
+			_play("attack", 0.9)
+		return
+	_attack_t += delta
+	if _attack_t >= stats.windup and _attack_t - delta < stats.windup:
+		var spiky: bool = building.pieces[break_key].type == "spikes"
+		piece_hit.emit(break_key)
+		building.damage(break_key, stats.wall_damage)
+		if spiky:
+			hurt(SPIKE_DAMAGE)
+	if _attack_t > stats.windup + 0.35:
+		_attack_t = -1.0
+		_cooldown = stats.cooldown
+
+
+## Damage without the flinch (spikes, traps).
+func hurt(amount: float) -> void:
+	if is_dead():
+		return
+	health = maxf(health - amount, 0.0)
+	_flash = 0.25
+	if health <= 0.0:
+		_die(-global_transform.basis.z)
+
+
 func _decide(night: bool) -> void:
 	match state:
+		State.BREAK:
+			# Someone in reach and in plain sight? Go for them instead.
+			if target and not target_dead.call() and target.global_position.distance_to(global_position) < stats.reach and has_line_of_sight():
+				state = State.CHASE
 		State.WANDER:
 			if notices_target(night):
+				_set_state(State.CHASE)
+			elif hunter and target and not target_dead.call() and target.global_position.distance_to(global_position) < SMELL:
 				_set_state(State.CHASE)
 		State.CHASE:
 			if target == null or target_dead.call():

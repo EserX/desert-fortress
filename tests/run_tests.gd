@@ -370,6 +370,7 @@ func _test_tiers() -> void:
 var ramp_top := 0.0
 var chase_walker: Node
 var march_walker: Node
+var break_wall := ""
 var ramp_base := 0.0
 ## v0.11: base zone, storage chest, workbench crafting, bandages, spike barricade.
 func _test_base() -> void:
@@ -627,6 +628,56 @@ func _test_waves() -> void:
 	main.player.position = Vector3(60, main.terrain.surface_height(60, -60), -60)
 
 
+## v0.15: collapsing upper floors, finding pieces from colliders, spikes biting back.
+func _test_breaking() -> void:
+	var b = main.building
+	var ms = main.mutants
+	b.load_data([])
+	var w := {"kind": "edge", "cx": 5, "cz": -3, "dir": 0, "level": 0}
+	var wk: String = b.place("wall", w, b.evaluate("wall", w).y)
+	var f := {"kind": "cell", "cx": 5, "cz": -3, "dir": 0, "level": 1}
+	var fev: Dictionary = b.evaluate("floor", f)
+	var fk: String = b.place("floor", f, fev.y)
+	var f2 := {"kind": "cell", "cx": 6, "cz": -3, "dir": 0, "level": 1}
+	var f2k: String = b.place("floor", f2, b.evaluate("floor", f2).y)
+	check(fev.ok and b.pieces.has(f2k), "a floor held up by one wall, with an overhang")
+	var collapsed := []
+	b.piece_collapsed.connect(func(k, _t): collapsed.append(k))
+	b.damage(wk, 9999.0)
+	check(not b.pieces.has(fk) and not b.pieces.has(f2k) and collapsed.size() == 2, "when the wall breaks the floors above collapse (%d)" % collapsed.size())
+	var d := {"kind": "edge", "cx": 5, "cz": -5, "dir": 0, "level": 0}
+	var dk: String = b.place("doorway", d, b.evaluate("doorway", d).y)
+	var gate_body: Node = b.pieces[dk].hinge.get_child(0)
+	check(b.piece_key_of(gate_body) == dk, "a gate counts as part of its doorway")
+	var ss := {"kind": "obj", "cx": 7, "cz": -6, "dir": 0, "level": 0}
+	var sk: String = b.place("spikes", ss, b.evaluate("spikes", ss).y)
+	var m = ms.spawn("walker", Vector3(15, 0, -11))
+	m.break_key = sk
+	m.state = m.State.BREAK
+	for i in 20:
+		m._break(0.05)
+	check(b.pieces[sk].hp < b.max_hp(b.pieces[sk]) and is_equal_approx(m.health, 100.0 - m.SPIKE_DAMAGE), "clawing at spikes hurts the mutant (%.0f)" % m.health)
+	b.remove(sk)
+	m._break(0.05)
+	check(m.state != m.State.BREAK, "when the piece is gone it moves on")
+	ms.clear()
+	b.load_data([])
+
+
+## A wave mutant smells you behind a wall and breaks through it.
+func _start_break_in() -> void:
+	var b = main.building
+	var player = main.player
+	var slot := {"kind": "edge", "cx": 0, "cz": -2, "dir": 0, "level": 0}
+	break_wall = b.place("wall", slot, b.evaluate("wall", slot).y, false, 0, 60.0)
+	player.position = Vector3(1, main.terrain.surface_height(1, -3.45), -3.45)
+	player.velocity = Vector3.ZERO
+	main.survival.health = 100.0
+	chase_walker = main.mutants.spawn("walker", Vector3(1, 0, -12))
+	chase_walker.make_hunter(Vector3.ZERO)
+	chase_walker.rotation.y = PI
+
+
 ## Real chase over many frames: it walks up to the player and claws.
 func _start_chase() -> void:
 	var ms = main.mutants
@@ -791,7 +842,22 @@ func _process(_delta: float) -> bool:
 			var d := Vector2(march_walker.position.x, march_walker.position.z).length()
 			check(d < 38.0, "a wave mutant marches on the base (%.1f m from the flag, started at 40)" % d)
 			main.mutants.clear()
-		1230:
+			_test_breaking()
+			_start_break_in()
+		1500:
+			var b = main.building
+			check(chase_walker.state == chase_walker.State.BREAK and chase_walker.break_key == break_wall, "a mutant blocked by a wall claws at it (state %d)" % chase_walker.state)
+			check(b.pieces.has(break_wall) and b.pieces[break_wall].hp < 60.0, "the wall takes damage (%.0f hp)" % b.pieces.get(break_wall, {}).get("hp", 0.0))
+			check(main.survival.health >= 100.0, "it can't claw you through the wall (health %.0f)" % main.survival.health)
+		1800:
+			check(not main.building.pieces.has(break_wall), "the wall breaks")
+			check(main.building.get_children().any(func(c): return c is CPUParticles3D), "a broken wall leaves dust and debris")
+		2000:
+			check(main.survival.health < 100.0, "then the mutant gets through to you (health %.0f)" % main.survival.health)
+			main.mutants.clear()
+			main.building.load_data([])
+			main.survival.health = 100.0
+		2010:
 			if failures.is_empty():
 				print("== ALL TESTS PASSED ==")
 				quit(0)

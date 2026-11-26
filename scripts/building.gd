@@ -31,6 +31,8 @@ const ZONE_RADIUS := 26.0    # base build zone around the flag at the origin
 const CHEST_SLOTS := 20
 
 signal piece_destroyed(key: String, type: String)
+## A piece fell down because what held it up was destroyed.
+signal piece_collapsed(key: String, type: String)
 ## A chest was taken down with things inside: drop them in a bag here.
 signal spilled(items: Dictionary, pos: Vector3)
 
@@ -652,11 +654,173 @@ func damage(key: String, amount: float) -> bool:
 	rec.hp = maxf(rec.hp - amount, 0.0)
 	if rec.hp <= 0.0:
 		var type: String = rec.type
+		_debris(rec)
 		remove(key)
 		piece_destroyed.emit(key, type)
+		collapse_unsupported()
 		return true
 	_update_cracks(rec)
 	return false
+
+
+## Key of the built piece a collider belongs to (walls, gates...), or "".
+func piece_key_of(n: Node) -> String:
+	while n and n != self:
+		if n.has_meta("piece_key"):
+			return n.get_meta("piece_key")
+		n = n.get_parent()
+	return ""
+
+
+## Keys of the pieces that could hold up an upper-level slot (same rules as _support_y).
+func _supporters(slot: Dictionary) -> Array:
+	var out: Array = []
+	var lv: int = slot.level
+	if slot.kind == "obj":
+		var deck := piece_at(cell_key(slot.cx, slot.cz, lv))
+		if not deck.is_empty() and deck.type in DECKS:
+			out.append(slot_key(deck.slot))
+		return out
+	if slot.kind == "cell":
+		for e in cell_edges(slot.cx, slot.cz, lv - 1):
+			var w := piece_at(slot_key(e))
+			if not w.is_empty() and w.type in WALLISH:
+				out.append(slot_key(w.slot))
+		for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var f := piece_at(cell_key(slot.cx + d.x, slot.cz + d.y, lv))
+			if not f.is_empty() and f.type in DECKS:
+				out.append(slot_key(f.slot))
+		return out
+	var below := piece_at(slot_key({"kind": "edge", "cx": slot.cx, "cz": slot.cz, "dir": slot.dir, "level": lv - 1}))
+	if not below.is_empty() and below.type in WALLISH:
+		out.append(slot_key(below.slot))
+	for c in edge_cells(slot):
+		var f := piece_at(cell_key(c.x, c.y, lv))
+		if not f.is_empty() and f.type in DECKS:
+			out.append(slot_key(f.slot))
+	return out
+
+
+## Upstairs pieces with no chain of support down to the ground fall down
+## (two floors can't hold each other up in the air). Returns how many fell.
+func collapse_unsupported() -> int:
+	var grounded := {}
+	for key in pieces:
+		if pieces[key].slot.level == 0:
+			grounded[key] = true
+	var changed := true
+	while changed:
+		changed = false
+		for key in pieces:
+			if grounded.has(key):
+				continue
+			for k in _supporters(pieces[key].slot):
+				if grounded.has(k):
+					grounded[key] = true
+					changed = true
+					break
+	var fell := 0
+	for key in pieces.keys():
+		if not grounded.has(key):
+			var rec: Dictionary = pieces[key]
+			_debris(rec)
+			remove(key)
+			piece_collapsed.emit(key, rec.type)
+			fell += 1
+	return fell
+
+
+## Broken boards and chunks tumble to the ground in a puff of dust, with a crash.
+func _debris(rec: Dictionary) -> void:
+	if not is_inside_tree():
+		return
+	var b := piece_bounds(rec.type)
+	var size: Vector3 = b[0]
+	var xf: Transform3D = rec.node.global_transform
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(slot_key(rec.slot)) + Time.get_ticks_msec()
+	var mat: Material = _tier_mat(rec.tier, "plank")
+	var ground: float = terrain.surface_height(xf.origin.x, xf.origin.z) if terrain else xf.origin.y
+	for i in 9:
+		var mi := MeshInstance3D.new()
+		mi.mesh = _box_mesh(Vector3(rng.randf_range(0.2, 0.7), rng.randf_range(0.08, 0.3), rng.randf_range(0.1, 0.3)))
+		mi.material_override = mat
+		add_child(mi)
+		var local: Vector3 = b[1] + Vector3(rng.randf_range(-0.5, 0.5) * size.x, rng.randf_range(-0.4, 0.4) * size.y, rng.randf_range(-0.5, 0.5) * size.z)
+		mi.global_position = xf * local
+		mi.rotation = Vector3(rng.randf() * TAU, rng.randf() * TAU, 0)
+		var land := mi.global_position + Vector3(rng.randf_range(-1.2, 1.2), 0, rng.randf_range(-1.2, 1.2))
+		land.y = maxf(ground, xf.origin.y) + 0.1
+		var t := rng.randf_range(0.45, 0.8)
+		var tw := mi.create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(mi, "global_position", land, t).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+		tw.tween_property(mi, "rotation", mi.rotation + Vector3(rng.randf_range(-3, 3), rng.randf_range(-3, 3), 0), t)
+		tw.chain().tween_interval(2.0)
+		tw.chain().tween_property(mi, "scale", Vector3.ONE * 0.01, 0.6)
+		tw.chain().tween_callback(mi.queue_free)
+	var dust := CPUParticles3D.new()
+	dust.one_shot = true
+	dust.emitting = true
+	dust.amount = 24
+	dust.lifetime = 1.6
+	dust.explosiveness = 0.9
+	dust.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	dust.emission_box_extents = size * 0.5
+	dust.direction = Vector3.UP
+	dust.spread = 70.0
+	dust.initial_velocity_min = 0.5
+	dust.initial_velocity_max = 2.0
+	dust.gravity = Vector3(0, -0.6, 0)
+	dust.scale_amount_min = 0.5
+	dust.scale_amount_max = 1.2
+	var q := QuadMesh.new()
+	q.size = Vector2(0.6, 0.6)
+	var dm := StandardMaterial3D.new()
+	dm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	dm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	dm.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	dm.albedo_color = Color(0.8, 0.68, 0.5, 0.5)
+	q.material = dm
+	dust.mesh = q
+	add_child(dust)
+	dust.global_position = xf * b[1]
+	get_tree().create_timer(2.0).timeout.connect(dust.queue_free)
+	var snd := AudioStreamPlayer3D.new()
+	snd.stream = _crash_sound()
+	snd.unit_size = 10.0
+	snd.max_distance = 70.0
+	add_child(snd)
+	snd.global_position = xf.origin
+	snd.pitch_scale = rng.randf_range(0.85, 1.1)
+	snd.play()
+	snd.finished.connect(snd.queue_free)
+
+
+var _crash: AudioStreamWAV
+
+## Generated crash: a burst of crackling noise over a low rumble.
+func _crash_sound() -> AudioStreamWAV:
+	if _crash:
+		return _crash
+	var rate := 22050
+	var n := int(rate * 1.1)
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var lp := 0.0
+	for i in n:
+		var t := float(i) / rate
+		lp += (rng.randf_range(-1, 1) - lp) * 0.08
+		var crackle := rng.randf_range(-1, 1) * (1.0 if rng.randf() < 0.08 else 0.25) * exp(-t * 5.0)
+		var s := (lp * 2.2 * exp(-t * 2.5) + crackle * 0.6 + sin(TAU * 55.0 * t) * 0.4 * exp(-t * 4.0)) * minf(t / 0.005, 1.0)
+		data.encode_s16(i * 2, int(clampf(s, -1.0, 1.0) * 28000.0))
+	_crash = AudioStreamWAV.new()
+	_crash.format = AudioStreamWAV.FORMAT_16_BITS
+	_crash.mix_rate = rate
+	_crash.data = data
+	return _crash
 
 
 ## True while a fresh piece can still be taken back for a full refund.

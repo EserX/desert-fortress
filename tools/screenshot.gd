@@ -29,6 +29,7 @@ var shots := [
 	{"name": "19_walker_night", "pos": Vector3(60, 0, 60), "yaw": 0.4, "pitch": -0.02, "hour": 22.5, "walker": true},
 	{"name": "20_wave", "pos": Vector3(2, 0, 14), "yaw": 0.3, "pitch": -0.04, "hour": 21.2, "wave": true},
 	{"name": "21_summary", "pos": Vector3(2, 0, 14), "yaw": 0.3, "pitch": -0.04, "hour": 6.4, "summary": true},
+	{"name": "22_breakin", "pos": Vector3(3.0, 0, -0.5), "yaw": 0.25, "pitch": -0.1, "hour": 19.4, "breakin": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -114,6 +115,8 @@ func _process(_d: float) -> bool:
 			main.hud.show_hitmarker("target")
 		if s.get("walker", false):
 			_walker_sample(p)
+		if s.get("breakin", false):
+			_breakin_sample(p)
 		if s.get("wave", false):
 			_wave_sample(p)
 		if s.get("summary", false):
@@ -243,3 +246,26 @@ func _wave_sample(p: Node3D) -> void:
 	main.inventory.add("pipe", 1)
 	main.inventory.selected = 0
 	main.melee.set_item("pipe")
+
+
+## Walkers tearing at a wall line north of the flag; one wall just gave way (v0.15).
+func _breakin_sample(p: Node3D) -> void:
+	var b = main.building
+	var ms = main.mutants
+	b.load_data([])
+	ms.clear()
+	var keys := []
+	for cx in [-2, -1, 0, 1, 2]:
+		var slot := {"kind": "edge", "cx": cx, "cz": -5, "dir": 0, "level": 0}
+		keys.append(b.place("wall", slot, b.evaluate("wall", slot).y, false, 1 if cx == 2 else 0))
+	b.damage(keys[1], 190.0)
+	b.damage(keys[3], 120.0)
+	for i in 3:
+		var w = ms.spawn("walker", [Vector3(1.2, 0, -10.8 + 4.0), Vector3(-2.5, 0, -10.5), Vector3(4.5, 0, -10.8)][i])
+		w.rotation.y = PI
+		w.set_physics_process(false)
+		w._anim_t = i * 2.0
+		w._attack_t = [0.35, 0.2, 0.42][i]
+		w._animate(0.0, 0.3)
+	b.damage(keys[2], 9999.0)
+	main.mutants.night = true

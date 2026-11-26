@@ -2,6 +2,19 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v0.15.0 (2026-11-26): Mutants break in
+- **They smell you:** a wave mutant within 30 m of you knows where you are, walls or not, and heads straight for you. Further away it keeps marching on the base.
+- **Breaking walls:** a mutant that walks into a building piece (wall, gate, window wall, barricade, chest...) stops and **claws at it**: 20 damage per swipe, about one every 2 seconds. A wooden wall (250 hp) holds one walker off for about 25 seconds, scrap metal for a minute, and concrete for over two minutes. More mutants on the same wall break it faster.
+- **No clawing through walls:** a mutant must have a clear line to you to hurt you. Standing right behind a wall is safe until the wall gives way.
+- **Spike barricades bite back:** a mutant clawing at a spike barricade loses 8 health with every swipe, and the spike kills count for the wave.
+- **Walls collapse:** at 0 hp a piece breaks apart in a shower of tumbling boards or chunks (in its material), a puff of dust and a generated crash. Anything upstairs that loses its last support falls down too: floors, walls, roofs and what stands on them. Two floors can no longer hold each other up in the air; there must be a chain of walls down to the ground. Demolishing with the hammer follows the same rule.
+- **Warnings:** "Mutants are breaking in! (N side of the base)" when they start on your base (at most every 20 s), and a line on the right for each piece destroyed or collapsed. Pieces lost count in the end-of-wave summary.
+- **Code:** mutants have a `BREAK` state; they look for a building piece with a short ray when they are blocked. `building.piece_key_of(node)`, `collapse_unsupported()` (a support chain search from the ground up), a `piece_collapsed` signal, and debris and crash effects in `building.gd`.
+- **Tests:** an upper floor and its overhang collapsing with their wall, gates counting as part of their doorway, spikes hurting the attacker, mutants moving on when the piece is gone, and a real break-in over many frames: a wave mutant smells you behind a wall, claws at it while you stay unhurt, the wall breaks with dust and debris, then it gets to you. New screenshot view `22_breakin`.
+
+**Try:** build a ring of walls around the flag with a doorway, upgrade the side facing the open desert, and wait for the night. Put spike barricades outside the weak spots.
+**Next:** v0.16, more mutant types: the Runner (fast, weak), the Brute (slow, tanky, wrecks walls) and the Spitter (ranged acid). Waves mix types and scale up each night.
+
 ## v0.14.0 (2026-11-26): Night waves
 - **Siren at dusk:** at 18:30 a generated air-raid siren wails and a banner tells you to get back to the base.
 - **Waves at night:** when night falls (20:00), wave N begins: **4 mutants on the first night, 2 more each night after, up to 30**. They come in from the edge of the map in groups of 2 or 3, one group every 9 seconds, from random directions, and **march on the base** (2.2 m/s, so the first ones arrive about a minute and a half later). On the way, and once they reach the base, they go for you if they see or hear you. Wave mutants see half again as far as the day wanderers and don't give up as quickly.

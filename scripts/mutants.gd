@@ -11,8 +11,10 @@ const MIX_RATE := 22050.0
 
 signal player_hit(damage: float, from: Vector3)
 signal mutant_killed(mutant: Node)
+signal piece_hit(key: String)
 
 var terrain  # Terrain
+var building  # Building
 var player: Node3D
 var player_dead := func(): return false
 var world_seed := 1337
@@ -46,6 +48,8 @@ func spawn(kind: String, pos: Vector3, hp := -1.0) -> Mutant:
 		m.health = hp
 	m.target = player
 	m.target_dead = player_dead
+	m.building = building
+	m.piece_hit.connect(func(k): piece_hit.emit(k))
 	m.sounds = _sounds
 	m.rotation.y = _rng.randf() * TAU
 	m.attacked.connect(func(dmg, from): player_hit.emit(dmg, from))

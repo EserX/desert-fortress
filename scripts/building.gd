@@ -17,6 +17,15 @@ const REACH := 9.0
 const DOOR_W := 1.1
 const DOOR_H := 2.05
 
+## Material tiers: hit points, the item used to upgrade to and repair each.
+const TIER_NAMES := ["wood", "scrap metal", "concrete"]
+const TIER_HP := [250.0, 600.0, 1500.0]
+const TIER_ITEM := ["wood", "scrap", "cement"]
+const REFUND := 0.5          # share of what a piece cost you get back when demolished
+const UNDO_SECONDS := 60.0   # build-mode right click gives everything back this soon after building
+
+signal piece_destroyed(key: String, type: String)
+
 ## type -> {"name", "slot": "cell"/"edge", "cost", "dirs": how many ways R turns it}
 const PIECES := {
 	"foundation": {"name": "Wooden foundation", "slot": "cell", "cost": {"wood": 4, "nails": 4}, "dirs": 1},
@@ -35,7 +44,7 @@ const WALLISH := ["wall", "doorway", "window"]
 const DECKS := ["floor", "roof"]
 
 var terrain  # Terrain
-## main slot key -> {"type", "slot", "y", "node", "open" (gates)}
+## main slot key -> {"type", "slot", "y", "node", "open" (gates), "tier", "hp", "built_at"}
 var pieces := {}
 ## every slot key a piece takes up (stairs take two) -> main slot key
 var occupied := {}
@@ -46,8 +55,20 @@ func _ready() -> void:
 	_mats.wood = LowPoly.material(Color(0.52, 0.36, 0.22))
 	_mats.wood_dark = LowPoly.material(Color(0.36, 0.24, 0.14))
 	_mats.plank = LowPoly.material(Color(0.60, 0.43, 0.27))
-	_mats.metal = LowPoly.material(Color(0.55, 0.5, 0.45), 0.6)
+	_mats.metal = LowPoly.material(Color(0.36, 0.38, 0.4), 0.55)
 	_mats.rust = LowPoly.material(Color(0.5, 0.28, 0.14), 0.8)
+	_mats.concrete = LowPoly.material(Color(0.5, 0.49, 0.46))
+	_mats.concrete_dark = LowPoly.material(Color(0.38, 0.37, 0.35))
+	_mats.crack = LowPoly.material(Color(0.08, 0.06, 0.05))
+
+
+## The material a mesh part uses at a tier (parts are designed in wood).
+func _tier_mat(tier: int, key: String) -> Material:
+	if tier == 1:
+		return _mats[{"wood": "metal", "plank": "metal", "wood_dark": "rust"}.get(key, key)]
+	if tier == 2:
+		return _mats[{"wood": "concrete", "plank": "concrete", "metal": "concrete", "wood_dark": "concrete_dark", "rust": "concrete_dark"}.get(key, key)]
+	return _mats[key]
 
 
 # --- Slots ----------------------------------------------------------------------
@@ -339,7 +360,7 @@ static func _box_mesh(size: Vector3) -> BoxMesh:
 # --- Building and removing ------------------------------------------------------
 
 ## Builds a piece (no cost or validity checks). Returns its slot key.
-func place(type: String, slot: Dictionary, y: float, gate_open := false) -> String:
+func place(type: String, slot: Dictionary, y: float, gate_open := false, tier := -1, hp := -1.0) -> String:
 	slot = slot.duplicate()
 	slot.level = int(slot.get("level", 0))
 	var key := slot_key(slot)
@@ -354,7 +375,7 @@ func place(type: String, slot: Dictionary, y: float, gate_open := false) -> Stri
 			mi.rotation.x = b[3]
 		if b.size() > 4:
 			mi.position += Basis(Vector3.RIGHT, b[3]) * b[4]
-		mi.material_override = _mats[b[2]]
+		mi.set_meta("mat", b[2])
 		body.add_child(mi)
 	for c in piece_colliders(type):
 		var col := CollisionShape3D.new()
@@ -365,7 +386,13 @@ func place(type: String, slot: Dictionary, y: float, gate_open := false) -> Stri
 		col.rotation.x = c[2]
 		body.add_child(col)
 	add_child(body)
-	var rec := {"type": type, "slot": slot, "y": y, "node": body, "open": false}
+	if tier < 0:
+		tier = base_tier(type)
+	var rec := {"type": type, "slot": slot, "y": y, "node": body, "open": false, "tier": tier,
+		"hp": 0.0, "built_at": Time.get_ticks_msec()}
+	rec.hp = max_hp(rec) if hp < 0.0 else minf(hp, max_hp(rec))
+	_add_cracks(rec)
+	_apply_tier(rec)
 	pieces[key] = rec
 	for k in slot_keys(type, slot):
 		occupied[k] = key
@@ -387,13 +414,13 @@ func _add_gate(rec: Dictionary, open: bool) -> void:
 		var mi := MeshInstance3D.new()
 		mi.mesh = _box_mesh(Vector3(DOOR_W / 4.0 - 0.03, DOOR_H - 0.06, 0.08))
 		mi.position.x = -DOOR_W * 0.5 + DOOR_W / 8.0 + i * DOOR_W / 4.0
-		mi.material_override = _mats.plank if i % 2 == 0 else _mats.wood
+		mi.set_meta("mat", "plank" if i % 2 == 0 else "wood")
 		gate.add_child(mi)
 	for yb in [-0.6, 0.6]:
 		var brace := MeshInstance3D.new()
 		brace.mesh = _box_mesh(Vector3(DOOR_W - 0.05, 0.12, 0.1))
 		brace.position = Vector3(0, yb, 0.03)
-		brace.material_override = _mats.wood_dark
+		brace.set_meta("mat", "wood_dark")
 		gate.add_child(brace)
 	var col := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
@@ -401,6 +428,7 @@ func _add_gate(rec: Dictionary, open: bool) -> void:
 	col.shape = shape
 	gate.add_child(col)
 	rec.hinge = hinge
+	_apply_tier(rec)
 	set_gate(slot_key(rec.slot), open)
 
 
@@ -465,11 +493,165 @@ func blocks_person(type: String, slot: Dictionary, y: float, pos: Vector3, radiu
 	return local.y < half.y + 0.3 and local.y + height > -half.y
 
 
+# --- Tiers, damage and the hammer ------------------------------------------------
+
+## Roofs and ramps are made of scrap from the start.
+static func base_tier(type: String) -> int:
+	return 1 if type in ["roof", "ramp"] else 0
+
+
+func max_hp(rec: Dictionary) -> float:
+	return TIER_HP[rec.tier]
+
+
+## Short name like "Scrap metal wall".
+func describe(rec: Dictionary) -> String:
+	var noun: String = PIECES[rec.type].name.replace("Wooden ", "").replace("Scrap ", "")
+	var tier_name: String = TIER_NAMES[rec.tier]
+	return "%s%s %s" % [tier_name[0].to_upper(), tier_name.substr(1), noun.to_lower()]
+
+
+## How much a piece's wood cost is worth in the next tier's material.
+static func _size(type: String) -> int:
+	var cost: Dictionary = PIECES[type].cost
+	return maxi(2, int(cost.get("wood", 0)) + int(cost.get("scrap", 0)))
+
+
+## What it costs to raise a piece one tier ({} at concrete).
+func upgrade_cost(rec: Dictionary) -> Dictionary:
+	if rec.tier >= TIER_NAMES.size() - 1:
+		return {}
+	if rec.tier == 0:
+		return {"scrap": _size(rec.type) + 1, "nails": 2}
+	return {"cement": _size(rec.type), "scrap": 1}
+
+
+## One unit of the tier's material per started quarter of missing hit points.
+func repair_cost(rec: Dictionary) -> Dictionary:
+	var missing: float = 1.0 - rec.hp / max_hp(rec)
+	if missing <= 0.001:
+		return {}
+	return {TIER_ITEM[rec.tier]: int(ceil(missing * 4.0))}
+
+
+## What demolishing gives back: half of everything put into it, rounded down.
+func refund(rec: Dictionary) -> Dictionary:
+	var spent: Dictionary = PIECES[rec.type].cost.duplicate()
+	var r := {"tier": base_tier(rec.type)}
+	while r.tier < rec.tier:
+		var up := upgrade_cost(r.merged({"type": rec.type}))
+		for item in up:
+			spent[item] = int(spent.get(item, 0)) + up[item]
+		r.tier += 1
+	var out := {}
+	for item in spent:
+		var n := int(floor(spent[item] * REFUND))
+		if n > 0:
+			out[item] = n
+	return out
+
+
+func upgrade(key: String) -> void:
+	var rec: Dictionary = pieces.get(key, {})
+	if rec.is_empty() or upgrade_cost(rec).is_empty():
+		return
+	rec.tier += 1
+	rec.hp = max_hp(rec)
+	_apply_tier(rec)
+
+
+func repair(key: String) -> void:
+	var rec: Dictionary = pieces.get(key, {})
+	if not rec.is_empty():
+		rec.hp = max_hp(rec)
+		_update_cracks(rec)
+
+
+## Hurts a piece. At 0 hit points it breaks and is gone. Returns true if it broke.
+func damage(key: String, amount: float) -> bool:
+	key = occupied.get(key, key)
+	var rec: Dictionary = pieces.get(key, {})
+	if rec.is_empty():
+		return false
+	rec.hp = maxf(rec.hp - amount, 0.0)
+	if rec.hp <= 0.0:
+		var type: String = rec.type
+		remove(key)
+		piece_destroyed.emit(key, type)
+		return true
+	_update_cracks(rec)
+	return false
+
+
+## True while a fresh piece can still be taken back for a full refund.
+func can_undo(rec: Dictionary) -> bool:
+	return (Time.get_ticks_msec() - rec.built_at) / 1000.0 < UNDO_SECONDS and rec.tier == base_tier(rec.type) and rec.hp >= max_hp(rec)
+
+
+func _apply_tier(rec: Dictionary) -> void:
+	for mi in _meshes(rec.node):
+		mi.material_override = _tier_mat(rec.tier, mi.get_meta("mat"))
+	_update_cracks(rec)
+
+
+func _meshes(node: Node) -> Array:
+	var out: Array = []
+	for c in node.get_children():
+		if c is MeshInstance3D and c.has_meta("mat"):
+			out.append(c)
+		if not (c is CollisionShape3D):
+			out.append_array(_meshes(c))
+	return out
+
+
+## Dark crack lines on both faces of a piece, hidden until it is damaged.
+func _add_cracks(rec: Dictionary) -> void:
+	var b := piece_bounds(rec.type)
+	var size: Vector3 = b[0]
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(slot_key(rec.slot))
+	var cracks := Node3D.new()
+	cracks.name = "Cracks"
+	rec.node.add_child(cracks)
+	var flat: bool = size.y < 1.0  # floors, foundations, roofs: cracks on top
+	for i in 6:
+		var mi := MeshInstance3D.new()
+		var crack_len := rng.randf_range(0.4, 0.9)
+		var pos: Vector3 = b[1]
+		if flat:
+			mi.mesh = _box_mesh(Vector3(crack_len, 0.02, 0.04))
+			pos += Vector3(rng.randf_range(-0.6, 0.6) * size.x * 0.5, size.y * 0.5 + 0.01, rng.randf_range(-0.6, 0.6) * size.z * 0.5)
+			mi.rotation.y = rng.randf() * PI
+		else:
+			mi.mesh = _box_mesh(Vector3(crack_len, 0.025, size.z + 0.02))
+			pos += Vector3(rng.randf_range(-0.35, 0.35) * size.x, rng.randf_range(-0.35, 0.35) * size.y, 0)
+			mi.rotation.z = rng.randf_range(-1.2, 1.2)
+		mi.position = pos
+		mi.material_override = _mats.crack
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		cracks.add_child(mi)
+	rec.cracks = cracks
+
+
+## Damage stage: 0 fine, 1 cracked (below 2/3), 2 badly cracked (below 1/3).
+func crack_stage(rec: Dictionary) -> int:
+	var f: float = rec.hp / max_hp(rec)
+	return 0 if f > 0.66 else (1 if f > 0.33 else 2)
+
+
+func _update_cracks(rec: Dictionary) -> void:
+	if not rec.has("cracks"):
+		return
+	var shown: int = [0, 3, 6][crack_stage(rec)]
+	for i in rec.cracks.get_child_count():
+		rec.cracks.get_child(i).visible = i < shown
+
+
 func save_data() -> Array:
 	var out: Array = []
 	for key in pieces:
 		var p: Dictionary = pieces[key]
-		out.append({"type": p.type, "kind": p.slot.kind, "cx": p.slot.cx, "cz": p.slot.cz, "dir": p.slot.dir, "level": p.slot.level, "y": p.y, "open": p.open})
+		out.append({"type": p.type, "kind": p.slot.kind, "cx": p.slot.cx, "cz": p.slot.cz, "dir": p.slot.dir, "level": p.slot.level, "y": p.y, "open": p.open, "tier": p.tier, "hp": p.hp})
 	return out
 
 
@@ -479,4 +661,4 @@ func load_data(data: Array) -> void:
 	for p in data:
 		if PIECES.has(p.get("type", "")):
 			var slot := {"kind": str(p.kind), "cx": int(p.cx), "cz": int(p.cz), "dir": int(p.dir), "level": int(p.get("level", 0))}
-			place(p.type, slot, float(p.y), bool(p.get("open", false)))
+			place(p.type, slot, float(p.y), bool(p.get("open", false)), int(p.get("tier", -1)), float(p.get("hp", -1.0)))

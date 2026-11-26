@@ -1,8 +1,8 @@
 extends Node3D
 ## Build mode (B): a see-through preview of the selected piece snaps to the
 ## grid where you look. Green means it can be built, red means it can't.
-## Left click builds (costs materials), right click takes a piece down
-## (full refund for now), R turns the piece, the wheel or 1–8 picks a piece.
+## Left click builds (costs materials), right click undoes a piece you built
+## in the last minute (full refund; after that use the hammer), R turns the piece, the wheel or 1–8 picks a piece.
 ## Aiming higher up a wall or at an upper floor builds on the next level.
 
 const Building = preload("res://scripts/building.gd")
@@ -149,10 +149,16 @@ func try_place() -> bool:
 	return true
 
 
-## Takes down the piece under the crosshair and refunds it. Returns its type or "".
+## Undoes a freshly built piece under the crosshair with a full refund.
+## Returns its type, "" if nothing was there, or "old" if it is too late to undo.
 func try_remove() -> String:
 	if not active or looking_at_piece == "":
 		return ""
+	var rec: Dictionary = building.piece_at(looking_at_piece)
+	if rec.is_empty():
+		return ""
+	if not building.can_undo(rec):
+		return "old"
 	var type := building.remove(looking_at_piece)
 	if type != "":
 		var left: Dictionary = inventory.add_all(Building.PIECES[type].cost)

@@ -20,7 +20,7 @@ const ACTIONS := {
 	"use_item": [KEY_F],
 	"map": [KEY_M],
 	"build": [KEY_B],
-	"rotate": [KEY_R],
+	"rotate": [KEY_R],  # also reloads a gun outside build mode
 	"hotbar_1": [KEY_1], "hotbar_2": [KEY_2], "hotbar_3": [KEY_3],
 	"hotbar_4": [KEY_4], "hotbar_5": [KEY_5], "hotbar_6": [KEY_6],
 	"hotbar_7": [KEY_7], "hotbar_8": [KEY_8], "hotbar_9": [KEY_9],

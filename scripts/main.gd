@@ -23,6 +23,7 @@ const Melee = preload("res://scripts/melee.gd")
 const Dummy = preload("res://scripts/dummy.gd")
 const Mutants = preload("res://scripts/mutants.gd")
 const Waves = preload("res://scripts/waves.gd")
+const Guns = preload("res://scripts/guns.gd")
 
 const DISCOVER_RANGE := 45.0
 const REFILLS_PER_MORNING := 4
@@ -59,6 +60,7 @@ var melee: Melee
 var dummy: Dummy
 var mutants: Mutants
 var waves: Waves
+var guns: Guns
 ## Wrecks and ruins: {"key": "w3", "kind": "wreck", "pos": Vector3}.
 var places: Array = []
 ## Keys of places you have been near.
@@ -171,6 +173,12 @@ func _ready() -> void:
 	melee.player = player
 	player.camera.add_child(melee)
 
+	guns = Guns.new()
+	guns.name = "Guns"
+	guns.player = player
+	guns.inventory = inventory
+	player.camera.add_child(guns)
+
 	build_mode = BuildMode.new()
 	build_mode.name = "BuildMode"
 	build_mode.building = building
@@ -224,6 +232,9 @@ func _ready() -> void:
 	building.piece_destroyed.connect(func(_k, t): hud.show_pickup(["%s was destroyed!" % Building.PIECES[t].name]))
 	building.piece_collapsed.connect(func(_k, t): hud.show_pickup(["%s collapsed" % Building.PIECES[t].name]))
 	melee.hit_landed.connect(hud.show_hitmarker)
+	guns.hit_landed.connect(hud.show_hitmarker)
+	guns.fired.connect(mutants.alert)
+	hud.guns = guns
 	survival.warning.connect(hud.show_banner)
 
 	day_night.day_started.connect(_on_morning)
@@ -247,6 +258,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif build_mode.active and _build_input(event):
 		get_viewport().set_input_as_handled()
 	elif holding_hammer() and _hammer_input(event):
+		get_viewport().set_input_as_handled()
+	elif guns.item != "" and _gun_input(event):
 		get_viewport().set_input_as_handled()
 	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT \
 			and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and Melee.is_weapon(melee.item):
@@ -291,7 +304,11 @@ func _process(delta: float) -> void:
 		hud.build_label.text = build_mode.status_text() if build_mode.active else ""
 		base_zone.set_highlight(build_mode.active)
 		var held: Dictionary = inventory.selected_stack()
-		melee.set_item("" if build_mode.active or survival.dead or held.is_empty() else held.item)
+		var hand: String = "" if build_mode.active or survival.dead or held.is_empty() else held.item
+		melee.set_item(hand)
+		guns.set_item(hand)
+		if inventory_ui.is_open() or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+			guns.set_ads(false)
 		_check_station_reach()
 	if _orbit_camera:
 		_orbit_angle += delta * 0.04
@@ -428,6 +445,22 @@ func _hammer_input(event: InputEvent) -> bool:
 	else:
 		hammer_demolish(key)
 	return true
+
+
+## Left click fires, right click (held) aims, R reloads. Returns true if used.
+func _gun_input(event: InputEvent) -> bool:
+	if event.is_action_pressed("rotate"):
+		guns.start_reload()
+		return true
+	if not event is InputEventMouseButton or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+		return false
+	if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+		guns.try_fire()
+		return true
+	if event.button_index == MOUSE_BUTTON_RIGHT:
+		guns.set_ads(event.pressed)
+		return true
+	return false
 
 
 func _prompt_for(id: String) -> String:
@@ -663,6 +696,7 @@ func collect_save_data() -> Dictionary:
 		"buildings": building.save_data(),
 		"mutants": mutants.save_data(),
 		"waves": waves.save_data(),
+		"guns": guns.save_data(),
 	}
 
 
@@ -673,6 +707,7 @@ func apply_save_data(data: Dictionary) -> void:
 	survival.load_data(data.get("survival", {}))
 	building.load_data(data.get("buildings", []))
 	waves.load_data(data.get("waves", {"wave": maxi(day_night.day - 1, 0)}))
+	guns.load_data(data.get("guns", {}))
 	if waves.active and not day_night.is_night():
 		waves.active = false  # never carry a wave into the day
 	if data.has("mutants"):

@@ -101,6 +101,16 @@ func spits() -> Array:
 	return get_children().filter(func(c): return c is Spit)
 
 
+## A loud noise (a gunshot): mutants within radius come to look.
+func alert(pos: Vector3, radius: float) -> int:
+	var n := 0
+	for m in alive():
+		if m.state == Mutant.State.WANDER and m.global_position.distance_to(pos) < radius:
+			m.hear_noise()
+			n += 1
+	return n
+
+
 func _on_died(m: Node) -> void:
 	kills += 1
 	mutant_killed.emit(m)

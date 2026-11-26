@@ -729,6 +729,82 @@ func _test_types() -> void:
 	ms.clear()
 
 
+## v0.17: the pistol. Crafting, reloading, firing, rate, kick, aiming, noise, saving.
+func _test_pistol() -> void:
+	var g = main.guns
+	var inv = main.inventory
+	var player = main.player
+	var d = main.dummy
+	inv.load_data({})
+	inv.add_all({"scrap": 10, "wood": 2, "nails": 6})
+	check(main.Items.craft("pistol", inv) != null and inv.count_of("pistol") == 1, "the workbench makes a pistol")
+	inv.add_all({"scrap": 2, "nails": 3})
+	main.Items.craft("ammo_9mm", inv)
+	check(inv.count_of("ammo_9mm") == 8, "and 8 rounds of 9mm")
+	inv.selected = inv.slots.find(inv.slots.filter(func(x): return x.get("item", "") == "pistol")[0])
+	main._process(0.0)
+	check(g.item == "pistol" and g.visible and not main.melee.visible, "holding the pistol shows it in both hands")
+	g.mag = {}
+	g._cooldown = 0.0
+	var r: Dictionary = g.try_fire()
+	check(not r.fired and g.reload_t >= 0.0, "an empty pistol clicks and starts reloading")
+	for i in 16:
+		g._process(0.1)
+	check(g.loaded("pistol") == 8 and inv.count_of("ammo_9mm") == 0, "reloading takes rounds from your pockets (%d loaded)" % g.loaded("pistol"))
+	check(not g.start_reload(), "no reload without spare ammo")
+	inv.add("ammo_9mm", 30)
+	check(g.start_reload(), "reload with ammo")
+	for i in 16:
+		g._process(0.1)
+	check(g.loaded("pistol") == 12 and inv.count_of("ammo_9mm") == 26, "a full magazine holds 12")
+	main.hud._process(0.0)
+	check(main.hud.ammo_label.text.begins_with("Pistol  12 / 26"), "the HUD shows the ammo: " + main.hud.ammo_label.text.replace("\n", " | "))
+	# Aim at the dummy from 10 m.
+	player.position = Vector3(-3, main.terrain.surface_height(-3, 14), 14)
+	player.rotation.y = 0.0
+	player.head.rotation.x = -0.03
+	player.head.position.y = player.EYE_HEIGHT
+	g.set_ads(true)
+	for i in 5:
+		g._process(0.1)
+	check(g.ads_amount > 0.99 and player.camera.fov < root.get_node("Settings").fov * 0.8, "aiming down the sights zooms in (fov %.0f)" % player.camera.fov)
+	var before: float = d.total_damage
+	var pitch: float = player.head.rotation.x
+	var shots := 0
+	for i in 3:
+		r = g.try_fire()
+		g._cooldown = 0.0
+		player.head.rotation.x = -0.03
+		player.rotation.y = 0.0
+		shots += 1 if r.kind == "target" else 0
+	check(shots == 3 and is_equal_approx(d.total_damage - before, 34.0 * 3), "aimed shots hit the dummy at 10 m for 34 each (%d hits)" % shots)
+	check(g.loaded("pistol") == 9, "each shot uses a round")
+	g.try_fire()
+	check(player.head.rotation.x > -0.03 + 0.02, "each shot kicks the view up")
+	check(not g.try_fire().fired, "one shot at a time (rate limit)")
+	g._process(0.25)
+	g.set_ads(false)
+	# A shot brings a wandering walker running.
+	var ms = main.mutants
+	ms.clear()
+	var w = ms.spawn("walker", player.position + Vector3(25, 0, 10))
+	w.rotation.y = atan2(-1, 0)  # looking away
+	check(w.state == w.State.WANDER, "the walker is minding its own business")
+	g.try_fire()
+	check(w.state == w.State.CHASE, "a gunshot 27 m away brings it running")
+	ms.clear()
+	var data: Dictionary = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	g.mag = {}
+	main.apply_save_data(data)
+	check(g.loaded("pistol") == 7, "rounds in the magazine are saved (%d)" % g.loaded("pistol"))
+	inv.load_data({})
+	main._process(0.0)
+	check(g.item == "" and not g.visible, "putting the pistol away hides it")
+	for i in 5:
+		g._process(0.1)
+	check(is_equal_approx(player.camera.fov, root.get_node("Settings").fov), "the view zooms back out")
+
+
 func _start_spitter() -> void:
 	var player = main.player
 	var py: float = main.terrain.surface_height(8, -8)
@@ -954,6 +1030,7 @@ func _process(_delta: float) -> bool:
 			check(d < 13.0, "a runner closes 20 m in under 2 seconds (%.1f m left)" % d)
 			main.mutants.clear()
 			main.survival.health = 100.0
+			_test_pistol()
 		2360:
 			if failures.is_empty():
 				print("== ALL TESTS PASSED ==")

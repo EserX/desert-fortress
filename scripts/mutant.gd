@@ -213,6 +213,12 @@ func crumble() -> void:
 	tw.tween_property(_model, "rotation", Vector3(-1.45, 0, 0.2), 0.9).set_ease(Tween.EASE_IN)
 
 
+## Heard a gunshot: come after the player.
+func hear_noise() -> void:
+	if not is_dead() and state == State.WANDER and target and not target_dead.call():
+		_set_state(State.CHASE)
+
+
 func is_dead() -> bool:
 	return state == State.DEAD
 

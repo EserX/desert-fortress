@@ -15,14 +15,17 @@ const ITEMS := {
 	"machete": {"name": "Machete", "weight": 0.8, "stack": 1},
 	"bandage": {"name": "Bandage", "weight": 0.1, "stack": 10},
 	"spike_barricade": {"name": "Spike barricade", "weight": 4.0, "stack": 5},
+	"pistol": {"name": "Pistol", "weight": 1.0, "stack": 1},
+	"ammo_9mm": {"name": "9mm rounds", "weight": 0.012, "stack": 60},
 }
 
-## What each kind of container can hold: item -> [min, max].
+## What each kind of container can hold: item -> [min, max]. A negative min
+## makes the item rarer (anything rolled below 1 means none).
 const LOOT_TABLES := {
 	"glovebox": {"cloth": [0, 2], "nails": [0, 4], "canned_food": [0, 1], "water": [0, 1]},
-	"trunk": {"scrap": [2, 5], "nails": [2, 6], "cloth": [0, 2], "water": [0, 1]},
+	"trunk": {"scrap": [2, 5], "nails": [2, 6], "cloth": [0, 2], "water": [0, 1], "ammo_9mm": [-6, 6]},
 	"crate": {"wood": [2, 5], "nails": [1, 4], "canned_food": [0, 2], "water": [0, 2], "cement": [0, 1]},
-	"supply": {"wood": [4, 8], "scrap": [3, 7], "nails": [8, 16], "canned_food": [1, 3], "water": [2, 4], "cloth": [1, 3], "cement": [1, 3]},
+	"supply": {"wood": [4, 8], "scrap": [3, 7], "nails": [8, 16], "canned_food": [1, 3], "water": [2, 4], "cloth": [1, 3], "cement": [1, 3], "ammo_9mm": [8, 20], "pistol": [-1, 1]},
 }
 
 ## Workbench recipes, in the order shown: item -> {"count": made, "cost": {item: n}, "info": String}.
@@ -31,6 +34,8 @@ const RECIPES := {
 	"machete": {"count": 1, "cost": {"scrap": 3, "cloth": 1, "wood": 1}, "info": "Hits harder and faster than the pipe"},
 	"bandage": {"count": 1, "cost": {"cloth": 2}, "info": "Heals 30 health (use it like food)"},
 	"spike_barricade": {"count": 1, "cost": {"wood": 4, "nails": 4}, "info": "Build it in build mode, keeps mutants back"},
+	"pistol": {"count": 1, "cost": {"scrap": 10, "wood": 2, "nails": 6}, "info": "12-round 9mm pistol. RMB aims, R reloads"},
+	"ammo_9mm": {"count": 8, "cost": {"scrap": 2, "nails": 3}, "info": "Hand-loaded 9mm rounds for the pistol"},
 }
 
 const CONTAINER_NAMES := {"glovebox": "glovebox", "trunk": "trunk", "crate": "crate", "supply": "supply crate"}

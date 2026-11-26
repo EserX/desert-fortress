@@ -14,6 +14,9 @@ var clock: Label
 var banner: Label
 var day_night  # DayNight
 var waves  # Waves
+var guns  # Guns
+var ammo_label: Label
+var _cross: Label
 var summary: PanelContainer
 var _summary_lines: VBoxContainer
 var _summary_time := 0.0
@@ -43,6 +46,7 @@ func _ready() -> void:
 	add_child(root)
 
 	var cross := _label("+", 26)
+	_cross = cross
 	cross.set_anchors_preset(Control.PRESET_CENTER)
 	cross.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	cross.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -60,6 +64,12 @@ func _ready() -> void:
 	root.add_child(hitmarker)
 
 	_build_damage(root)
+	ammo_label = _label("", 26)
+	ammo_label.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	ammo_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	ammo_label.size = Vector2(300, 40)
+	ammo_label.position = Vector2(-320, -150)
+	root.add_child(ammo_label)
 	_build_summary(root)
 
 	var title := _label("DESERT FORTRESS  v%s" % ProjectSettings.get_setting("application/config/version", ""), 18)
@@ -93,7 +103,7 @@ func _ready() -> void:
 	stamina_bar.add_theme_stylebox_override("fill", fill)
 	root.add_child(stamina_bar)
 
-	help = _label("WASD move  Shift sprint  Space jump  Ctrl crouch  E search  LMB swing  Tab bag  1-9 hotbar  Q drop  F eat/use  M map  B build  F5 save  Esc menu", 16)
+	help = _label("WASD move  Shift sprint  Space jump  Ctrl crouch  E use  LMB attack  RMB aim  R reload  Tab bag  Q drop  F eat  M map  B build  F5 save  Esc menu", 16)
 	help.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	help.position = Vector2(20, -36)
 	root.add_child(help)
@@ -162,6 +172,7 @@ func _label(text: String, size: int) -> Label:
 
 func _process(delta: float) -> void:
 	_update_needs()
+	_update_ammo()
 	if player == null:
 		return
 	var deg: float = player.heading_degrees()
@@ -344,6 +355,22 @@ func _build_damage(root: Control) -> void:
 	wedge.polygon = pts
 	wedge.color = Color(1.0, 0.15, 0.1, 0.85)
 	damage_arrow.add_child(wedge)
+
+
+## "Pistol 9 / 24" while a gun is in your hands; the crosshair fades when aiming.
+func _update_ammo() -> void:
+	if guns == null or guns.item == "":
+		ammo_label.text = ""
+		_cross.modulate.a = 1.0
+		return
+	var g: Dictionary = guns.GUNS[guns.item]
+	var text := "%s  %d / %d" % [Items.display_name(guns.item), guns.loaded(guns.item), inventory.count_of(g.ammo)]
+	if guns.reload_t >= 0.0:
+		text += "\nReloading..."
+	elif guns.loaded(guns.item) == 0:
+		text += "\n[R] Reload" if inventory.count_of(g.ammo) > 0 else "\nNo ammo"
+	ammo_label.text = text
+	_cross.modulate.a = 1.0 - guns.ads_amount
 
 
 ## End-of-wave summary card under the compass.

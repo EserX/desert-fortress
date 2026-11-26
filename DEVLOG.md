@@ -2,6 +2,24 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v0.17.0 (2026-11-26): The pistol
+- **Pistol:** a 12-round 9mm, held in both hands. **Left click** fires one shot (up to 5 a second), 34 damage, so three hits drop a walker and two a runner. Bullets travel 90 m.
+- **Aim down the sights:** hold **right click**. The gun comes up to the centre with the sights on the crosshair, the view zooms in a little, and the spread shrinks from about 1.8° at the hip to 0.25°. The crosshair fades while aiming.
+- **Recoil:** every shot kicks the view up (less when aimed) and nudges it to the side, and the gun jumps back in your hands. **Muzzle flash** with a short burst of light (you'll see it light up your arms at night).
+- **Reload:** **R** (when not in build mode). 1.5 seconds, with the gun tipping down while you swap the magazine. Rounds come from your pockets, and an empty pistol clicks and starts a reload by itself. The HUD shows "Pistol 9 / 24" (loaded / spare) and says when to reload or when you are out.
+- **Ammo is an item:** **9mm rounds** (stack of 60, almost weightless). Found in some car trunks and in every supply crate (8–20); supply crates sometimes hold a pistol too. At the workbench: **pistol** (10 scrap, 2 wood, 6 nails) and **8 rounds** (2 scrap, 3 nails).
+- **Loud:** a gunshot brings every wandering mutant within 45 m running. Melee is still the quiet option.
+- **Sounds:** a generated crack with a low thump and a faint echo, an empty click, and the clacks of a reload.
+- Bullets kick up dust where they hit the ground or walls, and show the usual hit marker and damage numbers on targets.
+- Shorter controls line so it fits at 1280×720.
+- **Saved:** rounds in the magazine. Older saves load with an empty pistol (if you have one).
+- **Code:** new `guns.gd` (a `GUNS` table ready for the shotgun and rifle), `Mutants.alert()` for noise, two new items and recipes.
+- **Tests:** crafting a pistol and rounds, empty click and auto-reload, reloading from your pockets, no reload without ammo, a full magazine, the HUD ammo text, aiming zoom, three aimed hits on the dummy at 10 m, a round per shot, view kick, rate limit, a gunshot alerting a walker 27 m away, the magazine saved, and the gun hiding and the view zooming back out when you put it away. New screenshot views `24_pistol` and `25_pistol_ads`.
+
+**Try:** make a pistol at the workbench (or find one in a supply crate) and some rounds, then pick off the walkers coming across the sand at night. Right click to aim.
+**Next:** v0.18, the shotgun and the rifle, weapon switching, ammo types and a headshot bonus.
+**Note:** the workbench list is now full at 1280×720; the next recipes need a second column or a scroll list.
+
 ## v0.16.0 (2026-11-26): Runner, Brute and Spitter
 - **Runner:** lean, reddish, with claws and bared teeth, bent almost double. 45 health (two machete hits), but it runs at 6.4 m/s, faster than you walk, so only sprinting gets you away. Small, quick swipes (7 damage). Weak against walls.
 - **Brute:** a big grey-purple hulk with huge fists. 420 health (11 machete hits) and barely flinches. Slow (2.5 m/s), with a long reach and a slow, heavy swing (30 damage). It **wrecks walls**: 95 per hit, so a wooden wall lasts about three swings. Kill brutes before they reach your walls, or upgrade.

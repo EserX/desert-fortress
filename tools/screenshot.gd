@@ -31,6 +31,8 @@ var shots := [
 	{"name": "21_summary", "pos": Vector3(2, 0, 14), "yaw": 0.3, "pitch": -0.04, "hour": 6.4, "summary": true},
 	{"name": "22_breakin", "pos": Vector3(3.0, 0, -0.5), "yaw": 0.25, "pitch": -0.1, "hour": 19.4, "breakin": true},
 	{"name": "23_types", "pos": Vector3(60, 0, 60), "yaw": 0.4, "pitch": -0.03, "hour": 16.5, "types": true},
+	{"name": "24_pistol", "pos": Vector3(60, 0, 60), "yaw": 0.4, "pitch": -0.03, "hour": 10.5, "pistol": false},
+	{"name": "25_pistol_ads", "pos": Vector3(60, 0, 60), "yaw": 0.4, "pitch": -0.03, "hour": 18.8, "pistol": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -116,6 +118,10 @@ func _process(_d: float) -> bool:
 			main.hud.show_hitmarker("target")
 		if s.get("walker", false):
 			_walker_sample(p)
+		if s.has("pistol"):
+			_pistol_sample(p, s.pistol)
+		elif main.guns.item != "":
+			main.guns.set_item("")
 		if s.get("types", false):
 			_types_sample(p)
 		if s.get("breakin", false):
@@ -295,3 +301,25 @@ func _types_sample(p: Node3D) -> void:
 	main.inventory.add("machete", 1)
 	main.inventory.selected = 0
 	main.melee.set_item("machete")
+
+
+## The pistol at the hip, or aimed with the muzzle flashing at a walker (v0.17).
+func _pistol_sample(p: Node3D, aimed: bool) -> void:
+	var ms = main.mutants
+	ms.clear()
+	var w = ms.spawn("walker", p.position - p.global_transform.basis.z * 9.0)
+	w.rotation.y = p.rotation.y + PI
+	w.set_physics_process(false)
+	w._animate(0.0, 2.0)
+	main.inventory.load_data({})
+	main.inventory.add_all({"pistol": 1, "ammo_9mm": 36})
+	main.inventory.selected = 0
+	main.melee.set_item("")
+	main.guns.set_item("pistol")
+	main.guns.mag = {"pistol": 9}
+	main.guns.set_ads(aimed)
+	main.guns.ads_amount = 1.0 if aimed else 0.0
+	if aimed:
+		main.guns._flash.visible = true
+		main.guns._flash_t = 30.0
+		main.guns._kick = 0.4

@@ -32,7 +32,7 @@ One version per development run, in this order. The full plan with reasons is in
 - [x] v0.16: Runner (fast, weak), Brute (slow, tanky, wrecks walls) and Spitter (ranged acid). Waves mix types and scale up each night
 
 ### M5: Defence
-- [ ] v0.17: Pistol: aim down sights, recoil, muzzle flash, reload, ammo as an item, sound
+- [x] v0.17: Pistol: aim down sights, recoil, muzzle flash, reload, ammo as an item, sound
 - [ ] v0.18: Shotgun and rifle, weapon switching, ammo types, headshot bonus
 - [ ] v0.19: Traps: spike strip, barbed wire (slows), landmine
 - [ ] v0.20: Fire pit, electric fence with a fuel generator, floodlights

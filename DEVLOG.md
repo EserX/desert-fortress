@@ -2,6 +2,19 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v1.0.0 (2026-11-26): Version 1.0
+The last parts of the v1.0 item (difficulty and hints came in v0.25):
+- **Graphics quality** in Settings: **Low** (no sun shadows, 75% render scale, 450 m view distance), **Medium** (shadows to 90 m, no anti-aliasing, 650 m) or **High** (the old look: shadows to 160 m, 2× anti-aliasing, 900 m). If the game stutters on the laptop, try Medium or Low. It applies straight away and is remembered.
+- **Performance:** wandering mutants far from you pause, turrets and traps only check a few times a second, and repeated props are MultiMeshes. Low quality is there for heavy nights with 30+ mutants on screen.
+- **Standalone Linux build:** `./export.sh` makes `build/desert-fortress.x86_64`, one 70 MB file that runs without Godot or the source folder. The first time it downloads Godot's export templates (1.3 GB, one time) and keeps just the Linux ones. I tested it here: the exported file starts and shows the title screen. `export_presets.cfg` holds the "Linux" preset (tests, tools and screenshots are left out).
+- **README** rewritten as a short manual: how to play your first day, survival, building, nights and the four mutant types, weapons, defences, cash and the shop, difficulty, every control, settings and performance, and where saves live.
+- **Tests:** low and high quality settings. All tests and the flow test pass.
+
+This completes the roadmap through **M6** and **v1.0**. Thanks for playing!
+
+**Try:** `./export.sh`, then run `build/desert-fortress.x86_64` on its own. Start a new game on Normal and see how many nights you last.
+**Next:** the owner picks from "After 1.0" (sandstorms, a boss every 10 nights, a buggy, outposts, animated characters, a soundtrack, Windows and Steam Deck builds), or adds player feedback.
+
 ## v0.25.0 (2026-11-26): Difficulty and first-time hints (v1.0, part 1)
 The v1.0 item is big, so it comes in parts. It stays unticked on the roadmap until all of it is done.
 - **Difficulty:** New game now asks for **Easy, Normal or Hard**. It stays with that game (it is in the save):

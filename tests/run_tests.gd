@@ -1275,17 +1275,26 @@ func _test_difficulty_and_hints() -> void:
 	var was: bool = s.hints
 	s.hints = true
 	s.hints_seen = []
+	main.hud._hint_queue.clear()
+	main.hud._hint_time = 0.0
 	check(main.hints.show_hint("gun") and main.hud.hint_box.visible and main.hud._hint_label.text.contains("reload"), "a first-time hint shows: " + main.hud._hint_label.text)
 	check(not main.hints.show_hint("gun"), "only the first time")
 	main.hud._hint_time = 0.0
 	main.hints.show_hint("build")
 	main.hints.show_hint("hammer")
-	check(main.hud._hint_queue.size() == 1, "hints wait their turn")
+	check(main.hud._hint_queue.size() == 1, "hints wait their turn (%s)" % str(main.hud._hint_queue))
 	s.hints = false
 	check(not main.hints.show_hint("mutant"), "no hints when they are turned off")
 	s.hints = was
 	s.hints_seen = []
 	s.save_settings()
+	# Graphics quality.
+	var q: int = s.quality
+	s.set_value("quality", 0)
+	check(not main.sun.shadow_enabled and main.player.camera.far < 500.0 and main.get_viewport().scaling_3d_scale < 1.0, "low quality: no sun shadows, shorter view, lower render scale")
+	s.set_value("quality", 2)
+	check(main.sun.shadow_enabled and main.player.camera.far == 900.0 and main.get_viewport().msaa_3d == Viewport.MSAA_2X, "high quality: shadows, full view, anti-aliasing")
+	s.set_value("quality", q)
 
 
 func _start_spitter() -> void:

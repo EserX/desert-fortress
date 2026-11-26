@@ -146,6 +146,8 @@ func _ready() -> void:
 	day_night.name = "DayNight"
 	add_child(day_night)
 	day_night.setup(sun, moon, env, sky_mat)
+	_apply_quality()
+	Settings.changed.connect(_apply_quality)
 
 	if menu_mode:
 		_setup_orbit_camera()
@@ -160,6 +162,7 @@ func _ready() -> void:
 	player.spawn_point = spawn
 	player.play_radius = terrain.PLAY_RADIUS
 	add_child(player)
+	_apply_quality()
 
 	ambience = Ambience.new()
 	ambience.name = "Ambience"
@@ -921,6 +924,15 @@ func apply_save_data(data: Dictionary) -> void:
 	player.head.rotation.x = float(p.get("pitch", 0.0))
 	player.stamina = float(p.get("stamina", player.STAMINA_MAX))
 	player.velocity = Vector3.ZERO
+
+
+## Graphics quality: sun shadows and how far you can see.
+func _apply_quality() -> void:
+	var q: Dictionary = Settings.QUALITY[Settings.quality]
+	sun.shadow_enabled = q.shadows
+	sun.directional_shadow_max_distance = maxf(q.shadow_dist, 1.0)
+	if player:
+		player.camera.far = q.far
 
 
 func _setup_environment() -> void:

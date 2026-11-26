@@ -42,7 +42,7 @@ One version per development run, in this order. The full plan with reasons is in
 - [x] v0.22: Cash per wave (kills, waves survived, base condition). Shop terminal at the base: materials, weapons, ammo, traps
 - [x] v0.23: Drone delivery to a landing pad. Blueprints unlock new builds
 - [x] v0.24: Base upgrades: bigger build zone, storage, workbench tiers, a radio warning which mutant types are coming
-- [ ] v1.0: Balance and polish: difficulty settings, first-time hints, performance pass, standalone Linux export, README as a short manual (difficulty and hints done in v0.25)
+- [x] v1.0: Balance and polish: difficulty settings, first-time hints, performance pass, standalone Linux export, README as a short manual
 
 ### After 1.0 (not scheduled, the owner picks)
 Sandstorms, a boss mutant every 10 nights, a bigger crafting tree, a buggy, outposts, animated low-poly characters, a generated soundtrack, Windows and Steam Deck builds.

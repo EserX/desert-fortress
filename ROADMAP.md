@@ -11,9 +11,9 @@ One version per development run, in this order. The full plan with reasons is in
 - [x] v0.1: procedural desert, first-person movement, props, compass HUD
 - [x] v0.2: day/night cycle, pause menu and settings, generated audio, crouch, dust
 - [x] v0.3: title screen, New game, Continue, save slots, quicksave and autosave, quit to desktop
+- [x] v0.4: interact key (E) with a prompt, search wrecks and ruin crates, loot pop-ups, opened containers saved
 
 ### M2: Scavenging and survival
-- [ ] v0.4: Interact key (E) with an on-screen prompt. Search wrecks (glovebox, trunk) and ruins (crates). Pickup pop-ups. Loot: scrap metal, wood, cloth, nails, canned food, water bottles. Opened containers are saved
 - [ ] v0.5: Inventory (Tab) with a grid, stacking and a weight limit (too heavy means no sprint). Hotbar 1–9, drop items. Saved with the game
 - [ ] v0.6: Health, hunger and thirst. Midday heat drains water faster, and shade helps. Eat and drink from the hotbar. Death screen, then respawn at the base flag, keeping your items
 - [ ] v0.7: Map (M) showing discovered places. Loot refills each morning at random spots. Rare supply crates with better loot

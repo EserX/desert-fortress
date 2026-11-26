@@ -1,5 +1,8 @@
 extends CanvasLayer
-## On-screen info: crosshair, compass, distance to base, stamina, controls help.
+## On-screen info: crosshair, compass, distance to base, stamina, controls help,
+## the interact prompt with a search bar, and pickup pop-ups.
+
+const Items = preload("res://scripts/items.gd")
 
 const DIRS := ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
 
@@ -12,6 +15,11 @@ var help: Label
 var clock: Label
 var banner: Label
 var day_night  # DayNight
+var interaction  # Interaction
+var inventory  # Inventory
+var prompt: Label
+var search_bar: ProgressBar
+var pickups: VBoxContainer
 var _banner_time := 0.0
 var _help_time := 12.0
 
@@ -61,7 +69,42 @@ func _ready() -> void:
 	stamina_bar.add_theme_stylebox_override("fill", fill)
 	root.add_child(stamina_bar)
 
-	help = _label("WASD move   Shift sprint   Space jump   Mouse look   Ctrl crouch   F5 quicksave   Esc menu", 16)
+	prompt = _label("", 20)
+	prompt.set_anchors_preset(Control.PRESET_CENTER)
+	prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	prompt.size = Vector2(400, 30)
+	prompt.position = Vector2(-200, 34)
+	root.add_child(prompt)
+
+	search_bar = ProgressBar.new()
+	search_bar.show_percentage = false
+	search_bar.set_anchors_preset(Control.PRESET_CENTER)
+	search_bar.size = Vector2(160, 8)
+	search_bar.position = Vector2(-80, 68)
+	search_bar.max_value = 1.0
+	var sbg := StyleBoxFlat.new()
+	sbg.bg_color = Color(0, 0, 0, 0.5)
+	var sfill := StyleBoxFlat.new()
+	sfill.bg_color = Color(1.0, 0.92, 0.7)
+	search_bar.add_theme_stylebox_override("background", sbg)
+	search_bar.add_theme_stylebox_override("fill", sfill)
+	search_bar.visible = false
+	root.add_child(search_bar)
+
+	pickups = VBoxContainer.new()
+	pickups.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
+	pickups.size = Vector2(300, 260)
+	pickups.position = Vector2(-320, -40)
+	pickups.alignment = BoxContainer.ALIGNMENT_END
+	pickups.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(pickups)
+
+	if interaction:
+		interaction.focus_changed.connect(_on_focus_changed)
+		interaction.search_progress.connect(_on_search_progress)
+		interaction.looted.connect(_on_looted)
+
+	help = _label("WASD move   Shift sprint   Space jump   Mouse look   Ctrl crouch   E search   F5 quicksave   Esc menu", 16)
 	help.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	help.position = Vector2(20, -36)
 	root.add_child(help)
@@ -129,6 +172,58 @@ func _process(delta: float) -> void:
 	if _help_time > 0.0:
 		_help_time -= delta
 		help.modulate.a = clampf(_help_time / 2.0, 0.0, 1.0)
+
+
+	# Pickup pop-ups drift up a little and fade out.
+	for c in pickups.get_children():
+		var age: float = c.get_meta("age", 0.0) + delta
+		c.set_meta("age", age)
+		c.modulate.a = clampf((4.0 - age) / 1.0, 0.0, 1.0) * clampf(age * 6.0, 0.0, 1.0)
+		if age > 4.0:
+			c.queue_free()
+
+
+func _on_focus_changed(target: Node) -> void:
+	if target == null:
+		prompt.text = ""
+	elif target.opened:
+		prompt.text = "%s (searched)" % target.label.capitalize()
+		prompt.modulate = Color(1, 1, 1, 0.55)
+	else:
+		prompt.text = "[E]  Search %s" % target.label
+		prompt.modulate = Color.WHITE
+
+
+func _on_search_progress(fraction: float) -> void:
+	search_bar.visible = fraction >= 0.0
+	search_bar.value = maxf(fraction, 0.0)
+	if fraction >= 0.0 and interaction and interaction.searching:
+		prompt.text = "Searching %s..." % interaction.searching.label
+	elif interaction:
+		_on_focus_changed(interaction.focus)
+
+
+func _on_looted(_target: Node, loot: Dictionary) -> void:
+	if loot.is_empty():
+		add_pickup("Nothing useful here", Color(0.85, 0.8, 0.75))
+		return
+	for id in loot:
+		var total: int = inventory.count(id) if inventory else int(loot[id])
+		add_pickup("+%d  %s   (%d)" % [loot[id], Items.display_name(id), total], Items.ITEMS[id].color)
+
+
+## Adds a short-lived line on the right side of the screen.
+func add_pickup(text: String, color: Color) -> void:
+	var l := _label(text, 20)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	l.add_theme_color_override("font_color", color)
+	l.set_meta("age", 0.0)
+	l.modulate.a = 0.0
+	pickups.add_child(l)
+	while pickups.get_child_count() > 7:
+		var old := pickups.get_child(0)
+		pickups.remove_child(old)
+		old.queue_free()
 
 
 func show_banner(text: String) -> void:

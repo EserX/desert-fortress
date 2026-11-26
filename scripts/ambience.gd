@@ -6,11 +6,15 @@ const MIX_RATE := 22050.0
 
 var player  # Player (untyped to avoid a circular preload)
 var day_night  # DayNight
+var interaction  # Interaction
 
 var _wind_player: AudioStreamPlayer
 var _wind: AudioStreamGeneratorPlayback
 var _step_player: AudioStreamPlayer
 var _land_player: AudioStreamPlayer
+var _rummage_player: AudioStreamPlayer
+var _pickup_player: AudioStreamPlayer
+var _rummage_timer := 0.0
 var _step_sounds: Array[AudioStreamWAV] = []
 var _rng := RandomNumberGenerator.new()
 var _dust: CPUParticles3D
@@ -28,9 +32,12 @@ func _ready() -> void:
 	_setup_wind()
 	_setup_steps()
 	_setup_dust()
+	_setup_loot_sounds()
 	if player:
 		player.footstep.connect(_on_footstep)
 		player.landed.connect(_on_landed)
+	if interaction:
+		interaction.looted.connect(_on_looted)
 
 
 # --- Wind -------------------------------------------------------------------
@@ -49,6 +56,13 @@ func _setup_wind() -> void:
 
 func _process(delta: float) -> void:
 	_fill_wind(delta)
+	# Rustling while searching: a quick crunch every so often.
+	if interaction and interaction.searching:
+		_rummage_timer -= delta
+		if _rummage_timer <= 0.0:
+			_rummage_timer = _rng.randf_range(0.12, 0.25)
+			_rummage_player.pitch_scale = _rng.randf_range(1.3, 2.0)
+			_rummage_player.play()
 	if _dust and player:
 		_dust.global_position = player.global_position + Vector3(0, 2.0, 0)
 
@@ -127,6 +141,43 @@ func _on_landed(fall_speed: float) -> void:
 	_land_player.volume_db = lerpf(-14.0, -2.0, clampf((fall_speed - 3.0) / 8.0, 0.0, 1.0))
 	_land_player.pitch_scale = _rng.randf_range(0.8, 1.0)
 	_land_player.play()
+
+
+# --- Searching and pickups -------------------------------------------------
+
+func _setup_loot_sounds() -> void:
+	_rummage_player = AudioStreamPlayer.new()
+	_rummage_player.stream = _make_crunch(0.09, 0.6, 2200.0)
+	_rummage_player.volume_db = -14.0
+	add_child(_rummage_player)
+	_pickup_player = AudioStreamPlayer.new()
+	_pickup_player.stream = _make_chime()
+	_pickup_player.volume_db = -12.0
+	add_child(_pickup_player)
+
+
+## Two soft rising tones: "found something".
+func _make_chime() -> AudioStreamWAV:
+	var n := int(MIX_RATE * 0.32)
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	for i in n:
+		var t := float(i) / MIX_RATE
+		var f := 660.0 if t < 0.1 else 880.0
+		var t0 := t if t < 0.1 else t - 0.1
+		var env := minf(t0 / 0.005, 1.0) * exp(-t0 * 14.0)
+		var s := sin(TAU * f * t) * 0.7 + sin(TAU * f * 2.0 * t) * 0.15
+		data.encode_s16(i * 2, int(clampf(s * env, -1.0, 1.0) * 26000.0))
+	var wav := AudioStreamWAV.new()
+	wav.format = AudioStreamWAV.FORMAT_16_BITS
+	wav.mix_rate = int(MIX_RATE)
+	wav.data = data
+	return wav
+
+
+func _on_looted(_target: Node, loot: Dictionary) -> void:
+	if not loot.is_empty():
+		_pickup_player.play()
 
 
 # --- Dust -------------------------------------------------------------------

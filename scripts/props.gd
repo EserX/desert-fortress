@@ -1,11 +1,14 @@
 extends Node3D
 ## Scatters desert props: rocks, cacti, dry shrubs, rusted car wrecks and
-## ruined concrete walls. Wrecks and ruins are the future scavenging spots.
+## ruined concrete walls. Wrecks (glovebox, trunk) and ruins (crates) can be searched.
 
 const LowPoly = preload("res://scripts/lowpoly.gd")
 const Terrain = preload("res://scripts/terrain.gd")
+const LootContainer = preload("res://scripts/loot_container.gd")
 
 var rng := RandomNumberGenerator.new()
+## Separate stream for loot spots so adding them doesn't move the other props.
+var loot_rng := RandomNumberGenerator.new()
 var terrain: Terrain
 
 # Shared meshes/materials (built once).
@@ -22,11 +25,16 @@ var cloth_mat: StandardMaterial3D
 ## Spots other systems may want later (loot, mutant spawns...).
 var wreck_positions: Array[Vector3] = []
 var ruin_positions: Array[Vector3] = []
+## Every searchable spot (LootContainer), in a stable order.
+var containers: Array = []
+var _box := BoxMesh.new()
+var _dark_mat: StandardMaterial3D
 
 
 func populate(terrain_node: Terrain, seed_value: int) -> void:
 	terrain = terrain_node
 	rng.seed = seed_value * 7 + 3
+	loot_rng.seed = seed_value * 13 + 5
 	_build_shared()
 	_place_base_marker()
 	for i in 260:
@@ -67,6 +75,7 @@ func _build_shared() -> void:
 	concrete_mat = LowPoly.material(Color(0.60, 0.56, 0.50))
 	wood_mat = LowPoly.material(Color(0.45, 0.31, 0.19))
 	cloth_mat = LowPoly.material(Color(0.75, 0.18, 0.12))
+	_dark_mat = LowPoly.material(Color(0.08, 0.07, 0.06))
 
 
 ## Random point on the dunes, outside the base clearing and inside the mountains.
@@ -215,6 +224,36 @@ func _place_wreck() -> void:
 		_mesh(body, wheel_mesh, dark, w, Vector3.ONE, Vector3(PI / 2, 0, 0))
 	_box_collider(body, Vector3(4.4, 1.0, 1.9), Vector3(0, 0.6, 0))
 	_box_collider(body, Vector3(2.1, 0.7, 1.75), Vector3(-0.35, 1.42, 0))
+	_add_wreck_loot(body, paint, wreck_positions.size() - 1)
+
+
+## Glovebox (reached from either front door) and a trunk with a lid that opens.
+func _add_wreck_loot(body: Node3D, paint: Material, index: int) -> void:
+	var glove := LootContainer.new()
+	glove.container_id = "wreck%d_glovebox" % index
+	glove.kind = "glovebox"
+	glove.label = "glovebox"
+	glove.search_time = 0.8
+	glove.add_box(Vector3(0.8, 0.7, 2.1), Vector3(0.4, 1.35, 0))
+	body.add_child(glove)
+	containers.append(glove)
+
+	var trunk := LootContainer.new()
+	trunk.container_id = "wreck%d_trunk" % index
+	trunk.kind = "trunk"
+	trunk.label = "trunk"
+	trunk.search_time = 1.2
+	trunk.add_box(Vector3(1.1, 0.5, 2.1), Vector3(-1.85, 1.0, 0))
+	# Dark hole under the lid, hidden while the lid is shut.
+	_mesh(body, _box, _dark_mat, Vector3(-1.82, 1.1, 0), Vector3(0.7, 0.02, 1.6))
+	var pivot := Node3D.new()
+	pivot.position = Vector3(-1.42, 1.11, 0)
+	body.add_child(pivot)
+	_mesh(pivot, _box, paint, Vector3(-0.39, 0, 0), Vector3(0.78, 0.05, 1.78))
+	trunk.lid = pivot
+	trunk.lid_open_rotation = Vector3(0, 0, -1.15)
+	body.add_child(trunk)
+	containers.append(trunk)
 
 
 func _place_ruin() -> void:
@@ -244,6 +283,49 @@ func _place_ruin() -> void:
 		var world := body.transform * local
 		local.y = terrain.surface_height(world.x, world.z) - p.y + s * 0.15
 		_mesh(body, box, concrete_mat, local, Vector3(s, s * 0.6, s), Vector3(rng.randf(), rng.randf(), rng.randf()))
+	# Supply crates sheltered inside the corner of the L.
+	var index := ruin_positions.size() - 1
+	var spots := [Vector3(1.1, 0, 1.0)]
+	if loot_rng.randf() < 0.6:
+		spots.append(Vector3(loot_rng.randf_range(2.6, 4.0), 0, 0.85))
+	for i in spots.size():
+		var world: Vector3 = body.transform * spots[i]
+		_place_crate(world, body.rotation.y + loot_rng.randf_range(-0.4, 0.4), "ruin%d_crate%d" % [index, i])
+
+
+## A wooden supply crate whose lid flips open when searched.
+func _place_crate(pos: Vector3, yaw: float, id: String) -> void:
+	var size := Vector3(0.9, 0.6, 0.6)
+	var ground := terrain.ground_under(pos.x, pos.z, 0.45)
+	var body := _body_at(Vector3(pos.x, ground - 0.05, pos.z), yaw)
+	_mesh(body, _box, wood_mat, Vector3(0, size.y * 0.5, 0), size)
+	# Darker slats so it reads as a crate.
+	var slat := LowPoly.material(Color(0.33, 0.22, 0.13))
+	for x in [-0.42, 0.42]:
+		_mesh(body, _box, slat, Vector3(x, size.y * 0.5, 0), Vector3(0.08, size.y + 0.01, size.z + 0.02))
+	_mesh(body, _box, _dark_mat, Vector3(0, size.y - 0.005, 0), Vector3(size.x - 0.1, 0.02, size.z - 0.1))
+	_box_collider(body, size, Vector3(0, size.y * 0.5, 0))
+	var pivot := Node3D.new()
+	pivot.position = Vector3(0, size.y + 0.03, -size.z * 0.5)
+	body.add_child(pivot)
+	_mesh(pivot, _box, slat, Vector3(0, 0, size.z * 0.5), Vector3(size.x + 0.04, 0.06, size.z + 0.04))
+	var crate := LootContainer.new()
+	crate.container_id = id
+	crate.kind = "crate"
+	crate.label = "crate"
+	crate.search_time = 1.5
+	crate.add_box(size + Vector3(0.12, 0.15, 0.12), Vector3(0, size.y * 0.5, 0))
+	crate.lid = pivot
+	crate.lid_open_rotation = Vector3(-1.9, 0, 0)
+	body.add_child(crate)
+	containers.append(crate)
+
+
+func container_by_id(id: String) -> Node:
+	for c in containers:
+		if c.container_id == id:
+			return c
+	return null
 
 
 ## A flag pole and a few crates marking where the fortress will be built.

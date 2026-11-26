@@ -10,6 +10,8 @@ var start_pos: Vector3
 var events: Array[String] = []
 var title: Node
 var game: Node
+var trunk: Node
+var Items = preload("res://scripts/items.gd")
 
 
 func _initialize() -> void:
@@ -44,6 +46,21 @@ func _process(_delta: float) -> bool:
 			check(down == 0, "all terrain normals face up (%d down)" % down)
 			check(main.props.get_child_count() > 300, "props spawned (%d)" % main.props.get_child_count())
 			check(main.props.wreck_positions.size() > 0, "wrecks placed")
+			var n_wreck: int = main.props.wreck_positions.size()
+			check(main.props.containers.size() >= n_wreck * 2 + main.props.ruin_positions.size(), "loot containers placed (%d)" % main.props.containers.size())
+			var ids := {}
+			for c in main.props.containers:
+				ids[c.container_id] = true
+			check(ids.size() == main.props.containers.size(), "container ids are unique")
+			check(Items.roll("crate", 42) == Items.roll("crate", 42), "loot rolls are repeatable")
+			var all_known := true
+			var any_loot := false
+			for i in 50:
+				var loot: Dictionary = Items.roll("crate", i)
+				any_loot = any_loot or not loot.is_empty()
+				for id in loot:
+					all_known = all_known and Items.ITEMS.has(id) and int(loot[id]) > 0
+			check(any_loot and all_known, "crate loot uses known items")
 		120:
 			var ground: float = terrain.height_at(player.position.x, player.position.z)
 			check(player.is_on_floor(), "player standing on the ground after spawn")
@@ -133,7 +150,49 @@ func _process(_delta: float) -> bool:
 			check(title.world.menu_mode and title.world.player == null, "title screen shows the world without a player")
 			check(title._col.get_child_count() >= 5, "title menu has its buttons")
 			title.queue_free()
-		720:
+			# Walk up behind a wreck and look at its trunk.
+			trunk = main.props.container_by_id("wreck0_trunk")
+			var car: Node3D = trunk.get_parent()
+			var stand: Vector3 = car.global_transform * Vector3(-3.3, 0, 0)
+			player.position = Vector3(stand.x, terrain.surface_height(stand.x, stand.z) + 0.05, stand.z)
+			player.velocity = Vector3.ZERO
+		740:
+			var target: Vector3 = trunk.get_parent().global_transform * Vector3(-1.85, 1.05, 0)
+			var d: Vector3 = target - player.camera.global_position
+			player.rotation.y = atan2(-d.x, -d.z)
+			player.head.rotation.x = atan2(d.y, Vector2(d.x, d.z).length())
+		750:
+			check(main.interaction.focus == trunk, "looking at the trunk focuses it (%s)" % str(main.interaction.focus))
+			check(main.hud.prompt.text.contains("Search trunk"), "prompt says: " + main.hud.prompt.text)
+			check(main.interaction.start_search(), "E starts a search")
+		850:
+			check(trunk.opened, "trunk searched after its search time")
+			var expected: Dictionary = Items.roll("trunk", hash("%d:%s" % [main.world_seed, "wreck0_trunk"]))
+			check(main.inventory.items == expected, "trunk loot went into the inventory (%s)" % str(main.inventory.items))
+			check(not main.interaction.start_search(), "a searched trunk can't be searched again")
+			check(main.hud.prompt.text.contains("searched"), "prompt shows searched")
+			check(absf(trunk.lid.rotation.z - trunk.lid_open_rotation.z) < 0.01, "trunk lid swung open")
+			# Opened containers and the inventory are saved.
+			main.inventory.add("wood", 2)
+			var data: Dictionary = main.collect_save_data()
+			check(data.opened_containers.has("wreck0_trunk"), "save lists opened containers")
+			var saved_items: Dictionary = main.inventory.items.duplicate()
+			trunk.opened = false
+			main.inventory.from_save({})
+			main.apply_save_data(JSON.parse_string(JSON.stringify(data)))
+			check(trunk.opened, "load restores opened containers")
+			check(main.inventory.items == saved_items, "load restores the inventory")
+			# Older saves without loot data still load.
+			main.apply_save_data({"world": {"day": 2, "hour": 10.0}})
+			check(main.inventory.items.is_empty(), "v0.3 save loads with an empty inventory")
+			# Looking away cancels a search.
+			var crate: Node = main.props.container_by_id("ruin0_crate0")
+			main.interaction.focus = crate
+			main.interaction.start_search()
+			main.interaction.focus = null
+		855:
+			check(main.interaction.searching == null, "looking away cancels the search")
+		870:
 			if failures.is_empty():
 				print("== ALL TESTS PASSED ==")
 				quit(0)

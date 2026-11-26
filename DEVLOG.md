@@ -2,6 +2,13 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v1.0.1 (2026-11-26): Turrets on masts, and a soak test
+- **Fix: turrets behind walls never fired.** Their gun sat at 1 m and walls are 2.4 m tall, so a turret inside your walls couldn't see anything outside them. Turrets now stand on a **3.4 m braced mast** and fire over walls at anything a few metres out (a mutant hugging the wall is still hidden from them; that is what wire, spikes and your own guns are for). They aim at the upper chest.
+- **New `tools/soak_test.gd`:** builds a fortress (a ring of walls with a gate, wire, sandbags, mines, two loaded turrets, a generator, a floodlight, an electric fence and a fire pit), starts a big wave (night 8 by default) and plays the whole night. It prints the lineup, progress every 10 seconds, what is left at the end, and the time per frame. Run it with `godot --headless --path . -s tools/soak_test.gd --fixed-fps 60 -- frames=11000`.
+  - Before the fix: 23 mutants, after a full night only 14 killed and 4 runners still clawing at the walls.
+  - After: all 18 wave mutants killed before dawn, 1 piece lost, no script errors, about 2.3 ms per frame (headless, no rendering) with 20+ mutants.
+- The screenshot tool no longer shows first-time hints in its pictures.
+
 ## v1.0.0 (2026-11-26): Version 1.0
 The last parts of the v1.0 item (difficulty and hints came in v0.25):
 - **Graphics quality** in Settings: **Low** (no sun shadows, 75% render scale, 450 m view distance), **Medium** (shadows to 90 m, no anti-aliasing, 650 m) or **High** (the old look: shadows to 160 m, 2× anti-aliasing, 900 m). If the game stutters on the laptop, try Medium or Low. It applies straight away and is remembered.

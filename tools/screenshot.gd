@@ -37,7 +37,7 @@ var shots := [
 	{"name": "27_rifle_scope", "pos": Vector3(60, 0, 60), "yaw": 0.4, "pitch": -0.0, "hour": 9.0, "gun": "rifle", "aim": true},
 	{"name": "28_traps", "pos": Vector3(5, 0, -0.5), "yaw": 0.55, "pitch": -0.3, "hour": 16.5, "traps": true},
 	{"name": "29_power", "pos": Vector3(6, 0, 10), "yaw": 0.35, "pitch": -0.12, "hour": 22.0, "power": true},
-	{"name": "30_turret", "pos": Vector3(7, 0, -1), "yaw": -0.15, "pitch": -0.3, "hour": 17.0, "turret": true},
+	{"name": "30_turret", "pos": Vector3(8, 0, 5), "yaw": -0.1, "pitch": 0.02, "hour": 17.0, "turret": true},
 	{"name": "31_terminal", "pos": Vector3(-0.6, 0, 4.2), "yaw": 0.5, "pitch": -0.2, "hour": 10.0, "terminal": true},
 	{"name": "32_shop", "pos": Vector3(-0.6, 0, 4.2), "yaw": 0.5, "pitch": -0.2, "hour": 10.0, "shop": true},
 	{"name": "33_drone", "pos": Vector3(4.5, 0, 12.5), "yaw": 0.17, "pitch": 0.28, "hour": 15.0, "drone": true},
@@ -54,6 +54,7 @@ func _initialize() -> void:
 		if arg.begins_with("only="):
 			var want := arg.substr(5)
 			shots = shots.filter(func(s): return s.name == want)
+	root.get_node("Settings").hints = false  # no tips in the pictures (not saved)
 	main = load("res://scenes/main.tscn").instantiate()
 	root.add_child(main)
 
@@ -448,6 +449,7 @@ func _turret_sample() -> void:
 	main.turrets.set_physics_process(false)
 	main.inventory.load_data({})
 	main.inventory.add_all({"scrap": 40, "nails": 20, "wood": 4})
+	main.shop.unlocked["turret"] = true
 	main.build_mode.active = true
 	main.build_mode.select(b.ORDER.find("turret"))
 

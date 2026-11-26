@@ -62,8 +62,9 @@ func update_turret(key: String, rec: Dictionary, delta: float) -> void:
 		shoot(rec, st)
 
 
+## Upper chest: from up on its mast the turret sees more of it over walls.
 static func _aim_point(m: Node3D) -> Vector3:
-	return m.global_position + Vector3(0, 1.1 * float(m.stats.scale.y), 0)
+	return m.global_position + Vector3(0, 1.35 * float(m.stats.scale.y), 0)
 
 
 ## The closest living mutant in range that the turret can see.

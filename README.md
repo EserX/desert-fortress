@@ -47,7 +47,7 @@ If `git pull` complains about untracked `.uid` files, they are safe to delete.
 
 **Weapons.** Melee costs stamina. Guns are loud and bring mutants running. Hold **right click** to aim (the rifle has a scope), **R** reloads. Headshots do double damage.
 
-**Defences.** Spike barricades, spike strips, barbed wire (slows them) and landmines. An electric fence and floodlights need a fuel generator within 18 m (fuel cans come from car trunks). A fire pit burns mutants that walk through it. Auto-turrets shoot anything they can see within 22 m, using the 9mm rounds you load into them with **E**.
+**Defences.** Spike barricades, spike strips, barbed wire (slows them) and landmines. An electric fence and floodlights need a fuel generator within 18 m (fuel cans come from car trunks). A fire pit burns mutants that walk through it. Auto-turrets stand on tall masts and shoot anything they can see within 22 m, over your walls, using the 9mm rounds you load into them with **E**.
 
 **Cash and the shop.** Every night pays for kills, for surviving, and for how much of the base still stands (more if you kill the whole wave). The **shop terminal** next to the flag has three pages:
 - **Counter:** materials, food, weapons, ammo and trap parts, straight into your pockets.
@@ -97,5 +97,6 @@ Add notes under **Player feedback** at the top of `ROADMAP.md` (bugs, how someth
 - `tools/flow_test.gd`: runs title, new game, save, main menu and continue with a display.
 - `tools/screenshot.gd`: renders screenshots for visual checks. Run with
   `xvfb-run godot --path . -s tools/screenshot.gd --rendering-method gl_compatibility`
+- `tools/soak_test.gd`: builds a fortress and plays a whole big night headless, to catch errors and check speed.
 - `export_presets.cfg` and `export.sh`: the standalone Linux build.
 - `CLAUDE.md`: instructions for the scheduled development runs.

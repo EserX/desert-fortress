@@ -452,10 +452,14 @@ static func piece_boxes(type: String) -> Array:
 				out.append([Vector3(0.26, 0.18, 0.02), Vector3(sx * 0.28, 3.2, -0.25), "lamp"])
 		"turret":
 			out.append([Vector3(0.9, 0.1, 0.9), Vector3(0, 0.05, 0), "concrete_dark"])
-			out.append([Vector3(0.2, 0.85, 0.2), Vector3(0, 0.5, 0), "metal"])
+			# A mast tall enough to fire over a wall (walls are 2.4 m).
+			out.append([Vector3(0.2, 3.3, 0.2), Vector3(0, 1.7, 0), "metal"])
+			for sx in [-1.0, 1.0]:
+				out.append([Vector3(0.06, 2.2, 0.06), Vector3(sx * 0.3, 1.0, 0), "rust", 0.0])  # braces
+			out.append([Vector3(0.66, 0.06, 0.06), Vector3(0, 2.1, 0), "rust"])
 			out.append([Vector3(0.45, 0.32, 0.3), Vector3(0.0, 0.26, 0.42), "rust"])   # ammo box
 			out.append([Vector3(0.36, 0.04, 0.26), Vector3(0.0, 0.44, 0.42), "metal"])
-			out.append([Vector3(0.04, 0.5, 0.04), Vector3(0.0, 0.7, 0.3), "metal"])     # feed belt
+			out.append([Vector3(0.04, 2.9, 0.04), Vector3(0.0, 1.9, 0.12), "metal"])    # feed belt up the mast
 		"landing_pad":
 			out.append([Vector3(1.9, 0.12, 1.9), Vector3(0, 0.06, 0), "concrete_dark"])
 			for sx in [-1.0, 1.0]:
@@ -524,7 +528,7 @@ static func piece_colliders(type: String) -> Array:
 		"floodlight":
 			return [[Vector3(0.5, 3.4, 0.5), Vector3(0, 1.7, 0), 0.0]]
 		"turret":
-			return [[Vector3(0.9, 1.3, 1.0), Vector3(0, 0.65, 0.1), 0.0]]
+			return [[Vector3(0.9, 3.4, 1.0), Vector3(0, 1.7, 0.1), 0.0]]
 		"landing_pad":
 			return [[Vector3(1.9, 0.14, 1.9), Vector3(0, 0.07, 0), 0.0]]
 		"sandbags":
@@ -630,7 +634,7 @@ func place(type: String, slot: Dictionary, y: float, gate_open := false, tier :=
 func _add_turret_head(rec: Dictionary) -> void:
 	var head := Node3D.new()
 	head.name = "Head"
-	head.position.y = 1.0
+	head.position.y = 3.4
 	head.scale = Vector3.ONE * 1.4
 	rec.node.add_child(head)
 	var gun := Node3D.new()

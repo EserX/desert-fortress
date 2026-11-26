@@ -20,6 +20,7 @@ const FALL_DAMAGE := 9.0     # per m/s above the safe speed
 const CONSUMABLES := {
 	"canned_food": {"food": 35.0, "water": 5.0},
 	"water": {"water": 40.0},
+	"bandage": {"health": 30.0},
 }
 
 var health := MAX

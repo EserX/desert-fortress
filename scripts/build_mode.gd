@@ -2,7 +2,7 @@ extends Node3D
 ## Build mode (B): a see-through preview of the selected piece snaps to the
 ## grid where you look. Green means it can be built, red means it can't.
 ## Left click builds (costs materials), right click undoes a piece you built
-## in the last minute (full refund; after that use the hammer), R turns the piece, the wheel or 1–8 picks a piece.
+## in the last minute (full refund; after that use the hammer), R turns the piece, the wheel or 1–9 picks a piece.
 ## Aiming higher up a wall or at an upper floor builds on the next level.
 
 const Building = preload("res://scripts/building.gd")

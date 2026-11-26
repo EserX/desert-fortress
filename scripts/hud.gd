@@ -74,7 +74,7 @@ func _ready() -> void:
 	stamina_bar.add_theme_stylebox_override("fill", fill)
 	root.add_child(stamina_bar)
 
-	help = _label("WASD move  Shift sprint  Space jump  Ctrl crouch  E search  Tab bag  1-9 hotbar  Q drop  F eat  M map  B build  F5 save  Esc menu", 16)
+	help = _label("WASD move  Shift sprint  Space jump  Ctrl crouch  E search  Tab bag  1-9 hotbar  Q drop  F eat/use  M map  B build  F5 save  Esc menu", 16)
 	help.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	help.position = Vector2(20, -36)
 	root.add_child(help)

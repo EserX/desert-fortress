@@ -2,6 +2,18 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v0.11.0 (2026-11-26): Base zone, storage chest and workbench
+- **Base build zone:** everything must be built within **26 m of the flag**. A ring of stakes with red rags marks the edge, and in build mode a bright dashed line on the sand shows it too. Outside it the preview turns red: "Outside the base zone".
+- **New build pieces** (key 9 for the chest, or the mouse wheel): **storage chest** (6 wood, 4 nails), **workbench** (6 wood, 3 scrap, 4 nails) and **spike barricade**. They stand in a square on the sand, a foundation or a floor (upper floors too), and R turns them. They have no material tiers, but the hammer repairs and demolishes them.
+- **Storage chest:** E opens it next to your inventory. 20 slots. Click to move stacks, right click moves a whole stack across. Tab, E or walking away closes it. Contents are saved; if a chest is demolished or destroyed, what was in it drops in a bag.
+- **Workbench:** E opens your inventory with three recipes: **hammer** (2 scrap, 2 wood), **bandage** (2 cloth, heals 30 with F) and **spike barricade** (4 wood, 4 nails). The barricade is an item you then build in build mode; demolishing it gives it back whole. It will hurt mutants once they arrive.
+- **Code:** inventories can now have any size (`Inventory.new(20)`), with `move_to`, `transfer` and `contents`. New `base_zone.gd` (MultiMesh stakes and line). Building has a third slot kind, `obj`, so objects can share a square with a foundation or floor.
+- **Saved:** chest contents (inside the building data). Older saves load unchanged.
+- **Tests:** zone check, chest on a foundation, moving stacks in and out, closing when you walk off, chest saved, spilling on removal, workbench crafting with and without materials, bandage healing, spike refund, hammer prompt. New screenshot views `15_base` and `16_bench`.
+
+**Try:** build a workbench near the flag, make a bandage from cloth, then build a chest and store your spare scrap. Walk to the zone edge in build mode to see the line.
+**Next:** v0.12, first-person hands and melee weapons (rusty pipe, machete) with a training dummy.
+
 ## v0.10.0 (2026-11-26): Material tiers and the hammer
 - **Three tiers** for every building piece, each with hit points: **wood** (250), **scrap metal** (600) and **concrete** (1500). Everything is built in wood, except roofs and ramps, which start as scrap metal. Each tier has its own look: planks, grey sheet metal with rusty posts, and grey concrete.
 - **Hammer:** everyone has one (new games start with it in hotbar slot 1, and older saves get one). Select it and look at a piece within 3.5 m. The prompt shows its tier, hit points and what the hammer will do:

@@ -19,6 +19,7 @@ var inventory  # Inventory
 var survival  # Survival
 var _need_bars: Array[ProgressBar] = []
 var heat_label: Label
+var build_label: Label
 var hotbar: HBoxContainer
 var _hotbar_labels: Array[Label] = []
 var _hotbar_panels: Array[Panel] = []
@@ -73,7 +74,7 @@ func _ready() -> void:
 	stamina_bar.add_theme_stylebox_override("fill", fill)
 	root.add_child(stamina_bar)
 
-	help = _label("WASD move   Shift sprint   Space jump   Mouse look   Ctrl crouch   E search   Tab inventory   1-9 hotbar   Q drop   F eat/drink   M map   F5 quicksave   Esc menu", 16)
+	help = _label("WASD move  Shift sprint  Space jump  Ctrl crouch  E search  Tab bag  1-9 hotbar  Q drop  F eat  M map  B build  F5 save  Esc menu", 16)
 	help.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	help.position = Vector2(20, -36)
 	root.add_child(help)
@@ -102,6 +103,14 @@ func _ready() -> void:
 
 	_build_hotbar(root)
 	_build_needs(root)
+
+	build_label = _label("", 18)
+	build_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	build_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	build_label.size = Vector2(900, 50)
+	build_label.position = Vector2(-450, -170)
+	build_label.add_theme_color_override("font_color", Color(0.75, 1.0, 0.75))
+	root.add_child(build_label)
 
 	banner = _label("", 34)
 	banner.set_anchors_preset(Control.PRESET_CENTER_TOP)

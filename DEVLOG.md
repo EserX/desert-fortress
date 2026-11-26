@@ -2,6 +2,20 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v0.8.0 (2026-11-25): Build mode
+- **Build mode (B):** a see-through preview of the selected piece snaps to a 2 m grid where you look (up to 9 m away). **Green** means you can build it, **red** means you can't, and the line above the hotbar says why: not enough materials, ground too steep, something in the way, or already built.
+- **Pieces:** **wooden foundation** (4 wood, 4 nails) fills a grid square and levels out the sand. **Wooden wall** (3 wood, 3 nails) stands on the edge between squares; on a foundation it sits on top of it, otherwise it's planted in the sand.
+- **Controls while building:** left click builds, **R** turns walls 90°, the mouse wheel or 1–2 picks the piece, B leaves build mode. **Right click takes a piece down** and gives back everything it cost (the hammer in v0.10 will make this a partial refund and add repairs).
+- Pieces are solid (you and, later, mutants collide with them) and they cast shade, which helps with the midday heat.
+- You can't build a piece on top of yourself, inside rocks, wrecks or other pieces.
+- **Saved:** every piece. Older saves load with nothing built.
+- Shorter controls line so it fits at 1280×720.
+- The test runner now fails if the game scripts don't compile (before, a parse error could still print "ALL TESTS PASSED").
+- **Tests:** build checks (preview snaps to the grid, needs materials, cost taken, no double building, walls on edges and on top of foundations, R turns walls, can't build on yourself, saved and loaded, take down refunds). New screenshot view `13_build`.
+
+**Try:** loot a few crates for wood and nails, then press B near the flag and lay out a 2×2 floor with walls around it.
+**Next:** v0.9, more pieces: doorway with a gate, window wall, floor, stairs, ramp and roof.
+
 ## v0.7.0 (2026-11-25): Map, morning loot and supply crates
 - **Map (M):** a top-down view of the desert inside the mountain ring. Shows the base, every wreck and ruin you have been within 45 m of, supply crates, and a blue arrow for where you are and which way you face. A green dot marks places that still have something to search. M or Esc closes it. The game keeps running while it's open.
 - **Loot refills each morning:** at 06:00 up to 4 searched gloveboxes, trunks or crates get new loot (different from last time), picked at random.

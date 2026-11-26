@@ -16,10 +16,7 @@ var shots := [
 	{"name": "05_night", "pos": Vector3(0, 0, 9), "yaw": 0.5, "pitch": 0.15, "hour": 23.0},
 	{"name": "06_wreck", "target": "wreck", "hour": 11.0},
 	{"name": "07_ruin", "target": "ruin", "hour": 16.0},
-	{"name": "09_trunk", "target": "trunk", "hour": 10.5},
-	{"name": "10_trunk_open", "target": "trunk", "hour": 10.5, "open": true},
-	{"name": "11_crate", "target": "crate", "hour": 15.0},
-	{"name": "12_crate_open", "target": "crate", "hour": 15.0, "open": true},
+	{"name": "09_crate", "target": "crate", "hour": 10.5},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -47,9 +44,7 @@ func _process(_d: float) -> bool:
 		main.day_night.hour = s.hour
 		main.day_night._apply()
 		p.set_physics_process(false)
-		if s.has("target") and s.target in ["trunk", "crate"]:
-			_look_at_container(p, s.target, s.get("open", false))
-		elif s.has("target"):
+		if s.has("target"):
 			_look_at_target(p, s.target)
 		else:
 			var pos: Vector3 = s.pos
@@ -73,6 +68,14 @@ func _process(_d: float) -> bool:
 
 ## Stand 9 m from the first wreck/ruin and look at it.
 func _look_at_target(p: Node3D, kind: String) -> void:
+	if kind == "crate":
+		var c: Dictionary = main.props.containers.filter(func(x): return x.kind == "crate")[0]
+		var cp: Vector3 = c.lid.global_position
+		p.position = cp + Vector3(1.4, -p.EYE_HEIGHT + 0.5, 0.6)
+		var dc := cp - p.position - Vector3(0, p.EYE_HEIGHT, 0)
+		p.rotation.y = atan2(-dc.x, -dc.z)
+		p.head.rotation.x = atan2(dc.y, Vector2(dc.x, dc.z).length())
+		return
 	var list: Array = main.props.wreck_positions if kind == "wreck" else main.props.ruin_positions
 	var t: Vector3 = list[0]
 	var from := t + Vector3(7, 0, 6)
@@ -81,31 +84,3 @@ func _look_at_target(p: Node3D, kind: String) -> void:
 	var d := t - from
 	p.rotation.y = atan2(-d.x, -d.z)
 	p.head.rotation.x = -0.15
-
-
-## Stand in front of the first trunk or ruin crate and aim at it, optionally
-## after searching it (so the open lid and the pickup pop-ups show).
-func _look_at_container(p: Node3D, kind: String, open: bool) -> void:
-	var id := "wreck0_trunk" if kind == "trunk" else "ruin0_crate0"
-	var c: Node3D = main.props.container_by_id(id)
-	var owner_body: Node3D = c.get_parent()
-	var target: Vector3
-	var stand: Vector3
-	if kind == "trunk":
-		target = owner_body.global_transform * Vector3(-1.85, 1.0, 0)
-		stand = owner_body.global_transform * Vector3(-3.6, 0, 0.9)
-	else:
-		target = owner_body.global_transform * Vector3(0, 0.3, 0)
-		stand = owner_body.global_transform * Vector3(0.4, 0, 1.6)
-	stand.y = main.terrain.surface_height(stand.x, stand.z)
-	p.position = stand
-	var eye: Vector3 = stand + Vector3(0, p.EYE_HEIGHT, 0)
-	var d := target - eye
-	p.rotation.y = atan2(-d.x, -d.z)
-	p.head.rotation.x = atan2(d.y, Vector2(d.x, d.z).length())
-	if open and not c.opened:
-		var loot: Dictionary = c.open(main.world_seed, false)
-		for item in loot:
-			main.inventory.add(item, loot[item])
-		main.interaction.looted.emit(c, loot)
-		main.interaction.focus_changed.emit(c)

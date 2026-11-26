@@ -9,8 +9,8 @@ const Hud = preload("res://scripts/hud.gd")
 const DayNight = preload("res://scripts/day_night.gd")
 const Ambience = preload("res://scripts/ambience.gd")
 const PauseMenu = preload("res://scripts/pause_menu.gd")
-const Inventory = preload("res://scripts/inventory.gd")
-const Interaction = preload("res://scripts/interaction.gd")
+const Loot = preload("res://scripts/loot.gd")
+const Items = preload("res://scripts/items.gd")
 
 ## When true the world is only a backdrop for the title screen:
 ## no player, HUD or pause menu, just a slowly orbiting camera.
@@ -26,8 +26,7 @@ var hud: Hud
 var day_night: DayNight
 var ambience: Ambience
 var pause_menu: PauseMenu
-var inventory: Inventory
-var interaction: Interaction
+var loot: Loot
 var sun: DirectionalLight3D
 var moon: DirectionalLight3D
 var env: Environment
@@ -49,6 +48,13 @@ func _ready() -> void:
 	add_child(props)
 	props.populate(terrain, world_seed)
 
+	loot = Loot.new()
+	loot.name = "Loot"
+	loot.world_seed = world_seed
+	for c in props.containers:
+		loot.register(c.id, c.kind, c.lid)
+	add_child(loot)
+
 	day_night = DayNight.new()
 	day_night.name = "DayNight"
 	add_child(day_night)
@@ -68,34 +74,23 @@ func _ready() -> void:
 	player.play_radius = terrain.PLAY_RADIUS
 	add_child(player)
 
-	inventory = Inventory.new()
-	inventory.name = "Inventory"
-	add_child(inventory)
-	interaction = Interaction.new()
-	interaction.name = "Interaction"
-	interaction.player = player
-	interaction.inventory = inventory
-	interaction.world_seed = world_seed
-	add_child(interaction)
-
 	ambience = Ambience.new()
 	ambience.name = "Ambience"
 	ambience.player = player
 	ambience.day_night = day_night
-	ambience.interaction = interaction
 	add_child(ambience)
 
 	hud = Hud.new()
 	hud.name = "HUD"
 	hud.player = player
 	hud.day_night = day_night
-	hud.interaction = interaction
-	hud.inventory = inventory
 	add_child(hud)
 
 	pause_menu = PauseMenu.new()
 	pause_menu.name = "PauseMenu"
 	add_child(pause_menu)
+
+	loot.picked_up.connect(_on_picked_up)
 
 	# Autosave every morning.
 	day_night.day_started.connect(func(_d): Game.save_game("auto", _screenshot()))
@@ -108,12 +103,18 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event.is_action_pressed("quick_save"):
 		Game.save_game("quick", _screenshot())
+	elif event.is_action_pressed("interact"):
+		var id := player.interact_target()
+		if id != "":
+			loot.open(id)
 	elif event.is_action_pressed("quick_load"):
 		if not Game.load_game("quick"):
 			hud.show_banner("No quicksave yet (F5 to quicksave)")
 
 
 func _process(delta: float) -> void:
+	if hud and not get_tree().paused:
+		hud.set_prompt(loot.prompt(player.interact_target()))
 	if _orbit_camera:
 		_orbit_angle += delta * 0.04
 		var target := Vector3(0, terrain.BASE_HEIGHT + 3.0, 0)
@@ -148,6 +149,13 @@ func thumbnail_image() -> Image:
 	return _screenshot()
 
 
+func _on_picked_up(items: Dictionary) -> void:
+	var lines: Array = []
+	for item in items:
+		lines.append("+%d %s" % [items[item], Items.display_name(item)])
+	hud.show_pickup(lines)
+
+
 # --- Save / load ---------------------------------------------------------------
 
 func collect_save_data() -> Dictionary:
@@ -162,22 +170,14 @@ func collect_save_data() -> Dictionary:
 			"day": day_night.day,
 			"hour": day_night.hour,
 		},
-		"inventory": inventory.to_save(),
-		"opened_containers": opened_container_ids(),
+		"loot": loot.save_data(),
 	}
-
-
-func opened_container_ids() -> Array:
-	var ids := []
-	for c in props.containers:
-		if c.opened:
-			ids.append(c.container_id)
-	return ids
 
 
 func apply_save_data(data: Dictionary) -> void:
 	var w: Dictionary = data.get("world", {})
 	day_night.restore(int(w.get("day", 1)), float(w.get("hour", 9.0)))
+	loot.load_data(data.get("loot", {}))
 	var p: Dictionary = data.get("player", {})
 	var pos: Array = p.get("position", [])
 	if pos.size() == 3:
@@ -188,12 +188,6 @@ func apply_save_data(data: Dictionary) -> void:
 	player.head.rotation.x = float(p.get("pitch", 0.0))
 	player.stamina = float(p.get("stamina", player.STAMINA_MAX))
 	player.velocity = Vector3.ZERO
-	# Added in v0.4; older saves simply have none.
-	inventory.from_save(data.get("inventory", {}))
-	for id in data.get("opened_containers", []):
-		var c = props.container_by_id(str(id))
-		if c:
-			c.set_opened()
 
 
 func _setup_environment() -> void:

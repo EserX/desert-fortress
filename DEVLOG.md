@@ -2,17 +2,17 @@
 
 Newest entries on top. Each development run adds one entry.
 
-## v0.4.0 (2026-11-26): Scavenging
-- **Interact key (E):** look at something searchable within arm's reach and a prompt appears under the crosshair: "[E] Search trunk". Pressing E starts a short search with a progress bar and a rustling sound. Walking off or looking away cancels it.
-- **What you can search:** every car wreck has a **glovebox** (stand by either front door) and a **trunk** (stand behind the car; the lid swings open). Every ruin has one or two **wooden supply crates** tucked inside the corner of the wall, with a lid that flips open. That's 28 wreck spots and about 15 crates per desert.
-- **Loot:** scrap metal, wood, cloth, nails, canned food and water bottles. Each kind of container has its own loot table: gloveboxes give small things (cloth, nails, food, water) and are sometimes empty, trunks mostly give scrap, crates mostly wood and nails.
-- **Pick-up pop-ups** on the right show what you found and your new total, e.g. "+3 Scrap metal (7)", with a soft chime.
-- **Saved:** searched containers stay open (and empty) after loading, and what you carry is kept in the save. Older v0.3 saves still load, just with empty pockets. Loot is fixed per world, so reloading doesn't reroll it.
-- **Decisions:** for now your items are a simple tally (no inventory screen yet; that's v0.5, which will use the item weights already defined). Containers use their own random stream, so wrecks, rocks and ruins in existing worlds didn't move. The base crates are decoration, not loot.
-- **Tests:** 46 headless checks (new: containers placed with unique ids, repeatable loot rolls, aiming at a trunk shows the prompt, searching fills the inventory, lid opens, can't search twice, looking away cancels, save and load of opened containers and inventory, loading a v0.3 save). Screenshot tool has 4 new views: trunk closed and open, crate closed and open.
+## v0.4.0 (2026-11-25): Scavenging
+- **Interact key (E):** look at something searchable within reach and a prompt appears under the crosshair ("[E] Search trunk"). Walls block it, so no looting through concrete.
+- **Wrecks** have a **glovebox** (reach in through the doors) and a **trunk** (at the back). **Ruins** now hide 1–2 wooden **supply crates** in the corner of the wall; searching knocks the lid off.
+- **Loot:** scrap metal, wood, cloth, nails, canned food and water bottles. Gloveboxes hold small things, trunks hold scrap and nails, crates hold wood and supplies. Each container's loot is fixed for a given world, so reloading doesn't reroll it.
+- **Pickup pop-ups** on the right ("+3 Scrap metal") that fade out.
+- **Saved:** which containers are searched and everything you picked up. Older saves still load (nothing searched, empty pockets).
+- Crates use their own random stream, so the rest of an existing world stays where it was.
+- **Tests:** loot checks (crosshair finds a crate, search gives loot, empty after, saved and restored, repeatable rolls). New screenshot view `09_crate`.
 
-**Try:** head out to a car wreck, stand behind it and press E on the trunk, then open the glovebox from the side. Find a concrete ruin and check the crates in its corner. Quicksave (F5), quickload (F9) and see that they stay searched.
-**Next:** v0.5, inventory screen (Tab) with a grid, stacking, weight limit, hotbar and dropping items.
+**Try:** walk to a wreck, aim at the doors and press E, then the trunk. Ruins have crates tucked in the corner.
+**Next:** v0.5, the inventory screen (Tab) and the hotbar, so you can see what you've collected.
 
 ## v0.3.0 (2026-11-25): Title screen, saving and loading
 - **Title screen:** the desert at sunset with a slowly circling camera behind the menu. Buttons: **Continue** (loads your most recent save), **New game**, **Load game**, **Settings** and **Quit to desktop**.

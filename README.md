@@ -32,7 +32,6 @@ If the game won't start or looks broken, try the OpenGL renderer with `./play.sh
 | Shift | Sprint (uses stamina) |
 | Space | Jump |
 | Ctrl / C | Crouch |
-| E | Search (glovebox, trunk, crate) |
 | Mouse | Look |
 | Esc | Pause menu (save, load, settings, quit) |
 | F5 / F9 | Quicksave / quickload |

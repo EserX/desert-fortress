@@ -71,7 +71,7 @@ func top_up(day: int) -> int:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash("mutants:%d:%d" % [world_seed, day])
 	var n := 0
-	while alive().size() < WANDERERS:
+	while alive().filter(func(m): return not m.hunter).size() < WANDERERS:
 		spawn("walker", random_spot(rng))
 		n += 1
 	return n
@@ -107,6 +107,8 @@ func load_data(data: Dictionary) -> void:
 		var h: Array = d.get("home", [])
 		if h.size() == 3:
 			m.home = Vector3(h[0], h[1], h[2])
+		if d.get("hunter", false):
+			m.make_hunter(m.home)
 
 
 ## Generated voices: a low groan, a snarl when it lunges, a grunt when hit,

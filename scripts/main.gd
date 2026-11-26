@@ -22,6 +22,7 @@ const BaseZone = preload("res://scripts/base_zone.gd")
 const Melee = preload("res://scripts/melee.gd")
 const Dummy = preload("res://scripts/dummy.gd")
 const Mutants = preload("res://scripts/mutants.gd")
+const Waves = preload("res://scripts/waves.gd")
 
 const DISCOVER_RANGE := 45.0
 const REFILLS_PER_MORNING := 4
@@ -57,6 +58,7 @@ var base_zone: BaseZone
 var melee: Melee
 var dummy: Dummy
 var mutants: Mutants
+var waves: Waves
 ## Wrecks and ruins: {"key": "w3", "kind": "wreck", "pos": Vector3}.
 var places: Array = []
 ## Keys of places you have been near.
@@ -146,6 +148,17 @@ func _ready() -> void:
 	add_child(mutants)
 	mutants.top_up(day_night.day)
 
+	waves = Waves.new()
+	waves.name = "Waves"
+	waves.mutants = mutants
+	waves.world_seed = world_seed
+	add_child(waves)
+	day_night.dusk_started.connect(waves.on_dusk)
+	day_night.night_started.connect(func(_d): waves.start_wave())
+	day_night.day_started.connect(waves.on_dawn)
+	mutants.mutant_killed.connect(waves.note_kill)
+	building.piece_destroyed.connect(func(_k, _t): waves.note_lost())
+
 	inventory = Inventory.new()
 	inventory.changed.connect(func(): player.overloaded = inventory.overloaded())
 	inventory.add("hammer", 1)  # everyone starts with a hammer
@@ -174,6 +187,7 @@ func _ready() -> void:
 	hud.name = "HUD"
 	hud.player = player
 	hud.day_night = day_night
+	hud.waves = waves
 	add_child(hud)
 
 	pause_menu = PauseMenu.new()
@@ -199,6 +213,10 @@ func _ready() -> void:
 	add_child(map_ui)
 
 	survival.died.connect(_on_died)
+	survival.died.connect(waves.note_death)
+	waves.wave_started.connect(func(n, size): hud.show_banner("Wave %d: %d mutants are coming. Defend the base!" % [n, size]))
+	waves.wave_ended.connect(func(s): hud.show_summary(Waves.summary_lines(s)))
+	waves.siren.connect(func(): hud.show_banner("Siren! Mutants come at nightfall. Get back to the base."))
 	mutants.player_hit.connect(_on_player_hit)
 	melee.hit_landed.connect(hud.show_hitmarker)
 	survival.warning.connect(hud.show_banner)
@@ -575,6 +593,7 @@ func _on_player_hit(dmg: float, from: Vector3) -> void:
 	if survival.dead:
 		return
 	survival.damage(dmg, "A walker got you.")
+	waves.note_damage(dmg)
 	var to: Vector3 = from - player.global_position
 	var local: Vector3 = player.global_transform.basis.inverse() * to
 	hud.show_damage(atan2(local.x, -local.z))
@@ -622,6 +641,7 @@ func collect_save_data() -> Dictionary:
 		"map": {"discovered": discovered.keys()},
 		"buildings": building.save_data(),
 		"mutants": mutants.save_data(),
+		"waves": waves.save_data(),
 	}
 
 
@@ -631,6 +651,9 @@ func apply_save_data(data: Dictionary) -> void:
 	loot.load_data(data.get("loot", {}))
 	survival.load_data(data.get("survival", {}))
 	building.load_data(data.get("buildings", []))
+	waves.load_data(data.get("waves", {"wave": maxi(day_night.day - 1, 0)}))
+	if waves.active and not day_night.is_night():
+		waves.active = false  # never carry a wave into the day
 	if data.has("mutants"):
 		mutants.load_data(data.mutants)  # older saves keep the freshly spawned walkers
 	discovered = {}

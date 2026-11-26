@@ -10,7 +10,7 @@ enum State { WANDER, CHASE, ATTACK, DEAD }
 ## Stats per mutant type. Later versions add more types here.
 const TYPES := {
 	"walker": {
-		"name": "Walker", "health": 100.0, "walk": 1.1, "run": 3.3,
+		"name": "Walker", "health": 100.0, "walk": 1.1, "march": 2.2, "run": 3.3,
 		"sight": 24.0, "sight_night": 15.0, "hear": 9.0, "lose": 38.0,
 		"damage": 12.0, "reach": 1.7, "windup": 0.45, "cooldown": 1.4,
 	},
@@ -28,6 +28,8 @@ var stats: Dictionary = TYPES.walker
 var health := 100.0
 var state := State.WANDER
 var home := Vector3.ZERO
+## Part of a night wave: marches to the base instead of idling, sees further.
+var hunter := false
 var target: Node3D            # the player
 var target_dead := func(): return false
 var _wander_to := Vector3.ZERO
@@ -135,6 +137,25 @@ func _box(parent: Node3D, size: Vector3, pos: Vector3, mat: Material) -> void:
 	parent.add_child(mi)
 
 
+## Joins a night wave heading for the base at goal.
+func make_hunter(goal: Vector3) -> void:
+	hunter = true
+	home = goal
+	_wander_to = goal
+
+
+## Dawn: the sun finishes off what is left of the wave (no kill counted).
+func crumble() -> void:
+	if is_dead():
+		return
+	state = State.DEAD
+	collision_layer = 0
+	collision_mask = 1
+	_dead_t = CORPSE_SECONDS - 4.0
+	var tw := _model.create_tween()
+	tw.tween_property(_model, "rotation", Vector3(-1.45, 0, 0.2), 0.9).set_ease(Tween.EASE_IN)
+
+
 func is_dead() -> bool:
 	return state == State.DEAD
 
@@ -209,7 +230,10 @@ func notices_target(night: bool) -> bool:
 	var hear: float = stats.hear * (1.6 if target.get("sprinting") else (0.5 if target.get("crouching") else 1.0))
 	if d < hear:
 		return true
-	if d > (stats.sight_night if night else stats.sight):
+	var sight: float = stats.sight_night if night else stats.sight
+	if hunter:
+		sight *= 1.5
+	if d > sight:
 		return false
 	# Only in front of it (a wide cone) and in plain sight.
 	var fwd := -global_transform.basis.z
@@ -237,7 +261,7 @@ func _physics_process(delta: float) -> void:
 				queue_free()
 		return
 	# Far from the player nothing happens (saves work with many mutants).
-	if state == State.WANDER and target and global_position.distance_squared_to(target.global_position) > 140.0 * 140.0:
+	if state == State.WANDER and not hunter and target and global_position.distance_squared_to(target.global_position) > 140.0 * 140.0:
 		return
 	_cooldown = maxf(_cooldown - delta, 0.0)
 	_think -= delta
@@ -252,7 +276,13 @@ func _physics_process(delta: float) -> void:
 			_wander_wait -= delta
 			var to := _wander_to - global_position
 			to.y = 0
-			if to.length() < 0.6 or _wander_wait > 0.0:
+			var far_from_home := Vector2(global_position.x - home.x, global_position.z - home.z).length() > 16.0
+			if hunter and far_from_home:
+				# March on the base.
+				speed = stats.march
+				_wander_to = home
+				want = to.normalized()
+			elif to.length() < 0.6 or _wander_wait > 0.0:
 				if _wander_wait <= 0.0:
 					_wander_wait = _rng.randf_range(2.0, 6.0)
 					var a := _rng.randf() * TAU
@@ -321,9 +351,10 @@ func _decide(night: bool) -> void:
 				_wander_to = home
 				return
 			var d: float = target.global_position.distance_to(global_position)
-			if d > stats.lose:
+			if d > stats.lose * (1.5 if hunter else 1.0):
 				state = State.WANDER
-				home = global_position
+				if not hunter:
+					home = global_position
 				_wander_to = home
 
 
@@ -358,4 +389,4 @@ func _play(name: String, pitch: float) -> void:
 
 
 func save_data() -> Dictionary:
-	return {"type": type, "pos": [position.x, position.y, position.z], "home": [home.x, home.y, home.z], "hp": health}
+	return {"type": type, "pos": [position.x, position.y, position.z], "home": [home.x, home.y, home.z], "hp": health, "hunter": hunter}

@@ -2,6 +2,20 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v0.14.0 (2026-11-26): Night waves
+- **Siren at dusk:** at 18:30 a generated air-raid siren wails and a banner tells you to get back to the base.
+- **Waves at night:** when night falls (20:00), wave N begins: **4 mutants on the first night, 2 more each night after, up to 30**. They come in from the edge of the map in groups of 2 or 3, one group every 9 seconds, from random directions, and **march on the base** (2.2 m/s, so the first ones arrive about a minute and a half later). On the way, and once they reach the base, they go for you if they see or hear you. Wave mutants see half again as far as the day wanderers and don't give up as quickly.
+- **Wave counter:** under the clock, "Wave 3: 5 left" counts the mutants still to come plus those still alive.
+- **The night ends** when every mutant of the wave is dead (and all have arrived), or **at dawn**, when the sun finishes off the rest (they collapse and crumble; no kill counted).
+- **End-of-wave summary:** a card for 10 seconds: "Wave 3 cleared!" or "Dawn: you survived night 3", with mutants killed, damage taken, building pieces lost and times you died.
+- The day wanderers from v0.13 stay as they were; wave mutants don't count against them.
+- **Saved:** the wave number and a wave in progress (how many are still to come, its stats, and which mutants belong to it). Older saves start counting from the current day. A save loaded in daytime never resumes a wave.
+- **Code:** new `waves.gd` (siren, wave sizes, group spawning, summary). Mutants have a `hunter` flag (`make_hunter(goal)`) and `crumble()`.
+- **Tests:** wave sizes, siren, a wave starting at night, every group arriving at the map edge, the HUD counter, clearing a wave and its summary (kills and damage), saving and loading mid-wave, dawn ending a wave, older saves, and a wave mutant really walking toward the flag. New screenshot views `20_wave` and `21_summary`.
+
+**Try:** stay at the base after the siren and fight off the first wave with the machete. Then watch the summary at dawn. Waves get bigger every night, so start building walls.
+**Next:** v0.15, mutants head for the base, attack walls in their way and break in, and walls collapse.
+
 ## v0.13.0 (2026-11-26): The first mutant, the Walker
 - **Walkers** roam the desert: five of them, always at least 70 m from the flag, each shambling around its own patch of sand. Every morning the dead ones are replaced. Low-poly, hunched, sickly green with glowing orange eyes (easy to spot at night).
 - **Spotting you:** a walker sees you up to 24 m away by day and 15 m at night, but only in front of it and only if nothing blocks the view (walls, wrecks, dunes). It also **hears** you within 9 m, more if you sprint and much less if you crouch. When it spots you it groans and comes after you at a fast shamble (3.3 m/s, slower than your walk), and it gives up when you get 38 m away.

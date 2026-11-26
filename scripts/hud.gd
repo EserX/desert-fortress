@@ -13,6 +13,10 @@ var help: Label
 var clock: Label
 var banner: Label
 var day_night  # DayNight
+var waves  # Waves
+var summary: PanelContainer
+var _summary_lines: VBoxContainer
+var _summary_time := 0.0
 var prompt: Label
 var hitmarker: Label
 var damage_vignette: TextureRect
@@ -56,6 +60,7 @@ func _ready() -> void:
 	root.add_child(hitmarker)
 
 	_build_damage(root)
+	_build_summary(root)
 
 	var title := _label("DESERT FORTRESS  v%s" % ProjectSettings.get_setting("application/config/version", ""), 18)
 	title.position = Vector2(20, 16)
@@ -177,10 +182,16 @@ func _process(delta: float) -> void:
 			text += "\nNight"
 		elif left < 120.0:
 			text += "\nNight in %d:%02d" % [int(left) / 60, int(left) % 60]
+		if waves and waves.active:
+			text += "\nWave %d: %d left" % [waves.wave, waves.remaining()]
 		clock.text = text
 	if _banner_time > 0.0:
 		_banner_time -= delta
 		banner.modulate.a = clampf(minf(_banner_time, 5.0 - _banner_time) * 1.5, 0.0, 1.0)
+	if _summary_time > 0.0:
+		_summary_time -= delta
+		summary.modulate.a = clampf(minf(_summary_time, 10.0 - _summary_time) * 2.0, 0.0, 1.0)
+		summary.visible = _summary_time > 0.0
 	if _help_time > 0.0:
 		_help_time -= delta
 		help.modulate.a = clampf(_help_time / 2.0, 0.0, 1.0)
@@ -333,6 +344,42 @@ func _build_damage(root: Control) -> void:
 	wedge.polygon = pts
 	wedge.color = Color(1.0, 0.15, 0.1, 0.85)
 	damage_arrow.add_child(wedge)
+
+
+## End-of-wave summary card under the compass.
+func _build_summary(root: Control) -> void:
+	summary = PanelContainer.new()
+	var st := StyleBoxFlat.new()
+	st.bg_color = Color(0.08, 0.05, 0.03, 0.78)
+	st.border_color = Color(0.95, 0.7, 0.35, 0.8)
+	st.set_border_width_all(2)
+	st.set_corner_radius_all(6)
+	st.set_content_margin_all(18)
+	summary.add_theme_stylebox_override("panel", st)
+	summary.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	summary.position = Vector2(-190, 210)
+	summary.custom_minimum_size = Vector2(380, 0)
+	summary.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	summary.visible = false
+	root.add_child(summary)
+	_summary_lines = VBoxContainer.new()
+	_summary_lines.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	summary.add_child(_summary_lines)
+
+
+## Shows the summary for 10 seconds. The first line is the heading.
+func show_summary(lines: Array) -> void:
+	for c in _summary_lines.get_children():
+		c.queue_free()
+	for i in lines.size():
+		var l := _label(lines[i], 28 if i == 0 else 20)
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		if i == 0:
+			l.add_theme_color_override("font_color", Color(1.0, 0.85, 0.45))
+		_summary_lines.add_child(l)
+	summary.visible = true
+	summary.modulate.a = 0.0
+	_summary_time = 10.0
 
 
 ## Flash for a hit from a mutant. angle: 0 = straight ahead, positive = to the right.

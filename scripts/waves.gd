@@ -1,0 +1,177 @@
+extends Node
+## Night waves. A siren wails at dusk; when night falls a wave of mutants comes
+## in from the edge of the map in small groups and heads for the base. The wave
+## ends when every one of them is dead or at dawn (the sun finishes the rest).
+## Then a short summary shows how the night went.
+
+const MIX_RATE := 22050.0
+const SPAWN_RADIUS := 205.0
+const GROUP_GAP := 9.0      # seconds between groups
+const MAX_SIZE := 30
+
+signal wave_started(n: int, size: int)
+signal wave_ended(summary: Dictionary)
+signal siren
+
+var mutants  # Mutants
+var world_seed := 1337
+var wave := 0               # number of the last wave that started
+var active := false
+var to_spawn := 0
+var spawn_timer := 0.0
+var stats := {}             # this wave: kills, damage, lost, deaths
+var _rng := RandomNumberGenerator.new()
+var _siren: AudioStreamPlayer
+
+
+func _ready() -> void:
+	_siren = AudioStreamPlayer.new()
+	_siren.stream = _make_siren()
+	_siren.volume_db = -8.0
+	add_child(_siren)
+
+
+## How many mutants night n brings.
+static func wave_size(n: int) -> int:
+	return mini(4 + (n - 1) * 2, MAX_SIZE)
+
+
+func on_dusk(_day: int) -> void:
+	_siren.play()
+	siren.emit()
+
+
+func start_wave() -> void:
+	wave += 1
+	active = true
+	to_spawn = wave_size(wave)
+	spawn_timer = 1.0
+	stats = {"kills": 0, "damage": 0.0, "lost": 0, "deaths": 0, "size": to_spawn}
+	_rng.seed = hash("wave:%d:%d" % [world_seed, wave])
+	wave_started.emit(wave, to_spawn)
+
+
+## Mutants of this wave still to come or still alive.
+func remaining() -> int:
+	return to_spawn + hunters().size()
+
+
+func hunters() -> Array:
+	return mutants.alive().filter(func(m): return m.hunter)
+
+
+func _process(delta: float) -> void:
+	if not active:
+		return
+	if to_spawn > 0:
+		spawn_timer -= delta
+		if spawn_timer <= 0.0:
+			spawn_timer = GROUP_GAP
+			_spawn_group()
+	elif hunters().is_empty():
+		end_wave(true)
+
+
+## Two or three mutants side by side at a random spot on the edge.
+func _spawn_group() -> void:
+	var n := mini(_rng.randi_range(2, 3), to_spawn)
+	var a := _rng.randf() * TAU
+	var out := Vector3(cos(a), 0, sin(a))
+	var side := out.cross(Vector3.UP)
+	for i in n:
+		var p := out * (SPAWN_RADIUS + _rng.randf_range(-4, 4)) + side * (i - (n - 1) * 0.5) * 2.5
+		var m = mutants.spawn("walker", p)
+		m.make_hunter(Vector3.ZERO)
+	to_spawn -= n
+
+
+## cleared: every mutant was killed (otherwise dawn came first).
+func end_wave(cleared: bool) -> void:
+	if not active:
+		return
+	active = false
+	to_spawn = 0
+	if not cleared:
+		for m in hunters():
+			m.crumble()
+	var s := stats.duplicate()
+	s.wave = wave
+	s.cleared = cleared
+	wave_ended.emit(s)
+
+
+func on_dawn(_day: int) -> void:
+	end_wave(false)
+
+
+func note_kill(m: Node) -> void:
+	if active:
+		stats.kills += 1
+
+
+func note_damage(amount: float) -> void:
+	if active:
+		stats.damage += amount
+
+
+func note_lost() -> void:
+	if active:
+		stats.lost += 1
+
+
+func note_death() -> void:
+	if active:
+		stats.deaths += 1
+
+
+## Lines for the end-of-wave summary.
+static func summary_lines(s: Dictionary) -> Array:
+	var lines: Array = []
+	lines.append(("Wave %d cleared!" if s.cleared else "Dawn: you survived night %d") % s.wave)
+	lines.append("Mutants killed: %d" % s.kills)
+	lines.append("Damage taken: %d" % int(s.damage))
+	if s.lost > 0:
+		lines.append("Building pieces lost: %d" % s.lost)
+	if s.deaths > 0:
+		lines.append("Times you died: %d" % s.deaths)
+	return lines
+
+
+func save_data() -> Dictionary:
+	return {"wave": wave, "active": active, "to_spawn": to_spawn, "stats": stats}
+
+
+func load_data(data: Dictionary) -> void:
+	wave = int(data.get("wave", 0))
+	active = bool(data.get("active", false))
+	to_spawn = int(data.get("to_spawn", 0))
+	stats = data.get("stats", {})
+	for k in ["kills", "lost", "deaths", "size"]:
+		stats[k] = int(stats.get(k, 0))
+	stats.damage = float(stats.get("damage", 0.0))
+	spawn_timer = 2.0
+	_rng.seed = hash("wave:%d:%d:%d" % [world_seed, wave, to_spawn])
+
+
+## A wailing air-raid siren: the pitch climbs and falls twice.
+func _make_siren() -> AudioStreamWAV:
+	var length := 7.0
+	var n := int(MIX_RATE * length)
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	var phase := 0.0
+	for i in n:
+		var t := float(i) / MIX_RATE
+		var u := fposmod(t / 3.5, 1.0)
+		var f := lerpf(260.0, 720.0, sin(PI * u) ** 0.7)
+		phase += f / MIX_RATE
+		var p := fposmod(phase, 1.0)
+		# Rounded square wave, like a mechanical siren's rotor.
+		var s := clampf(sin(TAU * p) * 2.5, -1.0, 1.0) * 0.5 + sin(TAU * p * 2.0) * 0.15
+		var env := minf(t / 0.6, 1.0) * minf((length - t) / 1.2, 1.0)
+		data.encode_s16(i * 2, int(s * env * 24000.0))
+	var wav := AudioStreamWAV.new()
+	wav.format = AudioStreamWAV.FORMAT_16_BITS
+	wav.mix_rate = int(MIX_RATE)
+	wav.data = data
+	return wav

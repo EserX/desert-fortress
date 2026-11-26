@@ -27,6 +27,8 @@ var shots := [
 	{"name": "17_melee", "pos": Vector3(-2.6, 0, 6.0), "yaw": 0.2, "pitch": -0.08, "hour": 9.5, "melee": true},
 	{"name": "18_walker", "pos": Vector3(60, 0, 60), "yaw": 0.4, "pitch": -0.05, "hour": 17.5, "walker": true},
 	{"name": "19_walker_night", "pos": Vector3(60, 0, 60), "yaw": 0.4, "pitch": -0.02, "hour": 22.5, "walker": true},
+	{"name": "20_wave", "pos": Vector3(2, 0, 14), "yaw": 0.3, "pitch": -0.04, "hour": 21.2, "wave": true},
+	{"name": "21_summary", "pos": Vector3(2, 0, 14), "yaw": 0.3, "pitch": -0.04, "hour": 6.4, "summary": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -112,6 +114,12 @@ func _process(_d: float) -> bool:
 			main.hud.show_hitmarker("target")
 		if s.get("walker", false):
 			_walker_sample(p)
+		if s.get("wave", false):
+			_wave_sample(p)
+		if s.get("summary", false):
+			main.mutants.clear()
+			main.hud.show_summary(main.Waves.summary_lines({"wave": 3, "cleared": false, "kills": 7, "damage": 46.0, "lost": 2, "deaths": 0}))
+			main.hud._summary_time = 5.0
 		if s.get("build", false):
 			_build_sample()
 		elif s.get("zone", false):
@@ -213,3 +221,25 @@ func _walker_sample(p: Node3D) -> void:
 	main.inventory.add("machete", 1)
 	main.inventory.selected = 0
 	main.melee.set_item("machete")
+
+
+## A night wave walking in on the base, with the wave counter on the HUD (v0.14).
+func _wave_sample(p: Node3D) -> void:
+	var ms = main.mutants
+	ms.clear()
+	main.waves.wave = 3
+	main.waves.active = true
+	main.waves.to_spawn = 3
+	var fwd := -p.global_transform.basis.z
+	var right := p.global_transform.basis.x
+	for i in 6:
+		var w = ms.spawn("walker", p.position + fwd * (9.0 + i * 3.5) + right * ((i % 3) - 1) * 3.0)
+		w.make_hunter(Vector3.ZERO)
+		w.rotation.y = p.rotation.y + PI
+		w.set_physics_process(false)
+		w._anim_t = i * 1.3
+		w._animate(0.0, 2.2)
+	main.inventory.load_data({})
+	main.inventory.add("pipe", 1)
+	main.inventory.selected = 0
+	main.melee.set_item("pipe")

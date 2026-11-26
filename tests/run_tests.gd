@@ -369,6 +369,7 @@ func _test_tiers() -> void:
 ## Ramp: walk up it for real.
 var ramp_top := 0.0
 var chase_walker: Node
+var march_walker: Node
 var ramp_base := 0.0
 ## v0.11: base zone, storage chest, workbench crafting, bandages, spike barricade.
 func _test_base() -> void:
@@ -575,6 +576,57 @@ func _test_walker_hits() -> void:
 	main.melee.set_item("")
 
 
+## v0.14: siren, wave size, spawning at the edge, clearing, dawn, summary, saving.
+func _test_waves() -> void:
+	var wv = main.waves
+	var ms = main.mutants
+	var Waves = load("res://scripts/waves.gd")
+	check(Waves.wave_size(1) == 4 and Waves.wave_size(5) == 12 and Waves.wave_size(40) == Waves.MAX_SIZE, "waves grow by 2 each night up to %d" % Waves.MAX_SIZE)
+	var got_siren := [false]
+	wv.siren.connect(func(): got_siren[0] = true, CONNECT_ONE_SHOT)
+	wv.on_dusk(1)
+	check(got_siren[0], "the siren sounds at dusk")
+	ms.clear()
+	main.day_night.restore(main.day_night.day, 21.0)
+	var n0: int = wv.wave
+	wv.start_wave()
+	check(wv.active and wv.wave == n0 + 1 and wv.remaining() == Waves.wave_size(wv.wave), "night starts wave %d with %d mutants" % [wv.wave, wv.remaining()])
+	var size: int = wv.remaining()
+	for i in 40:
+		wv._process(1.0)
+	check(wv.to_spawn == 0 and wv.hunters().size() == size, "the whole wave arrives in groups (%d)" % wv.hunters().size())
+	check(wv.hunters().all(func(m): return Vector2(m.position.x, m.position.z).length() > 195.0), "they come in from the edge of the map")
+	main.hud._process(0.0)
+	check(main.hud.clock.text.contains("Wave %d: %d left" % [wv.wave, size]), "the HUD shows the wave counter: " + main.hud.clock.text.replace("\n", " | "))
+	# Save in the middle of the night.
+	var data: Dictionary = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	var ended := []
+	wv.wave_ended.connect(func(s): ended.append(s))
+	main._on_player_hit(5.0, main.player.global_position)
+	for m in wv.hunters():
+		m.take_hit(500.0, m.global_position, Vector3.FORWARD)
+	wv._process(0.1)
+	check(not wv.active and ended.size() == 1 and ended[0].cleared and ended[0].kills == size, "killing them all ends the wave (%s)" % str(ended))
+	check(int(ended[0].damage) == 5, "the summary counts damage taken")
+	check(main.hud.summary.visible and Waves.summary_lines(ended[0])[0] == "Wave %d cleared!" % wv.wave, "the summary card shows")
+	main.apply_save_data(data)
+	check(wv.active and wv.hunters().size() == size and wv.wave == n0 + 1, "a wave in progress is saved and loaded")
+	wv.on_dawn(3)
+	check(not wv.active and wv.hunters().is_empty() and not ended[1].cleared, "dawn ends the wave and the rest crumble")
+	check(Waves.summary_lines(ended[1])[0].begins_with("Dawn"), "dawn summary: " + Waves.summary_lines(ended[1])[0])
+	check(ms.alive().size() == 0, "crumbled mutants don't count as alive")
+	data.erase("waves")
+	main.day_night.restore(6, 10.0)
+	main.apply_save_data(data)
+	main.day_night.restore(6, 10.0)
+	check(not wv.active, "older saves load without a wave running")
+	main.survival.health = 100.0
+	ms.clear()
+	march_walker = ms.spawn("walker", Vector3(0, 0, 40))
+	march_walker.make_hunter(Vector3.ZERO)
+	main.player.position = Vector3(60, main.terrain.surface_height(60, -60), -60)
+
+
 ## Real chase over many frames: it walks up to the player and claws.
 func _start_chase() -> void:
 	var ms = main.mutants
@@ -734,7 +786,12 @@ func _process(_delta: float) -> bool:
 			_test_walker_hits()
 			main.mutants.clear()
 			main.survival.health = 100.0
-		1110:
+			_test_waves()
+		1220:
+			var d := Vector2(march_walker.position.x, march_walker.position.z).length()
+			check(d < 38.0, "a wave mutant marches on the base (%.1f m from the flag, started at 40)" % d)
+			main.mutants.clear()
+		1230:
 			if failures.is_empty():
 				print("== ALL TESTS PASSED ==")
 				quit(0)

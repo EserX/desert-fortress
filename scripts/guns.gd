@@ -6,17 +6,26 @@ extends Node3D
 
 const LowPoly = preload("res://scripts/lowpoly.gd")
 
-## damage per hit, mag size, seconds between shots, reload seconds, ammo item,
-## range in m, spread in degrees (hip / aimed), view kick in radians, aimed zoom.
+## damage per hit (per pellet), pellets per shot, mag size, seconds between
+## shots, reload seconds, ammo item, range in m, spread in degrees (hip / aimed),
+## view kick in radians, aimed zoom, how far mutants hear it, where the gun sits
+## at the hip and when aimed, and whether aiming looks through a scope.
 const GUNS := {
-	"pistol": {"damage": 34.0, "mag": 12, "rate": 0.2, "reload": 1.5, "ammo": "ammo_9mm",
-		"range": 90.0, "spread_hip": 1.8, "spread_ads": 0.25, "kick": 0.035, "zoom": 0.75, "loud": 45.0},
+	"pistol": {"damage": 34.0, "pellets": 1, "mag": 12, "rate": 0.2, "reload": 1.5, "ammo": "ammo_9mm",
+		"range": 90.0, "spread_hip": 1.8, "spread_ads": 0.25, "kick": 0.035, "zoom": 0.75, "loud": 45.0,
+		"hip": Vector3(0.2, -0.2, -0.42), "ads": Vector3(0.0, -0.064, -0.58), "pitch": 1.0},
+	"shotgun": {"damage": 13.0, "pellets": 9, "mag": 6, "rate": 0.85, "reload": 2.6, "ammo": "shells",
+		"range": 32.0, "spread_hip": 5.0, "spread_ads": 3.0, "kick": 0.09, "zoom": 0.85, "loud": 60.0,
+		"hip": Vector3(0.22, -0.22, -0.36), "ads": Vector3(0.0, -0.075, -0.3), "pitch": 0.62},
+	"rifle": {"damage": 90.0, "pellets": 1, "mag": 5, "rate": 1.1, "reload": 2.4, "ammo": "ammo_762",
+		"range": 220.0, "spread_hip": 2.5, "spread_ads": 0.03, "kick": 0.07, "zoom": 0.32, "loud": 75.0,
+		"hip": Vector3(0.22, -0.22, -0.34), "ads": Vector3(0.0, -0.1, -0.2), "pitch": 0.8, "scope": true},
 }
+const HEADSHOT := 2.0     # damage multiplier for a hit on a mutant's head
+const RAISE_TIME := 0.35  # seconds to bring a gun up after switching to it
 const MIX_RATE := 22050.0
-const HIP_POS := Vector3(0.2, -0.2, -0.42)
-const ADS_POS := Vector3(0.0, -0.064, -0.58)
 
-## A shot connected: "target" or "solid" (same as melee).
+## A shot connected: "target", "head" or "solid".
 signal hit_landed(kind: String)
 ## A shot rang out here (mutants nearby hear it).
 signal fired(pos: Vector3, loudness: float)
@@ -29,10 +38,12 @@ var ads := false            # right mouse held
 var ads_amount := 0.0       # 0 = hip, 1 = fully aimed
 var reload_t := -1.0        # seconds into a reload, or -1
 var _cooldown := 0.0
+var raise_t := 0.0          # counts down while a gun is being brought up
 var _kick := 0.0            # gun model kick-back, decays
 var _rng := RandomNumberGenerator.new()
 var _rig: Node3D            # hands and gun, moves between hip and sights
 var _models := {}
+var _left: Node3D           # left hand: under the pistol grip or out on the fore-end
 var _flash: Node3D
 var _flash_light: OmniLight3D
 var _flash_t := 0.0
@@ -46,7 +57,7 @@ func _ready() -> void:
 	var steel := LowPoly.material(Color(0.16, 0.16, 0.17), 0.5)
 	var grip := LowPoly.material(Color(0.1, 0.09, 0.08))
 	_rig = Node3D.new()
-	_rig.position = HIP_POS
+	_rig.position = GUNS.pistol.hip
 	add_child(_rig)
 	var pistol := Node3D.new()
 	_box(pistol, Vector3(0.034, 0.042, 0.2), Vector3(0, 0.03, -0.06), steel)        # slide
@@ -58,15 +69,40 @@ func _ready() -> void:
 	_box(pistol, Vector3(0.012, 0.03, 0.04), Vector3(0, -0.03, -0.03), steel)       # trigger guard
 	_models["pistol"] = pistol
 	_rig.add_child(pistol)
+	var wood := LowPoly.material(Color(0.42, 0.26, 0.14))
+	var shotgun := Node3D.new()
+	_box(shotgun, Vector3(0.036, 0.036, 0.62), Vector3(0, 0.035, -0.3), steel)     # barrel
+	_box(shotgun, Vector3(0.03, 0.03, 0.5), Vector3(0, 0.0, -0.26), steel)         # tube magazine
+	_box(shotgun, Vector3(0.05, 0.05, 0.16), Vector3(0, 0.005, -0.3), wood)        # pump
+	_box(shotgun, Vector3(0.05, 0.07, 0.2), Vector3(0, 0.02, 0.02), steel)         # receiver
+	var st := _box(shotgun, Vector3(0.045, 0.08, 0.3), Vector3(0, -0.03, 0.22), wood)  # stock
+	st.rotation.x = 0.12
+	_box(shotgun, Vector3(0.012, 0.012, 0.012), Vector3(0, 0.06, -0.59), LowPoly.material(Color(0.9, 0.85, 0.6)))  # bead sight
+	_models["shotgun"] = shotgun
+	_rig.add_child(shotgun)
+	var rifle := Node3D.new()
+	_box(rifle, Vector3(0.026, 0.026, 0.72), Vector3(0, 0.03, -0.36), steel)       # barrel
+	_box(rifle, Vector3(0.05, 0.055, 0.5), Vector3(0, 0.005, -0.12), wood)         # fore-end
+	_box(rifle, Vector3(0.045, 0.06, 0.16), Vector3(0, 0.03, 0.02), steel)         # action
+	_box(rifle, Vector3(0.012, 0.012, 0.06), Vector3(0.04, 0.04, 0.05), steel)     # bolt handle
+	var rs := _box(rifle, Vector3(0.045, 0.09, 0.32), Vector3(0, -0.035, 0.24), wood)
+	rs.rotation.x = 0.1
+	_box(rifle, Vector3(0.045, 0.045, 0.3), Vector3(0, 0.09, -0.02), steel)        # scope tube
+	_box(rifle, Vector3(0.055, 0.055, 0.05), Vector3(0, 0.09, -0.17), steel)       # objective bell
+	_box(rifle, Vector3(0.05, 0.05, 0.04), Vector3(0, 0.09, 0.13), steel)          # eyepiece
+	_models["rifle"] = rifle
+	_rig.add_child(rifle)
 	# Right fist wrapped round the grip, left hand cupping it, forearms back to the camera.
 	_box(_rig, Vector3(0.07, 0.08, 0.08), Vector3(0.005, -0.06, 0.03), skin)
 	_box(_rig, Vector3(0.09, 0.09, 0.36), Vector3(0.03, -0.09, 0.22), sleeve)
-	_box(_rig, Vector3(0.06, 0.07, 0.08), Vector3(-0.035, -0.065, 0.0), skin)
-	var left := _box(_rig, Vector3(0.09, 0.09, 0.36), Vector3(-0.12, -0.1, 0.18), sleeve)
-	left.rotation.y = -0.45
+	_left = Node3D.new()
+	_rig.add_child(_left)
+	_box(_left, Vector3(0.06, 0.07, 0.08), Vector3.ZERO, skin)
+	var la := _box(_left, Vector3(0.09, 0.09, 0.36), Vector3(-0.085, -0.035, 0.18), sleeve)
+	la.rotation.y = -0.45
 	_flash = Node3D.new()
 	_flash.position = Vector3(0, 0.03, -0.19)
-	pistol.add_child(_flash)
+	_rig.add_child(_flash)
 	var fm := StandardMaterial3D.new()
 	fm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	fm.albedo_color = Color(1.0, 0.85, 0.4)
@@ -137,6 +173,10 @@ func set_item(id: String) -> void:
 	for k in _models:
 		_models[k].visible = k == id
 	reload_t = -1.0
+	if id != "":
+		raise_t = RAISE_TIME
+		_flash.position = Vector3(0, 0.035, -{"pistol": 0.17, "shotgun": 0.62, "rifle": 0.73}[id])
+		_left.position = {"pistol": Vector3(-0.035, -0.065, 0.0), "shotgun": Vector3(0.0, -0.035, -0.3), "rifle": Vector3(0.0, -0.04, -0.22)}[id]
 	if id == "":
 		ads = false
 
@@ -147,7 +187,7 @@ func set_ads(on: bool) -> void:
 
 ## Left click. Returns {"fired": bool, "kind": "target"/"solid"/"", "node"}.
 func try_fire() -> Dictionary:
-	if item == "" or reload_t >= 0.0 or _cooldown > 0.0:
+	if item == "" or reload_t >= 0.0 or _cooldown > 0.0 or raise_t > 0.0:
 		return {"fired": false, "kind": ""}
 	var g: Dictionary = GUNS[item]
 	if loaded(item) <= 0:
@@ -161,39 +201,56 @@ func try_fire() -> Dictionary:
 	_flash_t = 0.05
 	_flash.visible = true
 	_flash.rotation.z = _rng.randf() * TAU
-	_play(_sounds.shot, _rng.randf_range(0.95, 1.05))
-	# The view kicks up and a little to the side.
+	_play(_sounds.shot, g.pitch * _rng.randf_range(0.95, 1.05))
+	var res := shoot_ray(g)
+	# Then the view kicks up and a little to the side.
 	player.head.rotation.x = clampf(player.head.rotation.x + g.kick * lerpf(1.0, 0.6, ads_amount), -1.5, 1.5)
 	player.rotate_y(_rng.randf_range(-0.3, 0.3) * g.kick)
 	fired.emit(player.global_position, g.loud)
-	return shoot_ray(g)
+	return res
 
 
-## The bullet: a ray from the eye within the spread cone.
+## The bullet (or each pellet): a ray from the eye within the spread cone.
+## Damage on the same target adds up into one hit; head hits count double.
 func shoot_ray(g: Dictionary) -> Dictionary:
 	var cam: Camera3D = player.camera
 	var spread := deg_to_rad(lerpf(g.spread_hip, g.spread_ads, ads_amount))
-	var dir := -cam.global_transform.basis.z
-	var a := _rng.randf() * TAU
-	var r := sqrt(_rng.randf()) * spread
-	dir = dir.rotated(cam.global_transform.basis.x, sin(a) * r).rotated(cam.global_transform.basis.y, cos(a) * r)
 	var from := cam.global_position
-	var q := PhysicsRayQueryParameters3D.create(from, from + dir * g.range, 1 | 8, [player.get_rid()])
-	var hit := get_world_3d().direct_space_state.intersect_ray(q)
 	var res := {"fired": true, "kind": ""}
-	if hit.is_empty():
-		return res
-	var n: Node = hit.collider
-	while n and not n.has_method("take_hit"):
-		n = n.get_parent()
-	res.kind = "target" if n else "solid"
-	res.node = n
-	res.point = hit.position
-	if n:
-		n.take_hit(g.damage, hit.position, dir)
-	else:
-		_impact(hit.position, hit.normal)
-	hit_landed.emit(res.kind)
+	var totals := {}   # node -> [damage, point, dir, head]
+	for i in g.pellets:
+		var dir := -cam.global_transform.basis.z
+		var a := _rng.randf() * TAU
+		var r := sqrt(_rng.randf()) * spread
+		dir = dir.rotated(cam.global_transform.basis.x, sin(a) * r).rotated(cam.global_transform.basis.y, cos(a) * r)
+		var q := PhysicsRayQueryParameters3D.create(from, from + dir * g.range, 1 | 8, [player.get_rid()])
+		var hit := get_world_3d().direct_space_state.intersect_ray(q)
+		if hit.is_empty():
+			continue
+		var n: Node = hit.collider
+		while n and not n.has_method("take_hit"):
+			n = n.get_parent()
+		if n == null:
+			if i < 3:
+				_impact(hit.position, hit.normal)
+			if res.kind == "":
+				res.kind = "solid"
+			continue
+		var head: bool = n.has_method("is_headshot") and n.is_headshot(hit.position)
+		var dmg: float = g.damage * (HEADSHOT if head else 1.0)
+		if not totals.has(n):
+			totals[n] = [0.0, hit.position, dir, false]
+		totals[n][0] += dmg
+		totals[n][3] = totals[n][3] or head
+	for n in totals:
+		var t: Array = totals[n]
+		n.take_hit(t[0], t[1], t[2])
+		res.kind = "head" if t[3] else (res.kind if res.kind == "head" else "target")
+		res.node = n
+		res.point = t[1]
+		res.damage = t[0]
+	if res.kind != "":
+		hit_landed.emit(res.kind)
 	return res
 
 
@@ -219,13 +276,14 @@ func _finish_reload() -> void:
 
 func _process(delta: float) -> void:
 	_cooldown = maxf(_cooldown - delta, 0.0)
-	var target_ads := 1.0 if ads and reload_t < 0.0 and item != "" else 0.0
+	var target_ads := 1.0 if ads and reload_t < 0.0 and item != "" and raise_t <= 0.0 else 0.0
 	ads_amount = move_toward(ads_amount, target_ads, delta * 7.0)
 	if player:
 		var zoom: float = GUNS[item].zoom if item != "" else 1.0
 		player.camera.fov = Settings.fov * lerpf(1.0, zoom, ads_amount)
 	if not visible:
 		return
+	raise_t = maxf(raise_t - delta, 0.0)
 	if reload_t >= 0.0:
 		reload_t += delta
 		if reload_t >= GUNS[item].reload:
@@ -235,7 +293,11 @@ func _process(delta: float) -> void:
 		_flash_t -= delta
 		if _flash_t <= 0.0:
 			_flash.visible = false
-	var pos := HIP_POS.lerp(ADS_POS, ads_amount)
+	var g: Dictionary = GUNS[item]
+	var pos: Vector3 = (g.hip as Vector3).lerp(g.ads, ads_amount)
+	# Looking through a scope: the gun itself gets out of the way.
+	_models[item].visible = not (g.get("scope", false) and ads_amount > 0.9)
+	pos.y -= raise_t / RAISE_TIME * 0.25
 	pos.z += _kick * 0.05
 	var rot := Vector3(_kick * 0.25, 0, 0)
 	if reload_t >= 0.0:

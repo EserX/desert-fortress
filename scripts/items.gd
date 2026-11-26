@@ -17,25 +17,33 @@ const ITEMS := {
 	"spike_barricade": {"name": "Spike barricade", "weight": 4.0, "stack": 5},
 	"pistol": {"name": "Pistol", "weight": 1.0, "stack": 1},
 	"ammo_9mm": {"name": "9mm rounds", "weight": 0.012, "stack": 60},
+	"shotgun": {"name": "Shotgun", "weight": 3.2, "stack": 1},
+	"rifle": {"name": "Hunting rifle", "weight": 3.8, "stack": 1},
+	"shells": {"name": "Shotgun shells", "weight": 0.04, "stack": 30},
+	"ammo_762": {"name": "7.62 rounds", "weight": 0.025, "stack": 40},
 }
 
 ## What each kind of container can hold: item -> [min, max]. A negative min
 ## makes the item rarer (anything rolled below 1 means none).
 const LOOT_TABLES := {
 	"glovebox": {"cloth": [0, 2], "nails": [0, 4], "canned_food": [0, 1], "water": [0, 1]},
-	"trunk": {"scrap": [2, 5], "nails": [2, 6], "cloth": [0, 2], "water": [0, 1], "ammo_9mm": [-6, 6]},
+	"trunk": {"scrap": [2, 5], "nails": [2, 6], "cloth": [0, 2], "water": [0, 1], "ammo_9mm": [-6, 6], "shells": [-8, 4]},
 	"crate": {"wood": [2, 5], "nails": [1, 4], "canned_food": [0, 2], "water": [0, 2], "cement": [0, 1]},
-	"supply": {"wood": [4, 8], "scrap": [3, 7], "nails": [8, 16], "canned_food": [1, 3], "water": [2, 4], "cloth": [1, 3], "cement": [1, 3], "ammo_9mm": [8, 20], "pistol": [-1, 1]},
+	"supply": {"wood": [4, 8], "scrap": [3, 7], "nails": [8, 16], "canned_food": [1, 3], "water": [2, 4], "cloth": [1, 3], "cement": [1, 3], "ammo_9mm": [8, 20], "pistol": [-1, 1], "shells": [2, 8], "ammo_762": [-2, 6], "shotgun": [-3, 1], "rifle": [-4, 1]},
 }
 
 ## Workbench recipes, in the order shown: item -> {"count": made, "cost": {item: n}, "info": String}.
 const RECIPES := {
-	"hammer": {"count": 1, "cost": {"scrap": 2, "wood": 2}, "info": "Repairs, upgrades and demolishes"},
-	"machete": {"count": 1, "cost": {"scrap": 3, "cloth": 1, "wood": 1}, "info": "Hits harder and faster than the pipe"},
-	"bandage": {"count": 1, "cost": {"cloth": 2}, "info": "Heals 30 health (use it like food)"},
-	"spike_barricade": {"count": 1, "cost": {"wood": 4, "nails": 4}, "info": "Build it in build mode, keeps mutants back"},
-	"pistol": {"count": 1, "cost": {"scrap": 10, "wood": 2, "nails": 6}, "info": "12-round 9mm pistol. RMB aims, R reloads"},
-	"ammo_9mm": {"count": 8, "cost": {"scrap": 2, "nails": 3}, "info": "Hand-loaded 9mm rounds for the pistol"},
+	"hammer": {"count": 1, "cost": {"scrap": 2, "wood": 2}, "info": "repairs, upgrades, demolishes"},
+	"machete": {"count": 1, "cost": {"scrap": 3, "cloth": 1, "wood": 1}, "info": "faster and harder than the pipe"},
+	"bandage": {"count": 1, "cost": {"cloth": 2}, "info": "heals 30, use with F"},
+	"spike_barricade": {"count": 1, "cost": {"wood": 4, "nails": 4}, "info": "build it in build mode"},
+	"pistol": {"count": 1, "cost": {"scrap": 10, "wood": 2, "nails": 6}, "info": "12 rounds. RMB aims, R reloads"},
+	"ammo_9mm": {"count": 8, "cost": {"scrap": 2, "nails": 3}, "info": "for the pistol"},
+	"shotgun": {"count": 1, "cost": {"scrap": 14, "wood": 4, "nails": 8}, "info": "6 shells, deadly up close"},
+	"shells": {"count": 6, "cost": {"scrap": 2, "nails": 4, "cloth": 1}, "info": "for the shotgun"},
+	"rifle": {"count": 1, "cost": {"scrap": 16, "wood": 5, "nails": 10, "cloth": 2}, "info": "Scoped, 5 rounds, long range"},
+	"ammo_762": {"count": 5, "cost": {"scrap": 3, "nails": 4}, "info": "for the rifle"},
 }
 
 const CONTAINER_NAMES := {"glovebox": "glovebox", "trunk": "trunk", "crate": "crate", "supply": "supply crate"}

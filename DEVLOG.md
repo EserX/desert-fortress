@@ -2,6 +2,21 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v0.18.0 (2026-11-26): Shotgun, rifle and headshots
+- **Shotgun:** pump-action, 6 shells. Each blast fires 9 pellets (13 damage each) in a wide cone, so up close it nearly kills a walker in one blast, but past 20 m only a pellet or two land. Slow (one blast every 0.85 s), heavy kick, a deep boom, and it can be heard 60 m away. 2.6 s reload.
+- **Hunting rifle:** bolt action, 5 rounds, 90 damage, reaches 220 m. **Aiming looks through the scope:** the screen goes black around a round sight picture with cross hairs and a red dot, zoomed in about 3×. At the hip it is inaccurate. One shot every 1.1 s, 2.4 s reload, and loud (75 m).
+- **Headshots:** a gun hit on a mutant's head does **double damage** and flashes a bigger, red X. A rifle headshot kills a walker or a runner outright; a brute takes three.
+- **Weapon switching:** select a gun on the hotbar (number keys or the mouse wheel) and it is brought up from below in 0.35 s; it can't fire until it is up. The left hand moves out to the fore-end on the long guns.
+- **Ammo types:** **shotgun shells** and **7.62 rounds**, alongside the 9mm. Shells turn up in some car trunks; supply crates have shells and sometimes 7.62, a shotgun or a rifle. Workbench: shotgun (14 scrap, 4 wood, 8 nails), 6 shells (2 scrap, 4 nails, 1 cloth), rifle (16 scrap, 5 wood, 10 nails, 2 cloth), 5 rounds of 7.62 (3 scrap, 4 nails).
+- **Workbench list in two columns** so all 10 recipes fit, with the amount you have of each material in brackets.
+- Fix: a shot now lands where you aimed before the recoil kicks the view up (the pistol was slightly affected).
+- Pellets hitting the same target add up into one hit and one damage number.
+- **Code:** `Guns.GUNS` now holds pellets, hip and aimed positions, sound pitch and the scope flag. Mutants have `is_headshot(point)`. The HUD draws the scope overlay.
+- **Tests:** crafting the new guns and ammo, all recipes on the bench, the switching delay, scope overlay and zoom, a rifle headshot killing a walker for double damage, pellets adding up to one hit, the shotgun close up versus far away, and a shell per blast. New screenshot views `26_shotgun` and `27_rifle_scope`; `16_bench` shows the new list.
+
+**Try:** make a rifle and pick off mutants as they cross the dunes at night. Aim for the heads. Keep the shotgun for anything that gets through the gate.
+**Next:** v0.19, traps: spike strip, barbed wire (slows) and landmine.
+
 ## v0.17.0 (2026-11-26): The pistol
 - **Pistol:** a 12-round 9mm, held in both hands. **Left click** fires one shot (up to 5 a second), 34 damage, so three hits drop a walker and two a runner. Bullets travel 90 m.
 - **Aim down the sights:** hold **right click**. The gun comes up to the centre with the sights on the crosshair, the view zooms in a little, and the spread shrinks from about 1.8° at the hip to 0.25°. The crosshair fades while aiming.

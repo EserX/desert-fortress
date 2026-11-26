@@ -71,9 +71,16 @@ func _ready() -> void:
 	_bench_box.add_theme_constant_override("separation", 6)
 	col.add_child(_bench_box)
 	UI.title(_bench_box, "Workbench", 22)
+	var rgrid := GridContainer.new()
+	rgrid.columns = 2
+	rgrid.add_theme_constant_override("h_separation", 6)
+	rgrid.add_theme_constant_override("v_separation", 6)
+	_bench_box.add_child(rgrid)
 	for id in Items.RECIPES:
-		var b := UI.button(_bench_box, "", craft.bind(id))
-		b.add_theme_font_size_override("font_size", 15)
+		var b := UI.button(rgrid, "", craft.bind(id))
+		b.add_theme_font_size_override("font_size", 13)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.tooltip_text = Items.RECIPES[id].info
 		_recipe_buttons[id] = b
 
 	_help = UI.note(col, "")
@@ -233,6 +240,7 @@ func refresh() -> void:
 			for item in r.cost:
 				parts.append("%d %s (%d)" % [r.cost[item], Items.display_name(item).to_lower(), inventory.count_of(item)])
 			var b: Button = _recipe_buttons[id]
-			b.text = "Make %s:  %s   — %s" % [Items.display_name(id).to_lower(), ", ".join(parts), r.info]
+			var made: String = Items.display_name(id) if r.count == 1 else "%d %s" % [r.count, Items.display_name(id).to_lower()]
+			b.text = "Make %s  (%s)\n%s" % [made, r.info, ", ".join(parts)]
 			b.disabled = not Items.can_craft(id, inventory)
 	_weight.text = "Weight %.1f / %.0f kg%s" % [w, Inventory.MAX_WEIGHT, "   TOO HEAVY: no sprinting" if inventory.overloaded() else ""]

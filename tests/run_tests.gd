@@ -746,6 +746,8 @@ func _test_pistol() -> void:
 	check(g.item == "pistol" and g.visible and not main.melee.visible, "holding the pistol shows it in both hands")
 	g.mag = {}
 	g._cooldown = 0.0
+	check(not g.try_fire().fired and g.reload_t < 0.0, "a gun can't fire while it is still coming up")
+	g._process(g.RAISE_TIME + 0.01)
 	var r: Dictionary = g.try_fire()
 	check(not r.fired and g.reload_t >= 0.0, "an empty pistol clicks and starts reloading")
 	for i in 16:
@@ -777,7 +779,7 @@ func _test_pistol() -> void:
 		player.head.rotation.x = -0.03
 		player.rotation.y = 0.0
 		shots += 1 if r.kind == "target" else 0
-	check(shots == 3 and is_equal_approx(d.total_damage - before, 34.0 * 3), "aimed shots hit the dummy at 10 m for 34 each (%d hits)" % shots)
+	check(shots == 3 and is_equal_approx(d.total_damage - before, 34.0 * 3), "aimed shots hit the dummy at 10 m for 34 each (%d hits, %.0f)" % [shots, d.total_damage - before])
 	check(g.loaded("pistol") == 9, "each shot uses a round")
 	g.try_fire()
 	check(player.head.rotation.x > -0.03 + 0.02, "each shot kicks the view up")
@@ -803,6 +805,68 @@ func _test_pistol() -> void:
 	for i in 5:
 		g._process(0.1)
 	check(is_equal_approx(player.camera.fov, root.get_node("Settings").fov), "the view zooms back out")
+
+
+## v0.18: shotgun pellets, rifle scope, headshots, switching, new ammo.
+func _test_long_guns() -> void:
+	var g = main.guns
+	var inv = main.inventory
+	var player = main.player
+	var d = main.dummy
+	var Items = main.Items
+	inv.load_data({})
+	inv.add_all({"scrap": 40, "wood": 10, "nails": 30, "cloth": 4})
+	for id in ["shotgun", "shells", "rifle", "ammo_762"]:
+		Items.craft(id, inv)
+	check(inv.count_of("shotgun") == 1 and inv.count_of("rifle") == 1 and inv.count_of("shells") == 6 and inv.count_of("ammo_762") == 5, "the workbench makes a shotgun, a rifle and their ammo")
+	main.inventory_ui.open_bench("x")
+	check(main.inventory_ui._recipe_buttons.size() == Items.RECIPES.size(), "all %d recipes are on the workbench" % Items.RECIPES.size())
+	main.inventory_ui.close()
+	# Headshot with the rifle on a walker 14 m away.
+	var w = chase_walker
+	g.set_item("rifle")
+	check(g.raise_t > 0.0 and not g.try_fire().fired, "switching weapons takes a moment")
+	g._process(g.RAISE_TIME + 0.01)
+	g.mag["rifle"] = 5
+	g.set_ads(true)
+	for i in 5:
+		g._process(0.1)
+	main.hud._update_ammo()
+	check(main.hud.scope.visible and not g._models.rifle.visible, "the rifle scope fills the view when aiming")
+	check(player.camera.fov < root.get_node("Settings").fov * 0.4, "and zooms in a lot (fov %.0f)" % player.camera.fov)
+	var head: Vector3 = w.global_position + Vector3(0, 1.68, 0)
+	var eye: Vector3 = player.camera.global_position
+	var to := head - eye
+	player.head.rotation.x = atan2(to.y, Vector2(to.x, to.z).length())
+	player.rotation.y = atan2(-to.x, -to.z)
+	var r: Dictionary = g.try_fire()
+	check(r.kind == "head" and w.is_dead(), "a rifle headshot kills a walker outright (%s, %.0f damage)" % [r.kind, r.get("damage", 0.0)])
+	check(is_equal_approx(r.get("damage", 0.0), g.GUNS.rifle.damage * g.HEADSHOT), "headshots do double damage")
+	g.set_ads(false)
+	main.mutants.clear()
+	# Shotgun on the dummy: close up most pellets hit, far away few do.
+	g.set_item("shotgun")
+	g._process(g.RAISE_TIME + 0.01)
+	var totals: Array = []
+	for dist in [4.0, 26.0]:
+		player.position = Vector3(-3, main.terrain.surface_height(-3, 4 + dist), 4 + dist)
+		var aim: Vector3 = d.global_position + Vector3(0, 1.3, 0) - (player.position + Vector3(0, player.EYE_HEIGHT, 0))
+		player.rotation.y = 0.0
+		player.head.rotation.x = atan2(aim.y, Vector2(aim.x, aim.z).length())
+		var sum := 0.0
+		for i in 4:
+			g.mag["shotgun"] = 6
+			g._cooldown = 0.0
+			var hits_before: int = d.hits
+			var before: float = d.total_damage
+			g.try_fire()
+			sum += d.total_damage - before
+			if i == 0:
+				check(d.hits == hits_before + 1, "pellets on one target add up to a single hit")
+		totals.append(sum)
+	check(totals[0] > 13.0 * 4 * 2 and totals[0] > totals[1] * 2.0, "the shotgun is deadly close up and weak far away (%.0f vs %.0f)" % [totals[0], totals[1]])
+	check(g.loaded("shotgun") == 5, "each blast uses one shell")
+	g.set_item("")
 
 
 func _start_spitter() -> void:
@@ -1031,7 +1095,15 @@ func _process(_delta: float) -> bool:
 			main.mutants.clear()
 			main.survival.health = 100.0
 			_test_pistol()
-		2360:
+			var p = main.player
+			p.position = Vector3(30, main.terrain.surface_height(30, -30), -30)
+			p.rotation.y = 0.0
+			chase_walker = main.mutants.spawn("walker", Vector3(30, 0, -44))
+			chase_walker.rotation.y = 0.0  # looking away
+			chase_walker.set_physics_process(false)
+		2362:
+			_test_long_guns()
+		2370:
 			if failures.is_empty():
 				print("== ALL TESTS PASSED ==")
 				quit(0)

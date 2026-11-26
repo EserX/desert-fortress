@@ -213,6 +213,11 @@ func crumble() -> void:
 	tw.tween_property(_model, "rotation", Vector3(-1.45, 0, 0.2), 0.9).set_ease(Tween.EASE_IN)
 
 
+## True if a hit at this point is on the head (the top of the body).
+func is_headshot(point: Vector3) -> bool:
+	return point.y - global_position.y > 1.5 * float(stats.scale.y)
+
+
 ## Heard a gunshot: come after the player.
 func hear_noise() -> void:
 	if not is_dead() and state == State.WANDER and target and not target_dead.call():

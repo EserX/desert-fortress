@@ -16,6 +16,7 @@ var day_night  # DayNight
 var waves  # Waves
 var guns  # Guns
 var ammo_label: Label
+var scope: Control
 var _cross: Label
 var summary: PanelContainer
 var _summary_lines: VBoxContainer
@@ -70,6 +71,13 @@ func _ready() -> void:
 	ammo_label.size = Vector2(300, 40)
 	ammo_label.position = Vector2(-320, -150)
 	root.add_child(ammo_label)
+	scope = Control.new()
+	scope.set_anchors_preset(Control.PRESET_FULL_RECT)
+	scope.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	scope.visible = false
+	scope.draw.connect(_draw_scope)
+	root.add_child(scope)
+	root.move_child(scope, 0)
 	_build_summary(root)
 
 	var title := _label("DESERT FORTRESS  v%s" % ProjectSettings.get_setting("application/config/version", ""), 18)
@@ -313,7 +321,10 @@ func set_prompt(text: String) -> void:
 ## Shows "+3 Scrap metal" lines that fade out after a few seconds.
 ## Flashes an X on the crosshair: orange for a hit on a target, grey on a wall or rock.
 func show_hitmarker(kind: String) -> void:
-	hitmarker.add_theme_color_override("font_color", Color(1.0, 0.55, 0.2) if kind == "target" else Color(0.75, 0.75, 0.75))
+	var colors := {"target": Color(1.0, 0.55, 0.2), "head": Color(1.0, 0.15, 0.1)}
+	hitmarker.add_theme_color_override("font_color", colors.get(kind, Color(0.75, 0.75, 0.75)))
+	hitmarker.scale = Vector2.ONE * (1.5 if kind == "head" else 1.0)
+	hitmarker.pivot_offset = hitmarker.size / 2.0
 	hitmarker.modulate.a = 1.0
 	var tw := hitmarker.create_tween()
 	tw.tween_property(hitmarker, "modulate:a", 0.0, 0.3)
@@ -371,6 +382,26 @@ func _update_ammo() -> void:
 		text += "\n[R] Reload" if inventory.count_of(g.ammo) > 0 else "\nNo ammo"
 	ammo_label.text = text
 	_cross.modulate.a = 1.0 - guns.ads_amount
+	var scoped: bool = g.get("scope", false) and guns.ads_amount > 0.9
+	if scoped != scope.visible:
+		scope.visible = scoped
+		scope.queue_redraw()
+
+
+## Looking through the rifle scope: black all round a circle, with thin cross hairs.
+func _draw_scope() -> void:
+	var sz := scope.size
+	var c := sz / 2.0
+	var r := sz.y * 0.44
+	var w := sz.length()
+	scope.draw_arc(c, r + w / 2.0, 0.0, TAU, 96, Color.BLACK, w)
+	scope.draw_arc(c, r, 0.0, TAU, 96, Color(0.1, 0.1, 0.1), 6.0)
+	var line := Color(0, 0, 0, 0.85)
+	scope.draw_line(Vector2(c.x - r, c.y), Vector2(c.x - 14, c.y), line, 2.0)
+	scope.draw_line(Vector2(c.x + 14, c.y), Vector2(c.x + r, c.y), line, 2.0)
+	scope.draw_line(Vector2(c.x, c.y - r), Vector2(c.x, c.y - 14), line, 2.0)
+	scope.draw_line(Vector2(c.x, c.y + 14), Vector2(c.x, c.y + r), line, 2.0)
+	scope.draw_circle(c, 2.0, Color(0.9, 0.1, 0.05))
 
 
 ## End-of-wave summary card under the compass.

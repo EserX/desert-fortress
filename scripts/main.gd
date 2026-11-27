@@ -29,6 +29,7 @@ const Power = preload("res://scripts/power.gd")
 const Turrets = preload("res://scripts/turrets.gd")
 const Shop = preload("res://scripts/shop.gd")
 const ShopUI = preload("res://scripts/shop_ui.gd")
+const Market = preload("res://scripts/market.gd")
 const Drone = preload("res://scripts/drone.gd")
 const Hints = preload("res://scripts/hints.gd")
 const LowPoly = preload("res://scripts/lowpoly.gd")
@@ -104,6 +105,7 @@ var power: Power
 var turrets: Turrets
 var shop: Shop
 var shop_ui: ShopUI
+var market: Market
 var drone: Drone
 var hints: Hints
 var test_box: StaticBody3D
@@ -374,9 +376,14 @@ func _ready() -> void:
 	building.spilled.connect(func(items, pos): loot.spawn_drop(items, Vector3(pos.x, terrain.surface_height(pos.x, pos.z), pos.z)))
 	add_child(inventory_ui)
 
+	market = Market.new()
+	market.world_seed = world_seed
+	market.day = day_night.day
+	day_night.day_started.connect(market.on_morning)
 	shop_ui = ShopUI.new()
 	shop_ui.name = "ShopUI"
 	shop_ui.shop = shop
+	shop_ui.market = market
 	shop_ui.inventory = inventory
 	shop_ui.bought.connect(func(i, left):
 		hud.show_pickup(["Bought " + Shop.CATALOG[i].name.to_lower()])
@@ -385,6 +392,8 @@ func _ready() -> void:
 			hud.show_banner("Inventory full: the rest is in a bag at your feet"))
 	shop_ui.upgrade_bought.connect(func(id): hud.show_pickup(["Base upgrade: " + Shop.UPGRADES[id].name.to_lower()]))
 	shop_ui.ordered.connect(func(i): hud.show_pickup(["Ordered " + Shop.DRONE[i].name.to_lower() + " by drone"]))
+	shop_ui.market_sold.connect(func(item, n, got): hud.show_pickup(["Sold %d %s for $%d" % [n, Items.display_name(item).to_lower(), got]]))
+	shop_ui.market_bought.connect(func(item): hud.show_pickup(["Bought 1 " + Items.display_name(item).to_lower()]))
 	add_child(shop_ui)
 	drone.delivered.connect(_on_delivery)
 
@@ -1829,6 +1838,7 @@ func collect_save_data() -> Dictionary:
 		"waves": waves.save_data(),
 		"guns": guns.save_data(),
 		"shop": shop.save_data(),
+		"market": market.save_data(),
 		"drone": drone.save_data(),
 		"terrain": terrain.save_data(),
 		"caches": caches.save_data(),
@@ -1879,6 +1889,8 @@ func apply_save_data(data: Dictionary) -> void:
 	day_night.restore(int(w.get("day", 1)), float(w.get("hour", 9.0)))
 	# Upgrades first: chests must be big enough before their contents load.
 	shop.load_data(data.get("shop", {}))
+	var md = data.get("market", {})
+	market.load_data(md if md is Dictionary else {}, day_night.day)
 	building.chest_slots = Building.CHEST_SLOTS
 	apply_upgrades()
 	loot.load_data(data.get("loot", {}))

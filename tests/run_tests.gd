@@ -2993,6 +2993,7 @@ func _process(_delta: float) -> bool:
 			_test_resources()
 			_test_water()
 			_test_farming()
+			_test_market()
 			_start_ladder()
 		3300:
 			_check_debris()
@@ -3323,3 +3324,103 @@ func _test_farming() -> void:
 	f.load_data({})
 	w.load_data({})
 	inv.load_data({})
+
+
+## v1.15: the market at the shop terminal: daily prices, gluts, selling and buying food.
+func _test_market() -> void:
+	var m = main.market
+	var shop = main.shop
+	var inv = main.inventory
+	var ui = main.shop_ui
+	var Market = load("res://scripts/market.gd")
+	var Items = load("res://scripts/items.gd")
+	var F = load("res://scripts/farming.gd")
+	inv.load_data({})
+	m.load_data({}, 3)
+	# Every harvest has a buyer, and exotic crops are worth the most.
+	var missing: Array = []
+	for c in F.CROPS:
+		for item in F.CROPS[c].yield:
+			if not Market.GOODS.has(item):
+				missing.append(item)
+	check(missing.is_empty(), "the market buys every harvest %s" % [missing])
+	for item in Market.GOODS:
+		if not Items.ITEMS.has(item):
+			check(false, "market good %s is a real item" % item)
+	var top := 0
+	for item in Market.GOODS:
+		if item != "saffron" and item != "dragon_fruit":
+			top = maxi(top, Market.GOODS[item].base)
+	check(Market.GOODS.saffron.base > Market.GOODS.dragon_fruit.base and Market.GOODS.dragon_fruit.base > top, "exotic crops are worth the most")
+	check(Market.GOODS.rope.base * 1 > Market.GOODS.fibre.base * 3, "rope sells for more than the fibre it is made of")
+	# Daily prices: repeatable for a seed and day, different on other days.
+	var p3: int = m.price("saffron")
+	var m2 = Market.new()
+	m2.world_seed = m.world_seed
+	m2.day = 3
+	check(m2.price("saffron") == p3, "the same world and day give the same price ($%d)" % p3)
+	var seen := {}
+	for d in range(1, 11):
+		m2.day = d
+		seen[m2.price("saffron")] = true
+		var f: float = m2.daily_factor("millet")
+		if f < 0.7 or f > 1.3:
+			check(false, "daily millet price stays within its swing (%.2f)" % f)
+	check(seen.size() >= 4, "saffron's price changes from day to day (%d prices in 10 days)" % seen.size())
+	# Selling: cash in, items out, the price drops with each one sold.
+	shop.cash = 0
+	inv.add("millet", 30)
+	var first: int = m.price("millet")
+	var all_value: int = m.sale_value("millet", 30)
+	check(all_value < first * 30, "selling a lot gets less than the first price for each ($%d for 30)" % all_value)
+	var got: int = m.sell("millet", 10, inv, shop)
+	check(got > 0 and shop.cash == got and inv.count_of("millet") == 20, "selling 10 millet pays $%d and takes them" % got)
+	check(m.price("millet") < first, "the millet price drops after selling ($%d to $%d)" % [first, m.price("millet")])
+	check(m.sell("millet", 99, inv, shop) > 0 and inv.count_of("millet") == 0, "you can only sell what you have")
+	check(m.sell("millet", 1, inv, shop) == 0, "nothing left, nothing sold")
+	check(m.sell("scrap", 1, inv, shop) == 0 and m.price("scrap") == 0, "the market doesn't buy scrap")
+	var low: int = m.price("millet")
+	m.on_morning(4)
+	m.day = 3  # same day's prices, to see only the glut wear off
+	check(m.price("millet") > low, "the glut wears off overnight ($%d to $%d)" % [low, m.price("millet")])
+	for i in 10:
+		m.on_morning(4 + i)
+	check(not m.glut.has("millet"), "after a few days it is gone")
+	# Saved, and broken saves load.
+	m.day = 3
+	m.glut = {"melon": 12.0}
+	var data: Dictionary = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	m.glut = {}
+	main.apply_save_data(data)
+	check(is_equal_approx(float(m.glut.get("melon", 0.0)), 12.0), "the glut is saved")
+	check(m.day == main.day_night.day, "loading sets today's prices from the saved day")
+	m.load_data({"glut": {"melon": "lots", "triffid": 3, "dates": -4, "rope": 2}}, 2)
+	check(m.glut.size() == 1 and m.glut.has("rope"), "a broken market save loads what it can")
+	m.load_data({"glut": "junk"}, 2)
+	check(m.glut.is_empty(), "a junk market save loads empty")
+	# Buying food.
+	inv.load_data({})
+	shop.cash = 0
+	check(not m.buy("melon", inv, shop), "no cash, no melon")
+	shop.cash = 100
+	var bp: int = m.buy_price("melon")
+	check(bp >= Market.GOODS.melon.base, "food costs more to buy than it sells for ($%d)" % bp)
+	check(m.buy("melon", inv, shop) and inv.count_of("melon") == 1 and shop.cash == 100 - bp, "buying a melon takes $%d" % bp)
+	check(not m.buy("saffron", inv, shop), "the market doesn't sell saffron")
+	# The shop screen's market page.
+	inv.load_data({})
+	inv.add("dates", 8)
+	shop.cash = 0
+	ui.open()
+	ui.show_page(3)
+	var row: Dictionary = ui.market_rows["dates"]
+	check(ui._market_page.visible and not ui._counter.visible, "the market tab shows the market page")
+	check(row.name.text.contains("8") and not row.all.disabled and ui.market_rows["saffron"].all.disabled, "rows show what you have: " + row.name.text)
+	var expect: int = m.sale_value("dates", 8)
+	check(row.all.text.contains("$%d" % expect), "sell all shows the total: " + row.all.text)
+	row.all.pressed.emit()
+	check(inv.count_of("dates") == 0 and shop.cash == expect, "the sell all button sells them ($%d)" % shop.cash)
+	check(ui.market_buy_buttons.size() == Market.FOR_SALE.size(), "the market sells %d foods" % ui.market_buy_buttons.size())
+	ui.close()
+	inv.load_data({})
+	m.load_data({}, main.day_night.day)

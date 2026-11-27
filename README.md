@@ -1,8 +1,8 @@
 # Desert Fortress
 
-A 3D low-poly survival and fortress-defence game for Linux, made with Godot 4.5. Scavenge the desert by day, build and arm a fortress around the flag, and survive a bigger mutant wave every night. Each night pays cash you spend at the shop terminal on supplies, weapons, drone deliveries and base upgrades. Coming next: turning the desert green from a main well at the centre, with farms, oases and a market (see the roadmap).
+A 3D low-poly survival and fortress-defence game for Linux, made with Godot 4.5. Scavenge the desert by day, build and arm a fortress around the flag, and survive a bigger mutant wave every night. Each night pays cash you spend at the shop terminal on supplies, weapons, drone deliveries and base upgrades. Now also: turning the desert green from a main well at the centre, farming it and selling the harvest at the market; animals, oases and more are coming (see the roadmap).
 
-**Current version: v1.14.1.** See [ROADMAP.md](ROADMAP.md) for the plan and [DEVLOG.md](DEVLOG.md) for what changed in each update.
+**Current version: v1.15.0.** See [ROADMAP.md](ROADMAP.md) for the plan and [DEVLOG.md](DEVLOG.md) for what changed in each update.
 
 ## Play (Linux Mint)
 
@@ -74,7 +74,7 @@ If `git pull` complains about untracked `.uid` files, they are safe to delete.
 | Saffron (exotic) | 4 | 4 to 6 L | saffron; needs shade at midday (a roof or a date palm) and rots with more than 6 L |
 | Dragon fruit (exotic) | 5 | 6 L | dragon fruit every 3 days |
 
-Eat millet, melons, dates and dragon fruit with **F**. Exotic crops and flowers are for selling at the market (next update). Digging up a bed uproots its plant.
+Eat millet, melons, dates and dragon fruit with **F**. Sell the harvest at the market (shop terminal, Market page): exotic crops and flowers bring the most. Digging up a bed uproots its plant.
 
 **Nights.** At 18:30 a siren warns you. At 20:00 a wave of mutants comes in from the edge of the map and marches on the base. Close to you they know where you are, walls or not. They find their way round your walls: through an open gate if there is one, otherwise they all go for the weakest wall or gate (a damaged or wooden one before stone), and they walk round deep trenches and, if it's short, round barbed wire and spikes. Brutes don't bother and come straight through. The wave ends when all are dead or at dawn. A summary shows your kills and your pay.
 
@@ -89,10 +89,11 @@ Eat millet, melons, dates and dragon fruit with **F**. Exotic crops and flowers 
 
 **Defences.** Spike barricades, spike strips, barbed wire (slows them) and landmines. An electric fence and floodlights need power from a fuel generator (fuel cans come from car trunks): within 4 m they plug straight in, further away they need a **cable**. Make cable at the workbench (1 scrap, 1 cloth for 6), hold it, left click the generator and then the light, fence, **power switch** or turret (a cable costs one per 2 m, 24 m at most; right click takes a piece's cables back up). Power passes through switches only when they are on (E). A turret on power turns and fires 40% faster. At night an open gate closes by itself 8 seconds after you leave it, and **R** locks a shut metal door (locked, it takes half damage). A fire pit burns mutants that walk through it. Auto-turrets stand on tall masts and shoot anything they can see within 22 m, over your walls, using the 9mm rounds you load into them with **E**.
 
-**Cash and the shop.** Every night pays for kills, for surviving, and for how much of the base still stands (more if you kill the whole wave). The **shop terminal** next to the flag has three pages:
+**Cash and the shop.** Every night pays for kills, for surviving, and for how much of the base still stands (more if you kill the whole wave). The **shop terminal** next to the flag has four pages:
 - **Counter:** materials, food, weapons, ammo and trap parts, straight into your pockets.
 - **Drone orders:** big loads and **blueprints** (auto-turret, electric fence, sandbag wall), flown to a **drone landing pad** you build.
 - **Base upgrades:** a bigger build zone, bigger chests, workbench tiers (shotgun at tier 2, rifle and medkits at tier 3), and a radio that tells you at dusk which mutants are coming.
+- **Market:** sell crops, flowers, fruit, cotton, fibre, rope, cloth and logs from your pockets (Sell 1 or Sell all), and buy fresh food. Prices change every morning (the page says what is wanted today; green is a good price, red a poor one) and drop with each one you sell, so spread big harvests over a few days: a glut halves overnight. Saffron is worth the most, then dragon fruit; rope is worth more than the fibre it's made from.
 
 **Difficulty.** New game asks for Easy, Normal or Hard (wave size, mutant toughness, pay, and how fast you get hungry). First-time tips explain each thing as you meet it; turn them on or off in Settings.
 

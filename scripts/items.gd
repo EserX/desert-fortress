@@ -84,7 +84,7 @@ const RECIPES := {
 	"watering_can": {"count": 1, "cost": {"scrap": 2, "nails": 2}, "info": "fill it at the main well, LMB pours water on the sand"},
 	"water_pipe": {"count": 4, "cost": {"scrap": 2, "nails": 1}, "info": "hold it: click the main well, then a sprinkler (needs the hand pump)"},
 	"cloth": {"count": 2, "cost": {"cotton": 3}, "info": "spin cotton from your fields into cloth"},
-	"rope": {"count": 1, "cost": {"fibre": 3}, "info": "twist agave fibre into rope (sells at the market, v1.15)"},
+	"rope": {"count": 1, "cost": {"fibre": 3}, "info": "twist agave fibre into rope (sells well at the market)"},
 	"metal_detector": {"count": 1, "cost": {"scrap": 6, "nails": 4, "cloth": 2}, "info": "finds caches buried near the base"},
 	"spike_barricade": {"count": 1, "cost": {"wood": 4, "nails": 4}, "info": "build it in build mode"},
 	"pistol": {"count": 1, "cost": {"scrap": 10, "wood": 2, "nails": 6}, "info": "12 rounds. RMB aims, R reloads"},

@@ -2,6 +2,23 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v1.15.0 (2026-11-27): The market
+Third step of the terraforming direction (M10): your fields now earn cash. No player feedback was waiting.
+- **Market page** at the shop terminal (a fourth tab). One row for each thing the market buys: millet, melons, dates, cotton, agave fibre, rope, cloth, logs, marigolds, dragon fruit and saffron. Each row shows how many you carry, today's price and **Sell 1** / **Sell all ($total)**. Sales come from your pockets.
+- **Daily prices:** every morning each price moves up or down from its base price (±20% for goods like cloth and logs, ±30% for food, up to ±50% for saffron). A good price shows green with "(high)", a poor one red with "(low)", and the page says which crop is most wanted today. Prices come from the world seed and the day, so the same world has the same prices.
+- **Gluts:** each one you sell lowers the price of the next (selling as many as the item's "glut size" halves it: 4 for saffron, 10 for dragon fruit, 15 for melons and rope, 30 for millet). The glut halves every morning, so big harvests pay best spread over a few days. "Sell all" shows the true total, glut included.
+- **Base prices:** saffron $80, dragon fruit $18, rope $9, melon $7, marigolds $5, dates $4, millet and cotton $3, fibre and logs $2, cloth $1. Things the counter also sells (cloth, logs) are priced below what they cost there, so you can't buy and sell for profit. Rope is worth more than the 3 fibre it takes.
+- **Fresh food:** the market sells millet, melons, dates and dragon fruit at twice today's price.
+- The shop screen got a little tighter (smaller title, shorter note, slimmer counter buttons) so all four pages fit a 1280x720 window; before this the counter page's bottom line was cut off at 720 px.
+- **Saved:** the gluts. Today's prices come from the day, so they aren't saved. Older saves load with no gluts; broken entries are skipped.
+- Code: the new `scripts/market.gd` (prices, gluts, selling, buying, saving); the page is in `shop_ui.gd`. main.gd only creates it, connects the morning and the pop-ups, and saves it.
+- Decisions: selling is from your pockets only (not chests), which keeps it simple and makes you carry the harvest to the terminal. Scrap, wood, stone and the like aren't bought: the market is for what you grow. Prices are whole dollars, so cheap crops drop in $1 steps.
+- **Tests (26 new):** every harvest has a buyer, exotic crops worth the most, rope worth more than its fibre, repeatable daily prices that change from day to day and stay in their range, selling paying cash and taking the items, prices dropping as you sell, only selling what you have, no scrap, the glut wearing off, saving and broken saves, buying food (and not without cash, and not saffron), and the market page's rows and Sell all button.
+- New screenshot view `59_market`.
+
+**Try:** harvest some crops (or take them from the second test box), open the shop terminal's Market tab and compare "Sell 1" with "Sell all". Sell half a big harvest today and the rest tomorrow and see the difference. Check which crop is wanted each morning.
+**Next:** v1.16, water draws life: animals by day come to water and green land (hunted for meat), and at night mutants are drawn to the main well, with wave size growing with your water use and green land.
+
 ## v1.14.1 (2026-11-27): Workbench screen fits a 1280x720 window
 Player feedback first (found by the v1.14 run): at 1280x720 the workbench screen was taller than the window, so the last recipe row was cut off and the help line under it was off screen.
 - **Recipes in 4 columns** instead of 3 (21 recipes now take 6 rows, not 7).

@@ -66,6 +66,7 @@ var shots := [
 	{"name": "56_watering_can", "pos": Vector3(16, 0, 6), "yaw": 0.59, "pitch": -0.6, "hour": 15.0, "greening": true, "can": true},
 	{"name": "57_farm", "pos": Vector3(24, 0, 29.5), "yaw": 0.0, "pitch": -0.42, "hour": 10.0, "farm": true},
 	{"name": "58_seeds", "pos": Vector3(19, 0, 25.2), "yaw": 0.0, "pitch": -0.6, "hour": 16.0, "farm": true, "seeds": true},
+	{"name": "59_market", "pos": Vector3(-0.6, 0, 4.2), "yaw": 0.5, "pitch": -0.2, "hour": 10.0, "market": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -262,6 +263,10 @@ func _process(_d: float) -> bool:
 			main.inventory_ui.open_chest(ck, b.storage_of(ck))
 		elif s.get("shop", false):
 			main.shop_ui.open()
+		elif s.get("market", false):
+			main.inventory.add_all({"millet": 12, "dates": 8, "rope": 3, "saffron": 2})
+			main.shop_ui.open()
+			main.shop_ui.show_page(3)
 		elif s.get("drone_shop", false):
 			main.shop_ui.open()
 			main.shop_ui.show_page(true)

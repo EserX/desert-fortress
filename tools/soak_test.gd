@@ -4,7 +4,7 @@ extends SceneTree
 ## it play out for a few thousand frames. Reports how the night went, how long
 ## frames took, and fails if anything odd happened (errors show in the log).
 ##   godot --headless --path . -s tools/soak_test.gd --fixed-fps 60
-## Optional: -- wave=8 frames=4000 walls=1 away=1 trench=1
+## Optional: -- wave=8 frames=4000 walls=1 away=1 trench=1 gate=1 (leave the gate open)
 
 var main: Node
 var frame := 0
@@ -18,6 +18,9 @@ var _kills0 := 0
 var walls_only := false  # -- walls=1: just the ring of walls, no traps or turrets
 var away := false   # -- away=1: the player is far out in the desert all night
 var trench := false  # -- trench=1: a 2.25 m deep trench ring 14 m out from the flag
+var gate_open := false  # -- gate=1: the gate in the south wall stays open
+var _gate_key := ""
+var _through_gate := 0
 
 
 func _initialize() -> void:
@@ -32,6 +35,8 @@ func _initialize() -> void:
 			away = true
 		elif arg == "trench=1":
 			trench = true
+		elif arg == "gate=1":
+			gate_open = true
 	main = load("res://scenes/main.tscn").instantiate()
 	root.add_child(main)
 
@@ -48,9 +53,13 @@ func _fortress() -> void:
 	# A 6x6 square of walls round the flag, with a gate on the south side.
 	for i in range(-3, 3):
 		place.call("wall", "edge", i, -3)
-		place.call("wall" if i != 0 else "doorway", "edge", i, 3)
+		var k: String = place.call("wall" if i != 0 else "doorway", "edge", i, 3)
+		if i == 0:
+			_gate_key = k
 		place.call("wall", "edge", -3, i, 1)
 		place.call("wall", "edge", 3, i, 1)
+	if gate_open and _gate_key != "":
+		b.set_gate(_gate_key, true)
 	if trench:
 		var t = main.terrain
 		var cells := {}
@@ -85,6 +94,16 @@ func _fortress() -> void:
 	print("fortress: %d pieces, %d cables" % [b.pieces.size(), b.cables.size()])
 
 
+## Who broke what (the nearest mutant), to see whether they went for the gate.
+func _on_destroyed(key: String, type: String) -> void:
+	var best: Node = null
+	var p: Vector3 = Vector3.ZERO
+	for m in main.mutants.alive():
+		if m.break_key == key and (best == null or m.type == "brute"):
+			best = m
+	print("   frame %d: %s %s broken by %s" % [frame, type, key, best.type if best else "?"])
+
+
 func _process(delta: float) -> bool:
 	frame += 1
 	var player = main.player
@@ -98,11 +117,14 @@ func _process(delta: float) -> bool:
 		main.day_night.restore(1, 20.0)
 		main.waves.start_wave()
 		_kills0 = main.mutants.kills
+		main.building.piece_destroyed.connect(_on_destroyed)
 		print("wave %d: %s" % [main.waves.wave, main.waves.mix_text(main.waves.queue)])
 		_t0 = Time.get_ticks_usec()
 	elif frame > 5:
 		# Keep the player alive and in place: this is about the base.
 		main.survival.health = 100.0
+		if gate_open and main.building.pieces.has(_gate_key):
+			main.building.set_gate(_gate_key, true)  # gates close by themselves at night
 		var dt := delta * 1000.0
 		_total += dt
 		_worst = maxf(_worst, dt)
@@ -118,6 +140,8 @@ func _process(delta: float) -> bool:
 			if m.global_position.y < main.terrain.BASE_HEIGHT - 1.0:
 				in_trench += 1
 		print("   mutants down in a hole: %d" % in_trench)
+		var hurt: Array = main.building.pieces.values().filter(func(r): return r.hp < main.building.max_hp(r))
+		print("   pieces damaged but standing: %d; mutants inside the walls at the end: %d" % [hurt.size(), main.mutants.alive().filter(func(m): return absf(m.global_position.x) < 6.0 and absf(m.global_position.z) < 6.0).size()])
 		print("== SOAK DONE after %d frames: wave active=%s, kills %d, most alive at once %d, pieces left %d" % [frame, main.waves.active, main.mutants.kills - _kills0, _max_alive, main.building.pieces.size()])
 		print("   real time %.0f ms for %d frames (%.2f ms per frame, headless, no rendering)" % [real, frame - 5, real / maxf(frame - 5, 1)])
 		quit(0)

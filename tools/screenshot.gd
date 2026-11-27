@@ -58,8 +58,9 @@ var shots := [
 	{"name": "48_prefabs", "pos": Vector3(6, 0, 16), "yaw": 0.25, "pitch": -0.1, "hour": 16.5, "prefabs": true},
 	{"name": "49_blueprint", "pos": Vector3(10, 0, 15), "yaw": 0.0, "pitch": -0.2, "hour": 11.0, "prefab_ghost": true},
 	{"name": "50_horde", "pos": Vector3(-1.4, 0, 8.9), "yaw": 1.5, "pitch": -0.35, "hour": 12.0, "horde": true},
-	{"name": "51_trees", "pos": Vector3(0, 0, 0), "yaw": 0.0, "pitch": 0.05, "hour": 9.5, "trees": true},
-	{"name": "52_machines", "pos": Vector3(-8, 0, 12.5), "yaw": 0.1, "pitch": -0.3, "hour": 14.0, "machines": true},
+	{"name": "51_nav", "pos": Vector3(13, 22, 30), "yaw": 0.0, "pitch": -0.95, "hour": 15.0, "nav": true},
+	{"name": "52_trees", "pos": Vector3(0, 0, 0), "yaw": 0.0, "pitch": 0.05, "hour": 9.5, "trees": true},
+	{"name": "53_machines", "pos": Vector3(-8, 0, 12.5), "yaw": 0.1, "pitch": -0.3, "hour": 14.0, "machines": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -267,6 +268,8 @@ func _process(_d: float) -> bool:
 			_types_sample(p)
 		if s.get("breakin", false):
 			_breakin_sample(p)
+		if s.get("nav", false):
+			_nav_sample()
 		if s.get("wave", false):
 			_wave_sample(p)
 		if s.get("summary", false):
@@ -444,6 +447,67 @@ func _breakin_sample(p: Node3D) -> void:
 		w._animate(0.0, 0.3)
 	b.damage(keys[2], 9999.0)
 	main.mutants.night = true
+
+
+## v1.10: a walled yard with its gate open on the south side, the paths the
+## nav field gives from three spots outside (yellow dots), and walkers on them.
+func _nav_sample() -> void:
+	var b = main.building
+	var ms = main.mutants
+	b.load_data([])
+	ms.clear()
+	for c in main.get_children():
+		if c.name.begins_with("NavDots"):
+			c.queue_free()
+	var cx0 := 5
+	var cz0 := 5
+	for dz in 3:
+		for dx in 3:
+			var f := {"kind": "cell", "cx": cx0 + dx, "cz": cz0 + dz, "dir": 0, "level": 0}
+			b.place("foundation", f, b.evaluate("foundation", f).y)
+	for k in 3:
+		for e in [
+			{"kind": "edge", "cx": cx0 + k, "cz": cz0, "dir": 0, "level": 0},
+			{"kind": "edge", "cx": cx0 + k, "cz": cz0 + 3, "dir": 0, "level": 0},
+			{"kind": "edge", "cx": cx0, "cz": cz0 + k, "dir": 1, "level": 0},
+			{"kind": "edge", "cx": cx0 + 3, "cz": cz0 + k, "dir": 1, "level": 0},
+		]:
+			var door: bool = e.cz == cz0 + 3 and e.dir == 0 and k == 1
+			b.place("doorway" if door else "wall", e, b.evaluate("wall", e).y, door)
+	var nav = main.nav
+	var f = nav.compute_now("player", Vector3(13, 0, 12))
+	var dots := MultiMeshInstance3D.new()
+	dots.name = "NavDots"
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	var sphere := SphereMesh.new()
+	sphere.radius = 0.16
+	sphere.height = 0.32
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(1.0, 0.85, 0.2)
+	mat.emission_enabled = true
+	mat.emission = Color(1.0, 0.7, 0.1)
+	sphere.material = mat
+	mm.mesh = sphere
+	var pts: Array = []
+	var starts := [Vector3(13, 0, 1), Vector3(1, 0, 13), Vector3(26, 0, 6)]
+	for st in starts:
+		for c in nav.trace(f, st):
+			pts.append(nav.cell_point(c) + Vector3(0, 0.25, 0))
+	mm.instance_count = pts.size()
+	for i in pts.size():
+		mm.set_instance_transform(i, Transform3D(Basis(), pts[i]))
+	dots.multimesh = mm
+	main.add_child(dots)
+	for i in starts.size():
+		var path: Array = nav.trace(f, starts[i])
+		var at: Vector3 = nav.cell_point(path[mini(6, path.size() - 1)])
+		var nx: Vector3 = nav.cell_point(path[mini(7, path.size() - 1)])
+		var w = ms.spawn(["walker", "runner", "walker"][i], at)
+		w.look_at_from_position(at, Vector3(nx.x, at.y, nx.z) if nx.distance_to(at) > 0.1 else at + Vector3.FORWARD)
+		w.set_physics_process(false)
+		w._anim_t = i * 1.7
+		w._animate(0.0, 2.0)
 
 
 ## Walker, runner, brute and spitter in a row, and a glob of acid in the air (v0.16).

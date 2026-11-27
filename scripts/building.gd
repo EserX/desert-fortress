@@ -164,12 +164,12 @@ var chest_slots := CHEST_SLOTS
 var pieces := {}
 ## every slot key a piece takes up (stairs take two) -> main slot key
 var occupied := {}
-## Goes up whenever a piece is built, taken away, or a gate opens or shuts
-## (mutant pathfinding works its field out again then).
-var version := 0
 ## main slot key -> support in % (see MIN_SUPPORT), kept up to date
 var support := {}
 var _bulk := false  # loading: work out support once at the end
+## Goes up whenever something changes that mutants' paths care about (a piece
+## built, gone, opened, upgraded or badly damaged). See nav.gd.
+var revision := 0
 ## Cables: [key, key] pairs.
 var cables: Array = []
 var _cable_root: Node3D
@@ -822,6 +822,7 @@ func place(type: String, slot: Dictionary, y: float, gate_open := false, tier :=
 	slot = slot.duplicate()
 	slot.level = int(slot.get("level", 0))
 	var key := slot_key(slot)
+	revision += 1
 	var body := StaticBody3D.new()
 	body.transform = piece_transform(type, slot, y)
 	body.set_meta("piece_key", key)
@@ -919,7 +920,6 @@ func place(type: String, slot: Dictionary, y: float, gate_open := false, tier :=
 		_add_turret_head(rec)
 	if type in ["floodlight", "electric_fence"]:
 		rec.powered = false
-	version += 1
 	if not _bulk:
 		_refresh_support()
 	return key
@@ -1193,9 +1193,10 @@ func set_gate(key: String, open: bool) -> void:
 	var rec: Dictionary = pieces.get(key, {})
 	if rec.is_empty() or not rec.has("hinge"):
 		return
+	if rec.open != open:
+		revision += 1
 	rec.open = open
 	rec.open_t = 0.0
-	version += 1
 	if rec.type == "trapdoor":
 		rec.hinge.rotation.x = PI * 0.5 if open else 0.0
 	else:
@@ -1215,6 +1216,7 @@ func toggle_lock(key: String) -> bool:
 	if rec.is_empty() or rec.type != "metal_door" or rec.open:
 		return false
 	rec.locked = not rec.get("locked", false)
+	revision += 1
 	return true
 
 
@@ -1394,11 +1396,11 @@ func remove(key: String, spill := true) -> String:
 	if spill and rec.has("storage") and not rec.storage.contents().is_empty():
 		spilled.emit(rec.storage.contents(), rec.node.global_position)
 	rec.node.queue_free()
+	revision += 1
 	for k in slot_keys(rec.type, rec.slot):
 		occupied.erase(k)
 	pieces.erase(key)
 	support.erase(key)
-	version += 1
 	if not cables_of(key).is_empty():
 		cables = cables.filter(func(c): return not key in c)
 		_rebuild_cables()
@@ -1510,6 +1512,7 @@ func upgrade(key: String) -> void:
 		return
 	rec.tier += 1
 	rec.hp = max_hp(rec)
+	revision += 1
 	_apply_tier(rec)
 	_refresh_support()
 
@@ -1518,6 +1521,7 @@ func repair(key: String) -> void:
 	var rec: Dictionary = pieces.get(key, {})
 	if not rec.is_empty():
 		rec.hp = max_hp(rec)
+		revision += 1
 		_update_cracks(rec)
 
 
@@ -1529,7 +1533,10 @@ func damage(key: String, amount: float) -> bool:
 		return false
 	if rec.get("locked", false):
 		amount *= 0.5  # a locked metal door is barred from inside
+	var stage := crack_stage(rec)
 	rec.hp = maxf(rec.hp - amount, 0.0)
+	if crack_stage(rec) != stage:
+		revision += 1  # a badly damaged wall is a cheaper way in
 	if rec.hp <= 0.0:
 		var type: String = rec.type
 		_debris(rec)

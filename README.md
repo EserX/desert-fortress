@@ -58,7 +58,7 @@ If `git pull` complains about untracked `.uid` files, they are safe to delete.
 
 **Water well.** Dig a shaft at least **3.5 m** deep (the last metre is stone, so bring the pickaxe; looking straight down into a hole reaches its bottom), then build a **water well** over it (8 stone, 4 wood, 2 scrap). It fills a bottle of water every 75 seconds, up to 6; press **E** on it to take them. Hard work costs **stamina**: a dig 7 (filling 3.5), a pickaxe hit 9, building a piece 6, a hammer repair or upgrade 5. Out of breath, you have to wait.
 
-**Nights.** At 18:30 a siren warns you. At 20:00 a wave of mutants comes in from the edge of the map and marches on the base. Close to you they know where you are, walls or not, and tear through anything in their way. The wave ends when all are dead or at dawn. A summary shows your kills and your pay.
+**Nights.** At 18:30 a siren warns you. At 20:00 a wave of mutants comes in from the edge of the map and marches on the base. Close to you they know where you are, walls or not. They find their way round your walls: through an open gate if there is one, otherwise they all go for the weakest wall or gate (a damaged or wooden one before stone), and they walk round deep trenches and, if it's short, round barbed wire and spikes. Brutes don't bother and come straight through. The wave ends when all are dead or at dawn. A summary shows your kills and your pay.
 
 | Mutant | What to know |
 |---|---|

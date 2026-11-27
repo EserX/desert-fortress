@@ -34,6 +34,7 @@ const Hints = preload("res://scripts/hints.gd")
 const LowPoly = preload("res://scripts/lowpoly.gd")
 const Caches = preload("res://scripts/caches.gd")
 const HordeStand = preload("res://scripts/horde_stand.gd")
+const Nav = preload("res://scripts/nav.gd")
 
 ## Testing aid (temporary): a green box by the spawn point that holds a full
 ## stack of every item and tops your cash up to $2000 each time you open it.
@@ -89,6 +90,7 @@ var base_zone: BaseZone
 var melee: Melee
 var dummy: Dummy
 var mutants: Mutants
+var nav: Nav
 var waves: Waves
 var guns: Guns
 var traps: Traps
@@ -235,8 +237,18 @@ func _ready() -> void:
 	ambience.day_night = day_night
 	add_child(ambience)
 
+	nav = Nav.new()
+	nav.name = "Nav"
+	nav.terrain = terrain
+	nav.building = building
+	nav.player = player
+	nav.player_dead = func(): return survival == null or survival.dead
+	add_child(nav)
+	nav.rebuild_map()
+
 	mutants = Mutants.new()
 	mutants.name = "Mutants"
+	mutants.nav = nav
 	mutants.terrain = terrain
 	mutants.building = building
 	mutants.player = player
@@ -1841,6 +1853,7 @@ func apply_save_data(data: Dictionary) -> void:
 	player.head.rotation.x = float(p.get("pitch", 0.0))
 	player.stamina = float(p.get("stamina", player.STAMINA_MAX))
 	player.velocity = Vector3.ZERO
+	nav.rebuild_map()  # the mutants' path map, worked out now rather than when the first one arrives
 
 
 ## Graphics quality: sun shadows and how far you can see.

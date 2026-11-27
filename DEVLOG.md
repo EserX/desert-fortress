@@ -13,34 +13,38 @@ The owner asked for resource gathering and processing: trees and an axe, rocks t
   - Generators now also start up **by day** when a machine has work, and burn fuel for it. The saw blade, crusher wheel or flywheel spins while a machine works.
   - Demolishing a machine with the hammer gives you back its crate. What is in a machine is saved.
 - **Log stakes** (trap, 3 logs + 2 nails, end of the build list): sharpened logs crossed over a rail. They slow a mutant on them to 45% and bite for 26 a second, wearing down 5 per bite. Mutant pathfinding counts them as a trap, like the others.
+- **Support colours (build mode, from Valheim):** an upstairs piece's preview is green when it is well held (60% or more), yellow from 35%, and orange close to the 20% limit. Red still means it can't be built.
+- **Merged with v1.10 from main:** a separate v1.10 run on main added mutant navigation (`scripts/nav.gd`) while this branch had its own flow field. Main's version is more complete (paths to the player, stepping onto foundations, work spread over frames), so this branch dropped its own and kept main's. Log stakes cost 9 in its trap costs.
 - Everything new is in the test box (it fills from every item), the machine crates included.
-- **Tests (31 new):**
+- **Tests (32 new):**
   - Trees and stones: trees in groves and none in the zone, stones near the base, the axe finding the tree in front of you and its prompt, blows counting down, a half-chopped tree saved, the last blow giving its logs, no second felling, felled trees loaded, regrowth after 3 days but not 2, the axe and log recipes, picking up a stone (once), picked stones saved and coming back.
   - Machines: the three on the drone, an idle generator staying off by day, the sawmill prompt and loading, the generator starting up for it, 5 wood in 6 s, machine contents saved, taking the wood, a crusher without power waiting then grinding cement once cabled, demolishing giving the crate back.
-  - Log stakes biting.
-  - New screenshot views `51_trees` and `52_machines`.
+  - Log stakes biting, and the preview colours.
+  - New screenshot views `52_trees` and `53_machines`.
 
 **Try:** buy a sawmill and a rock crusher from the drone, put them beside your generator with a can of fuel, then chop a grove and pick up stones on the way back: logs and stone in, wood and cement out.
 **Next:** v2.0, the physics pass (explosions, throwables, knockback), or more processing (a furnace) if the owner prefers.
 
-## v1.10.0 (2026-11-27): Mutants find the way in
-The owner asked me to keep going and pick features from similar games. This is the planned M9 item, done the 7 Days to Die way: mutants work out the cheapest way into the base instead of walking in a straight line. Building also gets Valheim's stability colours.
-- **Pathfinding (flow field):** a 1 m grid 96 m across, centred on the flag, holds the cheapest way to the base from every spot. Open sand costs a metre. A wall, gate or fence costs what it takes to claw through it (4 + hit points / 12, so a wooden wall is like a 25 m detour and concrete like 130 m). An **open gate costs nothing**. A live electric fence costs 30 more, a trap 8 per square metre, and a pit a mutant can climb out of 10. A pit deeper than 1.9 m costs 80 (it would be stuck).
-  - Walkers, runners and spitters **walk round to an open gate**. With every gate shut they go for **the weakest wall on the cheapest way in**, and the whole wave picks the same one, so a battered wall draws them. They line up in front of a gateway before going through, so they don't snag on the posts, and they no longer tear down an open gate they brush against.
-  - **Brutes don't path:** they still come straight through.
-  - Once a mutant reaches the base it starts wrecking what is near, as before. If it can't see you because you are behind walls, it follows the way in instead of clawing at the nearest wall.
-  - The grid is worked out again within half a second after you build, take down, or open or shut anything, and every 4 seconds anyway (damaged walls, dug holes). The search takes about 50 ms, so it runs on a **worker thread** and the old field serves until the new one is ready: no stutter. Soak test (wave 8 against a bare wall ring, 12000 frames): the horde converges on one point, 6 of 24 walls still stand at the end against 0 before, and frames take 0.35 ms longer headless.
-- **Support colours (build mode):** an upstairs piece's preview is green when it is well held (60% or more), yellow from 35%, and orange close to the 20% limit. Red still means it can't be built.
-- **Code:** `scripts/flow_field.gd` (costs, Dijkstra with flat indices, `direction()`, `path_from()`, `rebuild_async()` / `poll()`), `building.version`, `mutants.field_for()`, mutant `field_dir()` / `arrived`, build mode `ghost_material()`.
-- **Tests (16 new):**
-  - Field: from 14 m north the field leads round the room and in at the open south gate without crossing a wall. With the gate shut it goes through one wooden wall, the near one. With that side in concrete it goes round to wood. A battered gate draws it.
-  - Costs: a trap makes its ground dear and a 2.25 m pit all but closes it.
-  - The worker thread's field comes in. Brutes don't path, and a mutant at its goal stops pathing.
-  - Live: a walker marching on the room walks round and in through the open gate in about 12 s without touching a wall.
-  - The preview colours.
+## v1.10.0 (2026-11-27): Mutant navigation
+Mutants no longer walk straight at you and claw at the first wall they meet. They find a way round.
+- **Paths round the base:** a 1 m grid covers the build zone and 16 m round it. Mutants inside it follow a shared **flow field** to you (or to the flag if you are out in the desert). Going round costs walking; a wall, closed gate, fence or sandbag wall in the way costs its **hit points** (tearing it down takes time). So:
+  - an **open gate** is the way in, even round the far side of the base;
+  - with every gate shut they go for the **weakest** wall or gate: a damaged one, or wood before scrap or stone (a locked metal door counts double, an electric fence a bit more);
+  - **groups pick the same weak point**, from every side, because they all follow the same field;
+  - **pits and trenches:** a rise they can't climb (2 m or more) can't be taken, so they walk round the end of a trench; a ring with no gap still makes them come straight and fall in, as before. Shallow dips cost a little climbing;
+  - **traps:** barbed wire, spike strips, barricades and spiked pits cost a few metres, so they walk round them when the way round is short. Landmines cost nothing (they don't know they're there). Chests, turrets and other objects are walked round;
+  - **Brutes** ignore all this and come straight through, as before.
+- Mutants now **step up onto foundations** (and other low pieces up to 0.8 m) instead of wrecking them, so a gate in a wall on foundations works.
+- Following a path that is open ahead, a mutant that bumps into a wall corner slides round it for 1.6 s before it starts tearing at it, and never wrecks an open gate it is squeezing through.
+- The paths are redone when you build, open or shut a gate, a piece breaks or gets badly damaged, or the ground is dug, and the path to you when you move 2 m. The work is spread over frames (about 1 ms a frame, a fresh path in about a third of a second) and only done while mutants need it; the map itself is made when the game loads.
+- **Why not Godot's navigation mesh** (the roadmap said "navigation mesh"): the base is built on a grid anyway, and the important part is giving each wall a cost (its hit points) so mutants pick the weakest one, which a navigation mesh can't express. Baking a mesh over ground that is dug all the time would also be slow. A grid flow field is cheap, exact for walls on grid edges, and shared by the whole wave.
+- **Code:** `scripts/nav.gd` (cost map, `rebuild_map()` that only redoes the cells round what changed, `compute_now()`, sliced Dijkstra in `_advance()`, `direction()`, `way_clear()`, `trace()` / `pieces_on()` for tests). `building.revision` and `terrain.revision` say when to redo it. Mutant `_nav_want()`, `_step_up()`, `nav_field`. `tools/nav_bench.gd` times it; `tools/soak_test.gd` takes `gate=1` and says who broke what.
+- **Tests (20 new, 1 changed):** the grid covers the zone, the path goes round to an open gate (and is longer but cheaper than a wall), mutants by a wall are sent sideways, in through the gate, closing a gate makes paths stale, the damaged wall picked from north, east and south, another wall picked once repaired, never the stone wall, Brutes not following and Walkers following, wire costing, a trench walked round (and no way out of a deep one), and with real physics a walker going round a walled yard on foundations, in at the open gate and onto the foundations, without scratching a wall, and reaching you. The old "breaks through a wall" test now shuts you in a 2 x 2 m box (a single wall they now simply walk round). New screenshot view `51_nav` shows the paths as yellow dots.
+- Soak test (wave 6, a 12 x 12 m ring of walls): with the gate open only the two Brutes broke walls; with it shut, the wave tore down one wall and came in through that gap.
+- Noticed, not fixed: now and then a mutant out in the desert gets stuck against a rock for good (also before this version).
 
-**Try:** build a wall ring with one gate and leave the gate open at dusk: they will queue at it, so put spikes and wire there. Then shut it and let one wall get battered: that's where the next wave goes.
-**Next:** v2.0, the physics pass (explosions push mutants and loose items, throwables, knockback per weapon, mutants falling into pits and off roofs).
+**Try:** build a ring of walls with a doorway, leave the gate open and call a horde with the red button: watch them go round to the gate (a turret or a spike strip there is a good idea). Then shut the gate and call another: they all pile onto the same wall (gates close by themselves only at night, so by day the button is the easy way to watch).
+**Next:** v2.0, the physics pass: explosions pushing mutants and items, throwables (molotov, pipe bomb, rocks), knockback per weapon, mutants falling into pits and off roofs.
 
 ## v1.9.0 (2026-11-27): Building overhaul: free turning, ready-made buildings, the horde button
 The owner asked for building to become a big part of the game, tuned like the survival builders: turn pieces before placing them, ready-made cabins, and a stand with a button that brings the enemies to you. This run does those instead of the planned mutant navigation (now v1.10).

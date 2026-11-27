@@ -9,6 +9,7 @@ const LowPoly = preload("res://scripts/lowpoly.gd")
 const WEAPONS := {
 	"pipe": {"damage": 25.0, "stamina": 12.0, "cooldown": 0.75, "reach": 2.4},
 	"machete": {"damage": 40.0, "stamina": 9.0, "cooldown": 0.55, "reach": 2.2},
+	"axe": {"damage": 34.0, "stamina": 11.0, "cooldown": 0.7, "reach": 2.3},
 }
 ## Held in the hands but not swung at things (has its own left click).
 const TOOLS := ["hammer", "shovel", "pickaxe", "metal_detector"]
@@ -70,11 +71,14 @@ func _ready() -> void:
 	var pickaxe := Node3D.new()
 	_box(pickaxe, Vector3(0.04, 0.62, 0.04), Vector3(0, 0.2, 0), wood)
 	_box(pickaxe, Vector3(0.05, 0.06, 0.42), Vector3(0, 0.5, -0.03), LowPoly.material(Color(0.32, 0.33, 0.34), 0.5))
+	var axe := Node3D.new()
+	_box(axe, Vector3(0.04, 0.6, 0.04), Vector3(0, 0.2, 0), wood)
+	_box(axe, Vector3(0.035, 0.14, 0.2), Vector3(0, 0.46, -0.08), LowPoly.material(Color(0.4, 0.41, 0.43), 0.45))
 	var detector := Node3D.new()
 	_box(detector, Vector3(0.03, 0.75, 0.03), Vector3(0, 0.25, 0), metal)
 	_box(detector, Vector3(0.08, 0.1, 0.06), Vector3(0, 0.05, 0.03), grip)
 	_box(detector, Vector3(0.24, 0.02, 0.18), Vector3(0, 0.63, -0.04), LowPoly.material(Color(0.85, 0.65, 0.1)))
-	_models = {"pipe": pipe, "machete": machete, "hammer": hammer, "shovel": shovel, "pickaxe": pickaxe, "metal_detector": detector}
+	_models = {"pipe": pipe, "machete": machete, "hammer": hammer, "shovel": shovel, "pickaxe": pickaxe, "metal_detector": detector, "axe": axe}
 	for k in _models:
 		_models[k].rotation.x = ITEM_TILT
 		_models[k].visible = false

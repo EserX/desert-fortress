@@ -58,6 +58,8 @@ var shots := [
 	{"name": "48_prefabs", "pos": Vector3(6, 0, 16), "yaw": 0.25, "pitch": -0.1, "hour": 16.5, "prefabs": true},
 	{"name": "49_blueprint", "pos": Vector3(10, 0, 15), "yaw": 0.0, "pitch": -0.2, "hour": 11.0, "prefab_ghost": true},
 	{"name": "50_horde", "pos": Vector3(-1.4, 0, 8.9), "yaw": 1.5, "pitch": -0.35, "hour": 12.0, "horde": true},
+	{"name": "51_trees", "pos": Vector3(0, 0, 0), "yaw": 0.0, "pitch": 0.05, "hour": 9.5, "trees": true},
+	{"name": "52_machines", "pos": Vector3(-8, 0, 12.5), "yaw": 0.1, "pitch": -0.3, "hour": 14.0, "machines": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -150,6 +152,30 @@ func _process(_d: float) -> bool:
 			_pieces2_sample()
 		if s.get("prefabs", false):
 			_prefabs_sample()
+		if s.get("trees", false):
+			# Stand back from the biggest grove and look at it.
+			var props = main.props
+			var best := 0
+			var best_n := 0
+			for i in props.trees.size():
+				var n := 0
+				for t in props.trees:
+					if t.node.position.distance_to(props.trees[i].node.position) < 14.0:
+						n += 1
+				if n > best_n:
+					best_n = n
+					best = i
+			var c: Vector3 = props.trees[best].node.position
+			var from := c + (Vector3.ZERO - c).normalized() * 22.0
+			from.y = main.terrain.surface_height(from.x, from.z)
+			p.position = from
+			var d := c - from
+			p.rotation.y = atan2(-d.x, -d.z)
+			main.inventory.load_data({})
+			main.inventory.add("axe", 1)
+			main.inventory.selected = 0
+		if s.get("machines", false):
+			_machines_sample()
 		if s.get("horde", false):
 			main.building.load_data([])
 			main.building.sites_load_data([])
@@ -657,3 +683,31 @@ func _prefabs_sample(half_only := false) -> void:
 				print("prefab ", sp[0], " stuck: ", nxt.reason)
 				break
 			b.build_site_piece(id, nxt)
+
+
+## v1.11: a generator powering a sawmill, a rock crusher and a nail press by
+## cable, with log stakes in front.
+func _machines_sample() -> void:
+	var b = main.building
+	main.terrain.load_data({})
+	main.mutants.clear()
+	b.load_data([])
+	b.sites_load_data([])
+	main.day_night.restore(main.day_night.day, 14.0)
+	var put := func(t: String, cx: int, cz: int, d := 0, turn := 0) -> String:
+		var sl := {"kind": "obj", "cx": cx, "cz": cz, "dir": d, "level": 0}
+		if turn != 0:
+			sl.turn = turn
+		var ev: Dictionary = b.evaluate(t, sl)
+		return b.place(t, sl, ev.y) if ev.ok else ""
+	var g: String = put.call("generator", -5, 4)
+	var keys: Array = [put.call("sawmill", -6, 3, 2), put.call("crusher", -4, 3, 2), put.call("nail_press", -3, 4, 3)]
+	if g != "":
+		b.pieces[g].fuel = 5.0
+		for k in keys:
+			if k != "":
+				b.connect_cable(g, k)
+				b.pieces[k].input = 10
+	put.call("log_stakes", -6, 6, 0, 1)
+	put.call("log_stakes", -4, 6, 0, 5)
+	main.power.tick(0.25)

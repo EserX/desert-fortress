@@ -33,7 +33,17 @@ const CHEST_SLOTS := 20      # before upgrades
 ## Power: cables (laid with cable from a reel) join wired pieces; power flows from
 ## running generators along them, through switches that are on. Pieces within
 ## PLUG_RANGE of a running generator are plugged straight into it.
-const WIRED := ["generator", "switch", "floodlight", "electric_fence", "turret"]
+const WIRED := ["generator", "switch", "floodlight", "electric_fence", "turret", "sawmill", "crusher", "nail_press"]
+## Machines (bought by drone, run on power): E loads what they take from your
+## pockets and takes what they made. Every `secs` seconds with power they turn
+## `need` of `in` into `make` of `out`.
+const MACHINES := {
+	"sawmill": {"in": "log", "need": 1, "out": "wood", "make": 5, "secs": 6.0},
+	"crusher": {"in": "stone", "need": 3, "out": "cement", "make": 1, "secs": 15.0},
+	"nail_press": {"in": "scrap", "need": 1, "out": "nails", "make": 8, "secs": 8.0},
+}
+const MACHINE_IN_MAX := 30   # items a machine's hopper takes
+const MACHINE_OUT_MAX := 60  # items it holds before it stops
 const PLUG_RANGE := 4.0
 const CABLE_MAX := 24.0      # longest single cable
 const CABLE_PER := 2.0       # metres of cable one cable item covers
@@ -100,9 +110,13 @@ const PIECES := {
 	"metal_door": {"name": "Metal door", "slot": "edge", "cost": {"scrap": 8, "nails": 4}, "dirs": 2, "fixed": true, "hp": 1400.0, "gate": true},
 	"switch": {"name": "Power switch", "slot": "obj", "cost": {"scrap": 2, "nails": 2}, "dirs": 4, "fixed": true},
 	"well": {"name": "Water well", "slot": "obj", "cost": {"stone": 8, "wood": 4, "scrap": 2}, "dirs": 4, "fixed": true, "steep_ok": true, "pit": WELL_DEPTH, "over_pit": true},
+	"log_stakes": {"name": "Log stakes", "slot": "obj", "cost": {"log": 3, "nails": 2}, "dirs": 2, "fixed": true, "trap": true},
+	"sawmill": {"name": "Sawmill", "slot": "obj", "cost": {"kit_sawmill": 1}, "dirs": 4, "fixed": true, "pickup": true},
+	"crusher": {"name": "Rock crusher", "slot": "obj", "cost": {"kit_crusher": 1}, "dirs": 4, "fixed": true, "pickup": true},
+	"nail_press": {"name": "Nail press", "slot": "obj", "cost": {"kit_press": 1}, "dirs": 4, "fixed": true, "pickup": true},
 	"spiked_pit": {"name": "Spiked pit", "slot": "obj", "cost": {"wood": 4, "nails": 6}, "dirs": 1, "fixed": true, "trap": true, "steep_ok": true, "pit": PIT_DEPTH},
 }
-const ORDER := ["foundation", "wall", "doorway", "window", "floor", "stairs", "ramp", "roof", "chest", "workbench", "spikes", "spike_strip", "barbed_wire", "landmine", "fire_pit", "generator", "electric_fence", "floodlight", "turret", "landing_pad", "sandbags", "ladder", "spiked_pit", "well", "half_wall", "low_wall", "slit_wall", "pillar", "trapdoor", "tri_foundation", "tri_roof", "metal_door", "switch"]
+const ORDER := ["foundation", "wall", "doorway", "window", "floor", "stairs", "ramp", "roof", "chest", "workbench", "spikes", "spike_strip", "barbed_wire", "landmine", "fire_pit", "generator", "electric_fence", "floodlight", "turret", "landing_pad", "sandbags", "ladder", "spiked_pit", "well", "half_wall", "low_wall", "slit_wall", "pillar", "trapdoor", "tri_foundation", "tri_roof", "metal_door", "switch", "log_stakes", "sawmill", "crusher", "nail_press"]
 ## Pieces marked "blueprint" must be unlocked first (blueprints come by drone).
 const TURRET_RANGE := 22.0
 const TURRET_AMMO := 240     # 9mm rounds its ammo box holds
@@ -134,7 +148,7 @@ const PILLAR_T := 0.3
 const HATCH := 1.0    # trapdoor opening, on the north side of its square
 ## Objects that turn freely in TURN_STEP steps (Z / X in build mode), not just
 ## the four grid ways: slot "turn" holds the extra steps (0..5) past "dir".
-const FREE_TURN := ["chest", "workbench", "spikes", "spike_strip", "barbed_wire", "landmine", "fire_pit", "generator", "floodlight", "turret", "switch"]
+const FREE_TURN := ["chest", "workbench", "spikes", "spike_strip", "barbed_wire", "landmine", "fire_pit", "generator", "floodlight", "turret", "switch", "log_stakes", "sawmill", "crusher", "nail_press"]
 const TURN_STEP := PI / 12.0
 ## Blueprints of ready-made buildings (see prefabs.gd) sit on interact layer 2.
 const SITE_LAYER := 2
@@ -571,6 +585,31 @@ static func piece_boxes(type: String) -> Array:
 				var x := -0.8 + i * 0.4
 				out.append([Vector3(0.08, 0.08, 1.4), Vector3(x, 0.5, 0), "plank", 0.6])
 				out.append([Vector3(0.08, 0.08, 1.4), Vector3(x + 0.1, 0.5, 0), "wood", -0.6])
+		"log_stakes":
+			# Sharpened logs crossed over a rail, points out both ways.
+			out.append([Vector3(1.9, 0.18, 0.18), Vector3(0, 0.45, 0), "wood_dark"])
+			for i in 4:
+				var x := -0.72 + i * 0.48
+				out.append([Vector3(0.16, 0.16, 1.5), Vector3(x, 0.45, 0), "wood", 0.55])
+				out.append([Vector3(0.16, 0.16, 1.5), Vector3(x + 0.12, 0.45, 0), "plank", -0.55])
+		"sawmill":
+			out.append([Vector3(1.8, 0.75, 0.8), Vector3(0, 0.375, 0), "wood_dark"])   # bench
+			out.append([Vector3(1.8, 0.06, 0.7), Vector3(0, 0.78, 0), "plank"])        # table
+			out.append([Vector3(0.5, 0.4, 0.4), Vector3(0.5, 0.35, 0.45), "metal"])     # motor
+			out.append([Vector3(0.06, 0.08, 0.02), Vector3(0.5, 0.45, 0.66), "lamp"])
+			out.append([Vector3(0.9, 0.3, 0.3), Vector3(-0.3, 0.98, 0), "wood"])        # a log on it
+		"crusher":
+			out.append([Vector3(1.3, 0.9, 1.1), Vector3(0, 0.45, 0), "metal"])          # body
+			out.append([Vector3(1.4, 0.45, 1.2), Vector3(0, 1.15, 0), "rust"])          # hopper
+			out.append([Vector3(0.5, 0.25, 0.6), Vector3(0, 0.2, 0.75), "rust"])        # chute
+			out.append([Vector3(0.4, 0.35, 0.35), Vector3(0.75, 0.4, 0), "metal"])      # motor
+			out.append([Vector3(0.06, 0.08, 0.02), Vector3(0.4, 0.75, 0.56), "lamp"])
+		"nail_press":
+			out.append([Vector3(0.9, 0.8, 0.8), Vector3(0, 0.4, 0), "metal"])          # base
+			out.append([Vector3(0.18, 1.2, 0.18), Vector3(0, 1.2, -0.25), "rust"])     # column
+			out.append([Vector3(0.7, 0.25, 0.5), Vector3(0, 1.75, -0.1), "metal"])      # head
+			out.append([Vector3(0.4, 0.15, 0.4), Vector3(0, 0.88, 0.1), "rust"])        # die
+			out.append([Vector3(0.06, 0.08, 0.02), Vector3(0.3, 0.6, 0.41), "lamp"])
 		"spike_strip":
 			out.append([Vector3(1.8, 0.05, 0.5), Vector3(0, 0.03, 0), "wood_dark"])
 			for i in 8:
@@ -713,6 +752,14 @@ static func piece_colliders(type: String) -> Array:
 			return [[Vector3(1.9, 1.0, 1.2), Vector3(0, 0.5, 0), 0.0]]
 		"spike_strip":
 			return [[Vector3(1.8, 0.25, 0.5), Vector3(0, 0.12, 0), 0.0]]
+		"log_stakes":
+			return [[Vector3(1.9, 0.9, 1.3), Vector3(0, 0.45, 0), 0.0]]
+		"sawmill":
+			return [[Vector3(1.8, 1.0, 1.0), Vector3(0, 0.5, 0.1), 0.0]]
+		"crusher":
+			return [[Vector3(1.5, 1.4, 1.3), Vector3(0, 0.7, 0.1), 0.0]]
+		"nail_press":
+			return [[Vector3(0.9, 1.9, 0.9), Vector3(0, 0.95, 0), 0.0]]
 		"barbed_wire":
 			return [[Vector3(1.8, 0.95, 0.5), Vector3(0, 0.47, 0), 0.0]]
 		"landmine":
@@ -859,6 +906,13 @@ func place(type: String, slot: Dictionary, y: float, gate_open := false, tier :=
 	elif type == "well":
 		rec.water = 0.0
 		body.set_meta("interact_id", "well:" + key)
+	elif MACHINES.has(type):
+		rec.input = 0
+		rec.output = 0
+		rec.progress = 0.0
+		rec.powered = false
+		body.set_meta("interact_id", "machine:" + key)
+		_add_rotor(rec)
 	elif type == "turret":
 		rec.ammo = 0
 		body.set_meta("interact_id", "turret:" + key)
@@ -869,6 +923,79 @@ func place(type: String, slot: Dictionary, y: float, gate_open := false, tier :=
 	if not _bulk:
 		_refresh_support()
 	return key
+
+
+## A part that turns while a machine works (a saw blade, crusher jaws, a flywheel).
+func _add_rotor(rec: Dictionary) -> void:
+	var rotor := Node3D.new()
+	var mi := MeshInstance3D.new()
+	match rec.type:
+		"sawmill":
+			rotor.position = Vector3(0.35, 0.9, 0)
+			rotor.rotation.x = PI * 0.5
+			var c := CylinderMesh.new()
+			c.top_radius = 0.32
+			c.bottom_radius = 0.32
+			c.height = 0.02
+			c.radial_segments = 10
+			mi.mesh = c
+		"crusher":
+			rotor.position = Vector3(0.95, 0.4, 0)
+			rotor.rotation.z = PI * 0.5
+			var c := CylinderMesh.new()
+			c.top_radius = 0.3
+			c.bottom_radius = 0.3
+			c.height = 0.08
+			c.radial_segments = 8
+			mi.mesh = c
+		_:
+			rotor.position = Vector3(-0.5, 1.75, -0.1)
+			rotor.rotation.z = PI * 0.5
+			var c := CylinderMesh.new()
+			c.top_radius = 0.28
+			c.bottom_radius = 0.28
+			c.height = 0.06
+			c.radial_segments = 8
+			mi.mesh = c
+	mi.material_override = _mats.metal
+	rotor.add_child(mi)
+	rec.node.add_child(rotor)
+	rec.rotor = rotor
+
+
+## "Sawmill (running): 3 logs in, 10 wood ready   [E] Load logs, take the wood"
+func machine_prompt(key: String, has_input: int) -> String:
+	var rec: Dictionary = pieces.get(key, {})
+	if rec.is_empty():
+		return ""
+	var m: Dictionary = MACHINES[rec.type]
+	var Items = preload("res://scripts/items.gd")
+	var state := "no power: cable it to a generator"
+	if rec.powered:
+		state = "running" if rec.input >= m.need and rec.output + m.make <= MACHINE_OUT_MAX else ("full" if rec.output + m.make > MACHINE_OUT_MAX else "waiting for %s" % Items.display_name(m.in).to_lower())
+	var text := "%s (%s): %d %s in, %d %s ready" % [PIECES[rec.type].name, state, rec.input, Items.display_name(m.in).to_lower(), rec.output, Items.display_name(m.out).to_lower()]
+	var acts: Array = []
+	if has_input > 0 and rec.input < MACHINE_IN_MAX:
+		acts.append("load %s" % Items.display_name(m.in).to_lower())
+	if rec.output > 0:
+		acts.append("take the %s" % Items.display_name(m.out).to_lower())
+	if acts.is_empty():
+		return text + "\n%d %s make %d %s every %d s" % [m.need, Items.display_name(m.in).to_lower(), m.make, Items.display_name(m.out).to_lower(), int(m.secs)]
+	var act: String = ", ".join(acts)
+	return text + "\n[E] " + act.left(1).to_upper() + act.substr(1)
+
+
+## One step of a machine's work. Returns true while it is busy.
+func run_machine(rec: Dictionary, dt: float) -> bool:
+	var m: Dictionary = MACHINES[rec.type]
+	var busy: bool = rec.powered and rec.input >= m.need and rec.output + m.make <= MACHINE_OUT_MAX
+	if busy:
+		rec.progress += dt
+		if rec.progress >= m.secs:
+			rec.progress -= m.secs
+			rec.input -= m.need
+			rec.output += m.make
+	return busy
 
 
 ## Triangle pieces: a prism over half the square, cut from its north-east to
@@ -1233,7 +1360,7 @@ func prompt(id: String) -> String:
 		return "[E] Use workbench"
 	var rec: Dictionary = pieces[key]
 	if id.begins_with("gen:"):
-		var state := "running" if rec.running else ("idle, runs at night" if rec.fuel > 0.0 else "out of fuel")
+		var state := "running" if rec.running else ("idle, runs at night and for busy machines" if rec.fuel > 0.0 else "out of fuel")
 		return "[E] Add a fuel can   Generator %d/%d cans, %s" % [ceili(rec.fuel), int(GEN_TANK), state]
 	if id.begins_with("turret:"):
 		return "[E] Load 9mm rounds   Auto-turret %d/%d rounds%s" % [rec.ammo, TURRET_AMMO, "" if rec.ammo > 0 else ", EMPTY"]
@@ -1860,7 +1987,7 @@ func piece_data(key: String) -> Dictionary:
 		d.turn = int(p.slot.turn)
 	if p.has("storage"):
 		d.items = p.storage.save_data()
-	for k in ["fuel", "burn", "ammo", "water", "locked"]:
+	for k in ["fuel", "burn", "ammo", "water", "locked", "input", "output", "progress"]:
 		if p.has(k):
 			d[k] = p[k]
 	return d
@@ -1892,6 +2019,10 @@ func restore_piece(p: Dictionary, slot := {}, y := NAN, old_tiers := false) -> S
 		rec.water = clampf(float(p.get("water", 0.0)), 0.0, WELL_MAX)
 	if rec.has("burn"):
 		rec.burn = clampf(float(p.get("burn", 0.0)), 0.0, FIRE_MAX)
+	if MACHINES.has(rec.type):
+		rec.input = clampi(int(p.get("input", 0)), 0, MACHINE_IN_MAX)
+		rec.output = clampi(int(p.get("output", 0)), 0, MACHINE_OUT_MAX)
+		rec.progress = float(p.get("progress", 0.0))
 	if p.get("locked", false) and rec.type == "metal_door":
 		rec.locked = true
 	return key

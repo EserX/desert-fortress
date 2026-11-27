@@ -2,6 +2,27 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v1.11.0 (2026-11-27): Gathering and processing
+The owner asked for resource gathering and processing: trees and an axe, rocks to pick up, machines bought with cash and flown in by drone (a rock crusher for cement), and traps made from gathered resources.
+- **Trees:** seven groves of date palms and dry acacias round old water holes (62 to 195 m out) and about 30 lone trees, 110 or so in all, none inside even the biggest build zone. They have their own random stream, so older saves' rocks and containers keep their ids.
+- **Axe** (workbench: 3 scrap, 2 wood; shop $40). Left click on a tree chops it (8 stamina a blow, 3 to 9 blows by size; the prompt shows how many are left and about how many logs). The last blow topples it away from you and its **logs** (2 to 5) go in your bag; what doesn't fit lands in a bag beside you. Felled trees grow back after **3 mornings**. Swung at anything else, the axe is a weapon (34 damage, between the pipe and the machete). Half-chopped and felled trees are saved.
+- **Logs** (3 kg, stack 10): split by hand at the workbench into **2 wood**, or into **5** at a sawmill. Log stakes are made from them.
+- **Loose stones:** 150 small stones lie about the sand, most beside rocks and 24 within 40 m of the base. **E** picks one up (+1 stone). They turn up again after 2 mornings. Saved.
+- **Machines, by drone** (drone section of the shop): **Sawmill** $150 (1 log makes 5 wood every 6 s), **Rock crusher** $250 (3 stone make 1 cement bag every 15 s), **Nail press** $200 (1 scrap makes 8 nails every 8 s). Each arrives as a crate in your bag. Place it in build mode (end of the list), where it turns freely like the other objects.
+  - They **run on power**: put one within 4 m of a generator or run a cable to it. **E** loads everything it takes from your pockets (its hopper holds 30) and takes what it has made (it stops when 60 are waiting). The prompt says what is in, what is ready and why it isn't running ("no power", "waiting for stone", "full").
+  - Generators now also start up **by day** when a machine has work, and burn fuel for it. The saw blade, crusher wheel or flywheel spins while a machine works.
+  - Demolishing a machine with the hammer gives you back its crate. What is in a machine is saved.
+- **Log stakes** (trap, 3 logs + 2 nails, end of the build list): sharpened logs crossed over a rail. They slow a mutant on them to 45% and bite for 26 a second, wearing down 5 per bite. Mutant pathfinding counts them as a trap, like the others.
+- Everything new is in the test box (it fills from every item), the machine crates included.
+- **Tests (31 new):**
+  - Trees and stones: trees in groves and none in the zone, stones near the base, the axe finding the tree in front of you and its prompt, blows counting down, a half-chopped tree saved, the last blow giving its logs, no second felling, felled trees loaded, regrowth after 3 days but not 2, the axe and log recipes, picking up a stone (once), picked stones saved and coming back.
+  - Machines: the three on the drone, an idle generator staying off by day, the sawmill prompt and loading, the generator starting up for it, 5 wood in 6 s, machine contents saved, taking the wood, a crusher without power waiting then grinding cement once cabled, demolishing giving the crate back.
+  - Log stakes biting.
+  - New screenshot views `51_trees` and `52_machines`.
+
+**Try:** buy a sawmill and a rock crusher from the drone, put them beside your generator with a can of fuel, then chop a grove and pick up stones on the way back: logs and stone in, wood and cement out.
+**Next:** v2.0, the physics pass (explosions, throwables, knockback), or more processing (a furnace) if the owner prefers.
+
 ## v1.10.0 (2026-11-27): Mutants find the way in
 The owner asked me to keep going and pick features from similar games. This is the planned M9 item, done the 7 Days to Die way: mutants work out the cheapest way into the base instead of walking in a straight line. Building also gets Valheim's stability colours.
 - **Pathfinding (flow field):** a 1 m grid 96 m across, centred on the flag, holds the cheapest way to the base from every spot. Open sand costs a metre. A wall, gate or fence costs what it takes to claw through it (4 + hit points / 12, so a wooden wall is like a 25 m detour and concrete like 130 m). An **open gate costs nothing**. A live electric fence costs 30 more, a trap 8 per square metre, and a pit a mutant can climb out of 10. A pit deeper than 1.9 m costs 80 (it would be stuck).

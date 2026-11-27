@@ -69,9 +69,28 @@ Resource gathering and processing: trees and an axe, rocks to pick up, machines 
 - [x] v1.11: **Gathering and processing:** groves of palms and acacias felled with an axe for logs (they grow back), loose stones to pick up, a sawmill, rock crusher and nail press bought by drone and run on generator power, splitting logs by hand at the workbench, log stakes trap
 - [ ] Later resource ideas (not scheduled): a furnace and the v2.2 crafting chain feeding off these machines, a water purifier, machines that feed a chest automatically
 
+### New direction (owner, 2026-11-27): terraform the desert
+The aim of the game shifts from pure base defence to **turning the dead desert green and making it livable**. A **main well** at the centre (the spawn point) is the heart of the base: all water starts there, it greens the land through a watering system, and its water is what draws the mutants in at night. Water brings life: **animals by day** (food), **mutants by night**. Seeds are bought, crops are grown and sold, and cash buys food and goods (grow exotic crops, sell them, buy what you need). Base defence stays as one part of the game, not the whole of it. M10 comes **before** the rest of M9 (v2.0 to v2.3 wait until M10 is done, unless the owner says otherwise).
+
+Design notes for every M10 run:
+- Track greening on a **coarse grid** over the whole map (for example 4 to 8 m cells: moisture and a stage from dead sand to firm ground, soil, grassland and grove) and blend ground colour and MultiMesh plants from it. Keep the fine diggable ground only where you build. Smooth on a GTX 1650-class laptop.
+- Every step must be playable on its own and saved.
+- Keep the existing systems (digging, dug wells, power, machines, shop and drone, waves) and connect them rather than replace them. Dug wells (v1.4) stay as smaller extra water sources.
+- Plants have different jobs: **food** (millet, melons, dates), **resources** (cotton to cloth, agave to fibre and rope, fast acacia to wood), **flowers** (speed up crops and greening nearby, sell well), **fruit trees** (slow, give shade and fruit for years, push the green out) and **exotic cash crops** (saffron, dragon fruit: dear seeds, fussy, big profit).
+
+### M10: Terraforming
+- [ ] v1.13: **The main well and watering:** a big main well at the spawn point (next to the flag) with a water store that refills each day and can be deepened with upgrades; a watering can, then a hand pump, pipes and sprinklers fed from it; watered sand turns to soil on a coarse map-wide grid and slowly greens (grass, small plants), shown on the ground. Saved
+- [ ] v1.14: **Seeds and farming:** seeds in the shop (by drone), seed beds and planting on soil, growth stages over days needing water (and shade for some), dying in the midday heat when dry; harvests by type (food, resources, flowers, fruit trees, exotic crops) with their own benefits
+- [ ] v1.15: **The market:** sell crops, flowers, fruit and goods at the shop terminal for cash; daily prices, prices that drop when you sell a lot of one thing, exotic crops worth the most; buy food and goods with the cash
+- [ ] v1.16: **Water draws life:** by day animals (gazelles, birds, jackals) come to water and green land, hunted for meat (cooked at the fire pit); by night mutants are drawn to the main well, wave size grows with water use and green land rather than only the night count, and they go for fields and pipes too
+- [ ] v1.17: **Green and livable:** a **green %** for the whole map and a **livable** score for the base (shade, water, food, plants, shelter) on the HUD and map; fruit trees and groves spread on their own; livable milestones give comforts (faster healing, resting through the heat, a better shelter)
+- [ ] v1.18: **Oases and outposts:** 3 to 5 hidden oases with springs, rare and exotic seeds, clay and reeds, guarded by mutants or a nest; claim one as an outpost with its own build zone, water and defences; nests keep the land round them dead until burned out
+- [ ] v1.19: **Goals and an ending:** green % milestones (10, 25, 50) unlock new seeds, machines and a weather station; the final milestone brings back rain (an ending, then free play); a peaceful terraform-only mode in the difficulty settings
+
 ### M9: Game logic, AI and physics
 - [x] v1.10: **Mutant navigation:** a navigation mesh, rebuilt when the base or the ground changes, so mutants path round walls to an open gate or the weakest wall instead of walking straight in. Brutes go straight through, pits and wire are taken into account, and groups pick the same weak point
-- [ ] v2.0: **Physics pass:** explosions push mutants and loose items, dropped items become physics props, throwables (molotov, pipe bomb, rocks) with arcs and bounces, knockback and stagger tuned per weapon, mutants falling into pits and off roofs
+- [x] v1.12: **Physics pass, part 1:** knockback and stagger tuned per weapon, mine blasts throw mutants (and their bodies) and scatter debris, a Brute's fist shoves you, mutants knocked into pits and off roofs, and long falls hurt them
+- [ ] v2.0: **Physics pass, part 2:** dropped items become physics props, throwables (molotov, pipe bomb, rocks) with arcs and bounces that use the v1.12 blasts
 - [ ] v2.1: **Survival depth:** cold nights (fire pits and walls keep you warm), bleeding wounds fixed with bandages, cooking at the fire pit, food that spoils, and carried weight slowing digging and climbing
 - [ ] v2.2: **Crafting chain:** a furnace (scrap to metal plates, sand to glass, clay to bricks), building parts made at the workbench, better tools (a steel shovel digs faster, a sledgehammer demolishes)
 - [ ] v2.3: **Events:** sandstorms (short view range, mutants out by day, dug holes slowly fill in), a boss mutant every 10 nights, and day raids on outposts away from the base
@@ -86,5 +105,6 @@ A buggy, outposts, animated low-poly characters, a generated soundtrack, Windows
 - Camera: first person only
 - Weapons: realistic guns
 - Order: building before combat
+- Aim: terraform the desert and make it livable around a main well at the centre (owner, 2026-11-27); base defence is one part of the game
 - Visuals: simple low-poly, no art or animation work (focus on logic, physics, building, digging)
 - Testing aid: a green **test box** next to the spawn point holds a stack of every item and tops your cash up to $2000 (`TEST_BOX` in `scripts/main.gd`). Keep it until the owner asks to remove it, and add new items to it automatically (it fills from `Items.ITEMS`)

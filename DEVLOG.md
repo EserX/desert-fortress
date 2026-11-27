@@ -2,6 +2,28 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v1.12.0 (2026-11-27): Physics pass, part 1 (knockback, stagger, blasts, falls)
+PR #14 (v1.11 gathering and processing) was merged into main first. Then the first half of the v2.0 physics pass: hits now move mutants, and blasts throw them. The roadmap item was big, so it is split: this run did the combat physics, part 2 (dropped items as physics props, throwables) is next.
+- **Knockback and stagger per weapon.** Every hit now has a shove (m/s) and a stagger (seconds). While staggered, a mutant doesn't walk, and a swing or spit it was winding up is cut short. It leans back from the blow.
+  - Rusty pipe: big shove, long stagger (5.5 m/s, 0.55 s). It's the crowd-control weapon.
+  - Axe: in between (3.8, 0.4).
+  - Machete: cuts deep but barely moves them (1.8, 0.2).
+  - Pistol: light (1.2, 0.12).
+  - Shotgun: 0.9 per pellet, so a point-blank blast shoves 8 m/s, with a 0.5 s stagger.
+  - Rifle: 3.5, 0.45.
+  - Turrets: a light shove and no stagger. They fire too fast for stagger, which would stunlock mutants.
+  - A Runner flies further, a Brute shrugs most of it off (20%). No stagger lasts longer than 1.5 s.
+- **Knockback is its own velocity** on top of the mutant's walking. It fades fast on the ground and hardly at all in the air, so a mutant shoved off a roof edge or a pit rim keeps going and falls. It stops dead against walls.
+- **Mutants feel long falls:** above 2.5 m they lose 22 health per extra metre and reel for a moment. Off a level-2 roof (4.8 m) that's about 50, so knocking mutants off your walls is worth it. Pits up to 2.25 m (the usual trench) still don't hurt them.
+- **Landmine blasts** throw mutants away and up (11 m/s out, 6.5 m/s up at the centre, less further out) and stagger them for up to 1.2 s. The body of one that dies is thrown too: a walker on the mine lands about 7 m away. Brutes barely move. The blast also **scatters loose debris** within 7 m and **shoves you** if you are too close.
+- **Getting shoved:** a Brute's fist knocks you back about 2.5 m and lifts you a little. A walker's claw is a small shove, and spitter acid none. Your shove is kept apart from your walking and fades in about a second.
+- Nothing new to save: knockback and stagger only last a moment.
+- **Tests (17 new):** the weapon tuning order, a pipe hit shoving harder and longer than a machete (by speed, and by distance moved: 0.65 m against 0.17 m), a stagger cutting a swing short, turret hits not stunlocking, the 1.5 s cap, a blast throwing a walker but not a Brute, acid not shoving you while a Brute shoves 5 times harder than a walker, a mine throwing a walker 3 m away up and back, a 6.5 m fall hurting (89) while a 1.5 m drop doesn't, the body on the mine thrown, debris scattered 5 m, and you knocked back 2.4 m with the shove fading out. The old "brutes barely flinch" check now looks at the knockback and stagger.
+- New screenshot view `54_blast`: a mine going off under four walkers with a Brute beside them.
+
+**Try:** fight a wave with the rusty pipe: each hit shoves a walker back and stops its swing, so you can hold a doorway. Stand on a wall with the pipe and knock them off. Put a landmine in front of the gate and watch it throw them.
+**Next:** v2.0 physics pass, part 2: dropped items become physics props, and throwables (rocks, pipe bombs, molotovs) that arc, bounce and use these blasts.
+
 ## v1.11.0 (2026-11-27): Gathering and processing
 The owner asked for resource gathering and processing: trees and an axe, rocks to pick up, machines bought with cash and flown in by drone (a rock crusher for cement), and traps made from gathered resources.
 - **Trees:** seven groves of date palms and dry acacias round old water holes (62 to 195 m out) and about 30 lone trees, 110 or so in all, none inside even the biggest build zone. They have their own random stream, so older saves' rocks and containers keep their ids.
@@ -110,7 +132,7 @@ Eight new pieces at the end of the build list (scroll the mouse wheel in build m
   - When a wall breaks, or a piece is demolished or undone in build mode, everything left below 20% collapses, then whatever that held, and so on. Undoing a piece in build mode now brings down what it held too (before, it could leave floors in the air).
 - **Physics debris:** collapsing and broken pieces throw **rigid chunks** that tumble, bounce, settle on the sand and shrink away after about 4 seconds. They are on their own physics layer (you and mutants walk through them), use continuous collision so they never fall through the ground, and at most 72 are around at once.
 - **Code:** `building.compute_support()`, `support_for()`, `support_loss()`, `upgrade_problem()` and a rewritten `collapse_unsupported()`. Support is kept up to date in `building.support` (worked out once after loading a save).
-- **Tests (16 new):** the 90/90/65/40% chain, the too-far floor refused, a wall on a wall, the hammer showing support, stone floors weighing more (86/51/22%), the refused upgrade that takes nothing, an upgrade that is fine, all four floors falling when the walls go, rigid debris (and its limit), and the debris settled on the sand a few seconds later. New screenshot view `46_support`.
+- **Tests (17 new):** the 90/90/65/40% chain, the too-far floor refused, a wall on a wall, the hammer showing support, stone floors weighing more (86/51/22%), the refused upgrade that takes nothing, an upgrade that is fine, all four floors falling when the walls go, rigid debris (and its limit), and the debris settled on the sand a few seconds later. New screenshot view `46_support`.
 
 **Try:** build a balcony off your walls and see how far it reaches, then try it in stone.
 **Next:** v1.6, more pieces: half and low walls, a gun slit wall, a corner pillar, a ladder piece for walls, a trapdoor, triangle foundations and roofs, and a metal door.
@@ -120,7 +142,7 @@ Eight new pieces at the end of the build list (scroll the mouse wheel in build m
 - **Reaching down holes:** looking steeply down, the shovel and pickaxe reach further (about 4 m out, up to 6.4 m along the line of sight), so you can dig a shaft from its edge.
 - **Stamina for hard work:** a dig costs 7 (a fill 3.5), a pickaxe hit 9, building a piece 6, a hammer repair or upgrade 5. With too little: "Too tired: catch your breath".
 - That finishes **M7, digging and terrain**.
-- **Tests (16 new):** a well needing a deep shaft (the reason says 3.5 m and the pickaxe), the shaft depth, reaching its bottom looking down, the well standing at ground level, the footprint filled round the shaft, the filling prompt, a bottle every 75 s, taking it, the 6-bottle limit, the well staying put when you dig next to it, water saved, and stamina for digging. New screenshot view `45_well`.
+- **Tests (17 new):** a well needing a deep shaft (the reason says 3.5 m and the pickaxe), the shaft depth, reaching its bottom looking down, the well standing at ground level, the footprint filled round the shaft, the filling prompt, a bottle every 75 s, taking it, the 6-bottle limit, the well staying put when you dig next to it, water saved, and stamina for digging. New screenshot view `45_well`.
 
 **Try:** dig a shaft with the pickaxe next to your base, build a well over it, and stop hauling water bottles in from the wrecks.
 **Next:** M8, v1.5 structural stability: a support value for each piece counted from the ground, overhangs and tall towers that collapse, and debris.

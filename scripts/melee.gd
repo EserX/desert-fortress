@@ -5,11 +5,13 @@ extends Node3D
 
 const LowPoly = preload("res://scripts/lowpoly.gd")
 
-## Weapon stats: damage per hit, stamina per swing, seconds between swings, reach in m.
+## Weapon stats: damage per hit, stamina per swing, seconds between swings,
+## reach in m, knockback (m/s) and stagger (s). The blunt pipe shoves and
+## staggers, the machete cuts deep but barely moves them, the axe is between.
 const WEAPONS := {
-	"pipe": {"damage": 25.0, "stamina": 12.0, "cooldown": 0.75, "reach": 2.4},
-	"machete": {"damage": 40.0, "stamina": 9.0, "cooldown": 0.55, "reach": 2.2},
-	"axe": {"damage": 34.0, "stamina": 11.0, "cooldown": 0.7, "reach": 2.3},
+	"pipe": {"damage": 25.0, "stamina": 12.0, "cooldown": 0.75, "reach": 2.4, "knock": 5.5, "stagger": 0.55},
+	"machete": {"damage": 40.0, "stamina": 9.0, "cooldown": 0.55, "reach": 2.2, "knock": 1.8, "stagger": 0.2},
+	"axe": {"damage": 34.0, "stamina": 11.0, "cooldown": 0.7, "reach": 2.3, "knock": 3.8, "stagger": 0.4},
 }
 ## Held in the hands but not swung at things (has its own left click).
 const TOOLS := ["hammer", "shovel", "pickaxe", "metal_detector"]
@@ -177,7 +179,7 @@ func strike() -> Dictionary:
 		n = n.get_parent()
 	var kind := "target" if n else "solid"
 	if n:
-		n.take_hit(w.damage, hit.position, dir)
+		n.take_hit(w.damage, hit.position, dir, w.knock, w.stagger)
 	_audio.stream = _sounds.thud if n else _sounds.clank
 	_audio.pitch_scale = _rng.randf_range(0.9, 1.1)
 	_audio.play()

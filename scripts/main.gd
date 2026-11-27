@@ -42,6 +42,8 @@ const Nav = preload("res://scripts/nav.gd")
 const TEST_BOX := true
 const TEST_CASH := 2000
 
+## How hard a mutant's blow shoves you (m/s, v2.0). A Brute also lifts you off your feet.
+const PLAYER_SHOVE := {"walker": 1.5, "runner": 1.0, "brute": 7.5}
 const DISCOVER_RANGE := 45.0
 const REFILLS_PER_MORNING := 4
 const SUPPLY_CHANCE := 0.5
@@ -1632,6 +1634,11 @@ func _on_player_hit(dmg: float, from: Vector3, kind := "walker") -> void:
 	var to: Vector3 = from - player.global_position
 	var local: Vector3 = player.global_transform.basis.inverse() * to
 	hud.show_damage(atan2(local.x, -local.z))
+	# A claw shoves you a little, a Brute's fist sends you flying (acid doesn't).
+	var shove: float = PLAYER_SHOVE.get(kind, 0.0)
+	if shove > 0.0:
+		var away := Vector3(-to.x, 0, -to.z).normalized()
+		player.push(away * shove + Vector3(0, shove * 0.35 if kind == "brute" else 0.0, 0))
 
 
 var _attack_warned_at := -100000

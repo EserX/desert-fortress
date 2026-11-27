@@ -9,17 +9,18 @@ const LowPoly = preload("res://scripts/lowpoly.gd")
 ## damage per hit (per pellet), pellets per shot, mag size, seconds between
 ## shots, reload seconds, ammo item, range in m, spread in degrees (hip / aimed),
 ## view kick in radians, aimed zoom, how far mutants hear it, where the gun sits
-## at the hip and when aimed, and whether aiming looks through a scope.
+## at the hip and when aimed, whether aiming looks through a scope, and the
+## knockback (m/s, per pellet) and stagger (s, once per shot) a hit gives.
 const GUNS := {
 	"pistol": {"damage": 34.0, "pellets": 1, "mag": 12, "rate": 0.2, "reload": 1.5, "ammo": "ammo_9mm",
 		"range": 90.0, "spread_hip": 1.8, "spread_ads": 0.25, "kick": 0.035, "zoom": 0.75, "loud": 45.0,
-		"hip": Vector3(0.2, -0.2, -0.42), "ads": Vector3(0.0, -0.064, -0.58), "pitch": 1.0},
+		"hip": Vector3(0.2, -0.2, -0.42), "ads": Vector3(0.0, -0.064, -0.58), "pitch": 1.0, "knock": 1.2, "stagger": 0.12},
 	"shotgun": {"damage": 13.0, "pellets": 9, "mag": 6, "rate": 0.85, "reload": 2.6, "ammo": "shells",
 		"range": 32.0, "spread_hip": 5.0, "spread_ads": 3.0, "kick": 0.09, "zoom": 0.85, "loud": 60.0,
-		"hip": Vector3(0.22, -0.22, -0.36), "ads": Vector3(0.0, -0.075, -0.3), "pitch": 0.62},
+		"hip": Vector3(0.22, -0.22, -0.36), "ads": Vector3(0.0, -0.075, -0.3), "pitch": 0.62, "knock": 0.9, "stagger": 0.5},
 	"rifle": {"damage": 90.0, "pellets": 1, "mag": 5, "rate": 1.1, "reload": 2.4, "ammo": "ammo_762",
 		"range": 220.0, "spread_hip": 2.5, "spread_ads": 0.03, "kick": 0.07, "zoom": 0.32, "loud": 75.0,
-		"hip": Vector3(0.22, -0.22, -0.34), "ads": Vector3(0.0, -0.1, -0.2), "pitch": 0.8, "scope": true},
+		"hip": Vector3(0.22, -0.22, -0.34), "ads": Vector3(0.0, -0.1, -0.2), "pitch": 0.8, "scope": true, "knock": 3.5, "stagger": 0.45},
 }
 const HEADSHOT := 2.0     # damage multiplier for a hit on a mutant's head
 const RAISE_TIME := 0.35  # seconds to bring a gun up after switching to it
@@ -217,7 +218,7 @@ func shoot_ray(g: Dictionary) -> Dictionary:
 	var spread := deg_to_rad(lerpf(g.spread_hip, g.spread_ads, ads_amount))
 	var from := cam.global_position
 	var res := {"fired": true, "kind": ""}
-	var totals := {}   # node -> [damage, point, dir, head]
+	var totals := {}   # node -> [damage, point, dir, head, pellets]
 	for i in g.pellets:
 		var dir := -cam.global_transform.basis.z
 		var a := _rng.randf() * TAU
@@ -239,12 +240,13 @@ func shoot_ray(g: Dictionary) -> Dictionary:
 		var head: bool = n.has_method("is_headshot") and n.is_headshot(hit.position)
 		var dmg: float = g.damage * (HEADSHOT if head else 1.0)
 		if not totals.has(n):
-			totals[n] = [0.0, hit.position, dir, false]
+			totals[n] = [0.0, hit.position, dir, false, 0]
 		totals[n][0] += dmg
+		totals[n][4] += 1
 		totals[n][3] = totals[n][3] or head
 	for n in totals:
 		var t: Array = totals[n]
-		n.take_hit(t[0], t[1], t[2])
+		n.take_hit(t[0], t[1], t[2], float(g.knock) * t[4], g.stagger)
 		res.kind = "head" if t[3] else (res.kind if res.kind == "head" else "target")
 		res.node = n
 		res.point = t[1]

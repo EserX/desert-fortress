@@ -61,6 +61,7 @@ var shots := [
 	{"name": "51_nav", "pos": Vector3(13, 22, 30), "yaw": 0.0, "pitch": -0.95, "hour": 15.0, "nav": true},
 	{"name": "52_trees", "pos": Vector3(0, 0, 0), "yaw": 0.0, "pitch": 0.05, "hour": 9.5, "trees": true},
 	{"name": "53_machines", "pos": Vector3(-8, 0, 12.5), "yaw": 0.1, "pitch": -0.3, "hour": 14.0, "machines": true},
+	{"name": "54_blast", "pos": Vector3(0, 0, 0), "yaw": 0.0, "pitch": -0.05, "hour": 16.0, "blast": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -177,6 +178,8 @@ func _process(_d: float) -> bool:
 			main.inventory.selected = 0
 		if s.get("machines", false):
 			_machines_sample()
+		if s.get("blast", false):
+			_blast_sample(p)
 		if s.get("horde", false):
 			main.building.load_data([])
 			main.building.sites_load_data([])
@@ -751,6 +754,28 @@ func _prefabs_sample(half_only := false) -> void:
 
 ## v1.11: a generator powering a sawmill, a rock crusher and a nail press by
 ## cable, with log stakes in front.
+## v2.0: a landmine goes off under a group of walkers, a quarter of a second
+## before the picture: bodies thrown up and away, a Brute standing firm.
+func _blast_sample(p: Node3D) -> void:
+	var b = main.building
+	main.terrain.load_data({})
+	main.mutants.clear()
+	b.load_data([])
+	b.sites_load_data([])
+	var sl := {"kind": "obj", "cx": 0, "cz": -6, "dir": 0, "level": 0}
+	var k: String = b.place("landmine", sl, b.evaluate("landmine", sl).y)
+	var mine: Vector3 = b.pieces[k].node.global_position
+	var eye := mine + Vector3(0, 0, 11)
+	p.position = Vector3(eye.x, main.terrain.surface_height(eye.x, eye.z), eye.z)
+	p.rotation.y = 0.0
+	for o in [Vector3(0.4, 0, 0.3), Vector3(-1.6, 0, 0.8), Vector3(1.9, 0, -0.6), Vector3(-0.5, 0, -2.4)]:
+		var w = main.mutants.spawn("walker", mine + o)
+		w.rotation.y = PI
+	var br = main.mutants.spawn("brute", mine + Vector3(3.2, 0, 1.2))
+	br.rotation.y = PI
+	main.traps.detonate(k)
+
+
 func _machines_sample() -> void:
 	var b = main.building
 	main.terrain.load_data({})

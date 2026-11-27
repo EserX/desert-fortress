@@ -22,6 +22,7 @@ const STAND_HEIGHT := 1.8
 const CROUCH_HEIGHT := 1.15
 const INTERACT_RANGE := 2.6
 const LADDER_SPEED := 2.4
+const KNOCK_GRIP := 6.0        # how fast a shove fades on the ground (per second)
 
 var stamina := STAMINA_MAX
 var exhausted := false
@@ -40,6 +41,8 @@ var _bob_time := 0.0
 var _last_step_phase := 0
 var _was_on_floor := true
 var _fall_speed := 0.0
+## Shove from a blast or a Brute's fist (m/s), fades out over a moment (v2.0).
+var knock := Vector3.ZERO
 var _shape: CollisionShape3D
 var _capsule: CapsuleShape3D
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
@@ -125,7 +128,24 @@ func _physics_process(delta: float) -> void:
 	var t := clampf(accel * delta, 0.0, 1.0)
 	velocity.x = lerpf(velocity.x, dir.x * speed, t)
 	velocity.z = lerpf(velocity.z, dir.z * speed, t)
-	move_and_slide()
+	if knock == Vector3.ZERO:
+		move_and_slide()
+	else:
+		# Keep the shove apart from your own walking, so it fades out on its own.
+		var walk := Vector2(velocity.x, velocity.z)
+		velocity.x += knock.x
+		velocity.z += knock.z
+		move_and_slide()
+		velocity.x = walk.x
+		velocity.z = walk.y
+		if is_on_wall():
+			var n := get_wall_normal()
+			var into := knock.dot(n)
+			if into < 0.0:
+				knock -= n * into
+		knock *= exp(-(KNOCK_GRIP if is_on_floor() else 1.0) * delta)
+		if knock.length() < 0.05:
+			knock = Vector3.ZERO
 
 	if is_on_floor() and not _was_on_floor:
 		landed.emit(_fall_speed)
@@ -144,6 +164,13 @@ func _physics_process(delta: float) -> void:
 		velocity = Vector3.ZERO
 
 	_update_head_bob(delta, moving and is_on_floor(), speed, sprinting)
+
+
+## Shoved by v (m/s): sideways through knock, up straight into the jump speed.
+func push(v: Vector3) -> void:
+	knock += Vector3(v.x, 0, v.z)
+	if v.y > 0.0:
+		velocity.y = maxf(velocity.y, v.y)
 
 
 func _update_crouch(delta: float) -> void:

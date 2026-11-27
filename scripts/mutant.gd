@@ -4,13 +4,16 @@ extends CharacterBody3D
 ## Types: Walker, Runner (fast, weak), Brute (slow, tanky, wrecks walls) and
 ## Spitter (keeps its distance and lobs acid). Takes melee hits through
 ## take_hit(); at 0 health it falls over and sinks into the sand.
+## Hits knock it back and stagger it (v2.0), blasts throw it, and a long fall
+## (off a roof, into a deep pit) hurts.
 
 const LowPoly = preload("res://scripts/lowpoly.gd")
 
 enum State { WANDER, CHASE, ATTACK, DEAD, BREAK, SPIT }
 
 ## Stats per mutant type. Later versions add more types here.
-## scale: model size (x, y, z); push: how far hits knock it back; spit: ranged acid.
+## scale: model size (x, y, z); push: how far hits knock it back and how long
+## they stagger it (1 = normal, a Brute shrugs most of it off); spit: ranged acid.
 const TYPES := {
 	"walker": {
 		"name": "Walker", "health": 100.0, "walk": 1.1, "march": 2.2, "run": 3.3,
@@ -52,6 +55,18 @@ const STEP_UP := 0.8
 ## Following a path that is open ahead, bumping into a piece only makes it
 ## tear the piece down after this long (it slides round it first).
 const NAV_PATIENCE := 1.6
+## Knockback (v2.0): the push from a hit fades at this rate on the ground
+## (per second, exponential), much slower in the air.
+const KNOCK_GRIP := 7.0
+const KNOCK_AIR_GRIP := 0.4
+## Default hit, for callers that don't say (about the old fixed flinch).
+const HIT_KNOCK := 3.5
+const HIT_STAGGER := 0.25
+## Longest stagger from a single hit.
+const STAGGER_MAX := 1.5
+## Falls higher than this hurt, by FALL_DAMAGE per metre more.
+const FALL_SAFE := 2.5
+const FALL_DAMAGE := 22.0
 
 signal attacked(damage: float, from: Vector3, kind: String)
 ## Lobbed a glob of acid (the manager adds it to the world).
@@ -84,6 +99,15 @@ var _wreck_key := ""          # the piece a wave mutant has picked to wreck
 var _wreck_t := 0.0
 var _spit_cd := 0.0
 var slow_mult := 1.0          # barbed wire and spike strips slow it down for a moment
+## Push from hits and blasts on top of its own walking (m/s), fades out.
+var knock := Vector3.ZERO
+## Seconds left reeling from a hit: no walking, no attacking.
+var stagger_t := 0.0
+## Damage from the last hard landing (for tests and the log).
+var last_fall_damage := 0.0
+var _walk_v := Vector3.ZERO   # its own walking velocity (without the knock)
+var _air_top := -INF          # highest point since it left the ground
+var _launched := false        # thrown up this frame: don't snap back to the floor
 var _los := false             # line of sight to the target, refreshed a few times a second
 var _wander_to := Vector3.ZERO
 var _wander_wait := 0.0
@@ -247,15 +271,16 @@ func is_dead() -> bool:
 	return state == State.DEAD
 
 
-## A melee hit: lose health, flinch back, flash red. At 0 it falls over.
-func take_hit(damage: float, point: Vector3, dir: Vector3) -> void:
+## A hit: lose health, get knocked back along dir by force (m/s) and reel
+## for stagger seconds (both scaled by the type's "push"), flash red.
+## At 0 it falls over.
+func take_hit(damage: float, point: Vector3, dir: Vector3, force := HIT_KNOCK, stagger := HIT_STAGGER) -> void:
 	if is_dead():
 		return
 	health = maxf(health - damage, 0.0)
 	_flash = 0.25
-	var push: Vector3 = Vector3(dir.x, 0, dir.z).normalized() * 3.5 * float(stats.push)
-	velocity += push
-	_attack_t = -1.0
+	knock += Vector3(dir.x, 0, dir.z).normalized() * force * float(stats.push)
+	_stagger(stagger)
 	_cooldown = maxf(_cooldown, 0.5)
 	_float_number(damage, point)
 	if health <= 0.0:
@@ -264,6 +289,34 @@ func take_hit(damage: float, point: Vector3, dir: Vector3) -> void:
 	_play("hurt", 0.9)
 	if state == State.WANDER:
 		_set_state(State.CHASE)
+
+
+## Thrown by a blast at from: pushed away by force and up by lift (m/s),
+## both scaled by the type's "push" (a Brute barely moves).
+func blast(from: Vector3, force: float, lift: float, stagger: float) -> void:
+	if is_dead():
+		return
+	var away := global_position - from
+	away.y = 0.0
+	away = away.normalized() if away.length() > 0.05 else -global_transform.basis.z
+	var p: float = stats.push
+	knock += away * force * p
+	var up := lift * minf(p, 1.0)
+	if up > 0.5:
+		velocity.y = maxf(velocity.y, up)
+		_launched = true
+	_stagger(stagger)
+
+
+## Reel for a moment: whatever it was doing (a swing, a spit) is cut short.
+func _stagger(seconds: float) -> void:
+	var s := minf(seconds * float(stats.push), STAGGER_MAX)
+	if s < 0.04:
+		return
+	stagger_t = maxf(stagger_t, s)
+	_attack_t = -1.0
+	if state == State.ATTACK or state == State.SPIT:
+		state = State.CHASE
 
 
 func _float_number(damage: float, point: Vector3) -> void:
@@ -342,6 +395,21 @@ func _physics_process(delta: float) -> void:
 	_skin.albedo_color = (stats.skin as Color).lerp(Color(1.0, 0.25, 0.2), _flash / 0.25)
 	if is_dead():
 		_dead_t += delta
+		if _dead_t < 3.0 and (knock != Vector3.ZERO or not is_on_floor()):
+			# The blow that killed it (or a blast) throws the body.
+			knock *= exp(-(KNOCK_GRIP if is_on_floor() else KNOCK_AIR_GRIP) * delta)
+			if knock.length() < 0.05:
+				knock = Vector3.ZERO
+			velocity.x = knock.x
+			velocity.z = knock.z
+			if _launched:
+				pass
+			elif is_on_floor():
+				velocity.y = -0.5
+			else:
+				velocity.y -= GRAVITY * delta
+			_launched = false
+			move_and_slide()
 		if _dead_t > CORPSE_SECONDS:
 			position.y -= delta * 0.3
 			if _dead_t > CORPSE_SECONDS + 6.0:
@@ -359,7 +427,9 @@ func _physics_process(delta: float) -> void:
 		_decide(night)
 	var want := Vector3.ZERO
 	var speed: float = stats.walk
-	match state:
+	var reeling := stagger_t > 0.0
+	stagger_t = maxf(stagger_t - delta, 0.0)
+	match (state if not reeling else -1):
 		State.WANDER:
 			_wander_wait -= delta
 			var to := _wander_to - global_position
@@ -445,14 +515,19 @@ func _physics_process(delta: float) -> void:
 		want = (want + want.cross(Vector3.UP) * _side * 1.4).normalized()
 	if want != Vector3.ZERO:
 		_face(want, delta * 5.0)
-	var hv := Vector3(velocity.x, 0, velocity.z)
-	hv = hv.lerp(want * speed, clampf(delta * 6.0, 0.0, 1.0))
-	velocity.x = hv.x
-	velocity.z = hv.z
-	if is_on_floor():
+	var hv := _walk_v.lerp(want * speed, clampf(delta * 6.0, 0.0, 1.0))
+	_walk_v = hv
+	var grounded := is_on_floor() and not _launched
+	knock *= exp(-(KNOCK_GRIP if grounded else KNOCK_AIR_GRIP) * delta)
+	if knock.length() < 0.05:
+		knock = Vector3.ZERO
+	velocity.x = hv.x + knock.x
+	velocity.z = hv.z + knock.z
+	if grounded:
 		velocity.y = -0.5
-	else:
+	elif not _launched:
 		velocity.y -= GRAVITY * delta
+	_launched = false
 	if is_on_floor():
 		_climb_base = global_position.y
 	climbing = false
@@ -474,6 +549,7 @@ func _physics_process(delta: float) -> void:
 				velocity.x -= nh.x * into
 				velocity.z -= nh.z * into
 	move_and_slide()
+	_after_move()
 	# Walked into a wall, gate or barricade: tear it down.
 	var slow := Vector2(get_real_velocity().x, get_real_velocity().z).length() < speed * 0.4
 	if want != Vector3.ZERO and building and slow and (state == State.CHASE or state == State.WANDER):
@@ -498,10 +574,36 @@ func _physics_process(delta: float) -> void:
 			_stuck_t = 0.0
 			_last_pos = global_position
 	_animate(delta, hv.length())
+	# Reeling: lean back from the blow.
+	_model.rotation.x = lerpf(_model.rotation.x, 0.32 if stagger_t > 0.0 else 0.0, clampf(delta * 12.0, 0.0, 1.0))
 	_groan_t -= delta
 	if _groan_t <= 0.0:
 		_groan_t = _rng.randf_range(5.0, 12.0) * (0.5 if state != State.WANDER else 1.0)
 		_play("groan", _rng.randf_range(0.85, 1.05))
+
+
+## After moving: knock stops against walls, and a hard landing hurts.
+func _after_move() -> void:
+	if knock != Vector3.ZERO and is_on_wall():
+		var n := get_wall_normal()
+		var nh := Vector3(n.x, 0, n.z).normalized()
+		var into := knock.dot(nh)
+		if into < 0.0:
+			knock -= nh * into
+	if is_on_floor():
+		if _air_top > -INF:
+			var fall := _air_top - global_position.y
+			_air_top = -INF
+			if fall > FALL_SAFE:
+				last_fall_damage = (fall - FALL_SAFE) * FALL_DAMAGE
+				_flash = 0.25
+				_stagger(0.3 + 0.15 * fall)
+				_play("hurt", 0.8)
+				hurt(last_fall_damage)
+	elif not climbing:
+		_air_top = maxf(_air_top, global_position.y)
+	else:
+		_air_top = -INF
 
 
 ## Direction along nav field `field` (walls, gates, pits and traps taken into

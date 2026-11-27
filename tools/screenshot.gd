@@ -69,6 +69,8 @@ var shots := [
 	{"name": "59_market", "pos": Vector3(-0.6, 0, 4.2), "yaw": 0.5, "pitch": -0.2, "hour": 10.0, "market": true},
 	{"name": "60_animals", "pos": Vector3(24, 0, 40), "yaw": 0.0, "pitch": -0.5, "hour": 9.5, "animals": true},
 	{"name": "61_raid", "pos": Vector3(24, 0, 31), "yaw": 0.0, "pitch": -0.3, "hour": 17.2, "raid": true},
+	{"name": "62_livable_map", "pos": Vector3(20, 0, 40), "yaw": 0.9, "pitch": 0.0, "hour": 10.0, "map": true, "farm": true, "livable": true},
+	{"name": "63_livable", "pos": Vector3(24, 0, 29.5), "yaw": 0.0, "pitch": -0.42, "hour": 12.5, "farm": true, "livable": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -191,6 +193,8 @@ func _process(_d: float) -> bool:
 			_greening_sample(s.get("can", false))
 		if s.get("farm", false):
 			_farm_sample(s.get("seeds", false))
+		if s.get("livable", false):
+			_livable_sample()
 		if s.get("animals", false):
 			_animals_sample()
 		elif main.animals.all().size() > 0:
@@ -868,6 +872,20 @@ func _farm_sample(seeds: bool) -> void:
 		main.inventory.load_data({})
 		main.inventory.add("seed_millet", 6)
 		main.inventory.selected = 0
+
+
+## v1.17: the farm sample made greener, with a fire pit and a grown palm, so
+## the HUD and the map show a green % and a livable score.
+func _livable_sample() -> void:
+	var w = main.water
+	var b = main.building
+	for c in w.cells:
+		w.cells[c].green = 1.0 if c.y >= 4 else 0.6
+	var fs := {"kind": "obj", "cx": 2, "cz": 9, "dir": 0, "level": 0}
+	b.place("fire_pit", fs, b.evaluate("fire_pit", fs).y)
+	main.livable.spread_green()
+	w.redraw()
+	main.livable.refresh(false)
 
 
 ## v1.16: gazelles, a jackal and birds on green land, and a gazelle to butcher.

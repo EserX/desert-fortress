@@ -34,6 +34,8 @@ var food := MAX
 var water := MAX
 var dead := false
 var hot := false  # in the midday heat right now (for the HUD)
+var regen_mult := 1.0  # v1.17: a livable base heals faster (livable.gd sets it)
+var heat_shelter := false  # v1.17: resting through the midday heat at a livable base
 var need_mult := 1.0  # difficulty: how fast food and water run down
 var cause := ""   # what hurt you last, for the death screen ("" = hunger, thirst or a fall)
 var _warned := {}
@@ -48,7 +50,7 @@ static func is_hot_hour(hour: float) -> bool:
 func tick(delta: float, hour: float, sprinting: bool, in_shade: bool) -> void:
 	if dead:
 		return
-	hot = is_hot_hour(hour) and not in_shade
+	hot = is_hot_hour(hour) and not in_shade and not heat_shelter
 	var water_rate := WATER_DRAIN
 	var food_rate := FOOD_DRAIN
 	if hot:
@@ -64,7 +66,7 @@ func tick(delta: float, hour: float, sprinting: bool, in_shade: bool) -> void:
 	if food <= 0.0 or water <= 0.0:
 		damage(STARVE_DAMAGE * delta)
 	elif food > 50.0 and water > 50.0:
-		health = minf(health + REGEN * delta, MAX)
+		health = minf(health + REGEN * regen_mult * delta, MAX)
 	_check_warning("water", water, "You are thirsty. Drink some water.")
 	_check_warning("food", food, "You are hungry. Eat something.")
 

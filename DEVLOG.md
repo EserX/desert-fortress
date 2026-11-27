@@ -2,6 +2,31 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v1.17.0 (2026-11-27): Green and livable
+Fifth step of the terraforming direction (M10): the game now measures how green the desert is and how livable your base is, and rewards you for it. No player feedback was waiting.
+- **Green %** of the whole desert (the green of every 4 m ground square added up, over the roughly 10,000 squares of the map). Shown on the HUD under the clock ("Green 0.11%   Livable 46") and on the map. It is small at first on purpose: v1.19 will hang its 10 / 25 / 50% milestones on it.
+- **Livable score (0 to 100)** for the base: five parts of up to 20 points each, counted inside the build zone, worked out once a second:
+  - **Shade:** 4 per grown date palm, 2 per roof (and triangle roof).
+  - **Water:** 6 for the main well, up to 9 more for deepening it (3 per 200 L), 3 for the hand pump, 2 per dug well.
+  - **Food:** 2.5 per living millet, melon, date palm or dragon fruit plant, 3 for a fire pit to cook on.
+  - **Plants:** 2 per fully green square (10 squares fill it).
+  - **Shelter:** 1 per wall-type piece, floor or roof, plus 2 each for a chest and a workbench.
+- **Milestones and comforts** (while the score holds them; each is announced with a banner the first time):
+  - **25, Settled:** health comes back twice as fast inside the build zone.
+  - **50, Cool camp:** the midday heat doesn't make you thirstier inside the build zone (resting through the heat).
+  - **75, Homestead:** every damaged building piece mends 10% of its hit points each morning (my take on "a better shelter").
+- **The map** now draws your soil and green land (brown to green squares) and a LAND panel on the right with the green %, the livable score, its five parts and the three milestones (ticked when reached).
+- **Green land spreads on its own:** each morning a fully green square gives the squares next to it 2 L towards soil and a touch of green. So the sand round green land turns to soil in 3 mornings and stays soil while the green holds, but it only goes green with your water (the touch of green is less than a dry morning takes). Let the green fade and the fringe goes back to sand.
+- **Palm groves spread:** each morning a grown date palm has a 30% chance to drop a sapling on a free, watered soil spot within 2 beds (4 m) of it, 3 saplings a morning at most. Where they fall comes from the world seed and the day. The saplings are ordinary date palms (water them or the heat kills them).
+- **Saved:** the best milestone reached (so banners aren't repeated). The score itself is worked out from the base. Older saves load with the milestones they already reach taken as announced; a broken value falls back to that too.
+- Code: new `scripts/livable.gd` (score, green %, comforts, spreading, saving). Small hooks: `farming.sprout()` (a plant coming up on its own, using the same checks as planting), `building.mend_all()`, and `regen_mult` / `heat_shelter` on survival (set by livable). main.gd only creates it and saves it (+19 lines); the HUD and the map read it.
+- Decisions: comforts follow the current score rather than the best ever, so a neglected base loses them (the milestone banner isn't repeated, though). All parts count only inside the build zone, so outposts (v1.18) can get their own score later. A roof counts for both shade and shelter, which is fair: it gives both.
+- **Tests (38 new):** the map's square count, 0% on a dead desert, a bare base scoring 6 (the well), green % over the whole map, plant points only inside the zone, the HUD text, food plants (dead ones not counted) and a fire pit, palm shade, the first milestone and its banner (only once), faster healing at the base and not away from it, a cabin's roofs and walls, Cool camp with no heat at the base but heat in the desert, water upgrades, Homestead mending a wall 10%, the map's milestone list, saving and loading without repeated banners, an older save, a broken save, green spreading to the four squares next to a green one in 3 mornings (and no further), the fringe staying bare soil, fading back to sand when left dry, a palm dropping a sapling next to it, the same spot for the same world and day, none on dry soil, and never on the main well or on sand.
+- New screenshot views `62_livable_map` (the map with green land and the LAND panel) and `63_livable` (the HUD line over a green farm).
+
+**Try:** water a patch near the base green, plant a few melons and a date palm, build a fire pit and a cabin, and watch the Livable number on the HUD climb; open the map (M) to see what's missing. Reach 50 and stand in the base at 13:00: the heat warning shouldn't show. Keep a grown date palm's square and the ones around it watered and look for saplings in the mornings.
+**Next:** v1.18, oases and outposts: hidden oases with springs, rare seeds, clay and reeds, guarded by mutants or a nest, which you can claim as outposts.
+
 ## v1.16.0 (2026-11-27): Water draws life
 Fourth step of the terraforming direction (M10): water brings animals by day and mutants by night. No player feedback was waiting. The owner asked to merge and keep developing; everything was already merged into `main` (v1.15), so this run went on to the next roadmap item.
 - **Animals by day.** Between 07:00 and 17:00 animals walk (or fly) in from 80 to 115 m out to graze on your green land, and now and then to drink at the main well. How many come depends on the land's **life**: the green of every square added up, plus a little for bare soil. About one gazelle for every 3 fully green squares (8 grazers at most), a jackal for every four grazers, birds in flocks of three (9 at most). Dead sand draws nothing. Which animal comes, from where and to which square comes from the world seed and the day.

@@ -128,6 +128,19 @@ func plant_problem(p: Vector3) -> String:
 	return ""
 
 
+## A plant comes up on its own at spot s (v1.17: palm saplings). Returns true
+## if it took (a free spot on soil, away from the main well).
+func sprout(s: Vector2i, crop: String) -> bool:
+	if not CROPS.has(crop):
+		return false
+	var c := spot_center(s)
+	if plant_problem(Vector3(c.x, 0.0, c.y)) != "":
+		return false
+	plants[s] = {"crop": crop, "grow": 0.0, "hp": 1.0, "dead": false, "fruited": false}
+	_dirty = true
+	return true
+
+
 ## Plants a seed of `crop` at this point (takes one seed). Returns "" or why not.
 func plant(p: Vector3, crop: String) -> String:
 	if not CROPS.has(crop):

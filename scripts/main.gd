@@ -40,6 +40,7 @@ const Water = preload("res://scripts/water.gd")
 const Farming = preload("res://scripts/farming.gd")
 const Animals = preload("res://scripts/animals.gd")
 const Raids = preload("res://scripts/raids.gd")
+const Livable = preload("res://scripts/livable.gd")
 
 ## Testing aid (temporary): a green box by the spawn point that holds a full
 ## stack of every item and tops your cash up to $2000 each time you open it.
@@ -102,6 +103,7 @@ var water: Water
 var farming: Farming
 var animals: Animals
 var raids: Raids
+var livable: Livable
 var waves: Waves
 var guns: Guns
 var traps: Traps
@@ -1744,6 +1746,20 @@ func _setup_life() -> void:
 	day_night.dusk_started.connect(animals.on_dusk)
 	day_night.night_started.connect(animals.on_night)
 	day_night.day_started.connect(animals.on_morning)
+	livable = Livable.new()
+	livable.name = "Livable"
+	livable.water = water
+	livable.farming = farming
+	livable.building = building
+	livable.survival = survival
+	livable.player = player
+	livable.day_night = day_night
+	livable.world_seed = world_seed
+	add_child(livable)
+	hud.livable = livable
+	livable.message.connect(hud.show_banner)
+	water.morning_tally.connect(livable.on_tally)  # after the farming tally
+	day_night.day_started.connect(livable.on_morning)
 
 
 ## A mutant clawed you: lose health, red flash on the side it came from.
@@ -1909,6 +1925,7 @@ func collect_save_data() -> Dictionary:
 		"water": water.save_data(),
 		"farming": farming.save_data(),
 		"animals": animals.save_data(),
+		"livable": livable.save_data(),
 	}
 
 
@@ -2012,6 +2029,8 @@ func apply_save_data(data: Dictionary) -> void:
 	player.stamina = float(p.get("stamina", player.STAMINA_MAX))
 	player.velocity = Vector3.ZERO
 	nav.rebuild_map()  # the mutants' path map, worked out now rather than when the first one arrives
+	var lv = data.get("livable", {})
+	livable.load_data(lv if lv is Dictionary else {})  # last: scores what was loaded
 
 
 ## Graphics quality: sun shadows and how far you can see.

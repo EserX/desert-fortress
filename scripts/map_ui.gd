@@ -72,6 +72,7 @@ func _draw_map() -> void:
 	_canvas.draw_circle(c, RADIUS_PX + 16.0, MOUNTAIN)
 	_canvas.draw_circle(c, RADIUS_PX, SAND)
 	_canvas.draw_string(font, c + Vector2(-8, -RADIUS_PX - 22), "N", HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color(1, 0.95, 0.85))
+	_draw_green()
 	# Base.
 	var b := to_map(Vector3.ZERO)
 	_canvas.draw_rect(Rect2(b - Vector2(7, 7), Vector2(14, 14)), Color(0.8, 0.15, 0.1))
@@ -111,6 +112,52 @@ func _draw_map() -> void:
 	_canvas.draw_colored_polygon(PackedVector2Array([pp + f * 12, pp - f * 7 + s * 7, pp - f * 3, pp - f * 7 - s * 7]), Color(0.1, 0.3, 0.9))
 	# Legend.
 	var y := 120.0
-	for line in ["MAP", "Brown block: wreck", "Grey corner: ruin", "Green dot: still has loot", "Green square: supply crate", "Red dots: tonight's wave", "Blue arrow: you", "", "M or Esc closes"]:
+	for line in ["MAP", "Brown block: wreck", "Grey corner: ruin", "Green dot: still has loot", "Green square: supply crate", "Red dots: tonight's wave", "Blue arrow: you", "Brown to green: your land", "", "M or Esc closes"]:
 		_canvas.draw_string(font, Vector2(30, y), line, HORIZONTAL_ALIGNMENT_LEFT, -1, 22 if line == "MAP" else 16, Color(1, 0.95, 0.85))
 		y += 26.0
+	_draw_livable(font)
+
+
+## Soil and green land (v1.17): one small square for every watered ground square
+## (a few hundred at most, only while the map is open).
+func _draw_green() -> void:
+	var w = main.water
+	if w == null:
+		return
+	var scale: float = radius_px() / main.terrain.PLAY_RADIUS
+	var side: float = maxf(w.CELL * scale, 2.0)
+	for c in w.cells:
+		var e: Dictionary = w.cells[c]
+		if e.total < w.SOIL_NEED:
+			continue
+		var col := Color(0.55, 0.4, 0.25).lerp(Color(0.25, 0.55, 0.15), float(e.green))
+		_canvas.draw_rect(Rect2(to_map(Vector3(c.x * w.CELL, 0, c.y * w.CELL)), Vector2(side, side)), col)
+
+
+## The green % and the livable score with its parts and milestones, on the right.
+func _draw_livable(font: Font) -> void:
+	var lv = main.livable
+	if lv == null:
+		return
+	var x := _canvas.size.x - 320.0
+	var y := 120.0
+	var box := Rect2(x - 14.0, y - 30.0, 316.0, 362.0)
+	_canvas.draw_rect(box, Color(0.08, 0.05, 0.03, 0.85))
+	_canvas.draw_string(font, Vector2(x, y), "LAND", HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color(1, 0.95, 0.85))
+	y += 28.0
+	for line in lv.summary_lines():
+		var text: String = line
+		var col := Color(1, 0.95, 0.85)
+		if text.begins_with("[x]"):
+			col = Color(0.6, 1.0, 0.5)
+		elif text.begins_with("[ ]"):
+			col = Color(0.85, 0.8, 0.7)
+		if text.begins_with("[") and text.contains(": "):
+			var at := text.find(": ")
+			_canvas.draw_string(font, Vector2(x, y), text.substr(0, at), HORIZONTAL_ALIGNMENT_LEFT, -1, 16, col)
+			y += 20.0
+			text = "      " + text.substr(at + 2)
+			_canvas.draw_string(font, Vector2(x, y), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, col)
+		else:
+			_canvas.draw_string(font, Vector2(x, y), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, col)
+		y += 24.0 if text != "" else 10.0

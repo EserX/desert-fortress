@@ -2,7 +2,7 @@
 
 A 3D low-poly survival and fortress-defence game for Linux, made with Godot 4.5. Scavenge the desert by day, build and arm a fortress around the flag, and survive a bigger mutant wave every night. Each night pays cash you spend at the shop terminal on supplies, weapons, drone deliveries and base upgrades. Now also: turning the desert green from a main well at the centre, farming it and selling the harvest at the market, and hunting the animals the green land draws in (by night the water draws the mutants); oases and more are coming (see the roadmap).
 
-**Current version: v1.16.0.** See [ROADMAP.md](ROADMAP.md) for the plan and [DEVLOG.md](DEVLOG.md) for what changed in each update.
+**Current version: v1.17.0.** See [ROADMAP.md](ROADMAP.md) for the plan and [DEVLOG.md](DEVLOG.md) for what changed in each update.
 
 ## Play (Linux Mint)
 
@@ -75,6 +75,13 @@ If `git pull` complains about untracked `.uid` files, they are safe to delete.
 | Dragon fruit (exotic) | 5 | 6 L | dragon fruit every 3 days |
 
 Eat millet, melons, dates and dragon fruit with **F**. Sell the harvest at the market (shop terminal, Market page): exotic crops and flowers bring the most. Digging up a bed uproots its plant.
+
+**Green and livable.** The HUD (top right) and the map (**M**) show how much of the whole desert is **green** and how **livable** your base is, out of 100. The livable score has five parts of up to 20 points, all counted inside the build zone: **shade** (4 for each grown date palm, 2 for each roof), **water** (6 for the main well, more for deepening it, 3 for the hand pump, 2 for each dug well), **food** (2.5 for each living millet, melon, date palm or dragon fruit plant, 3 for a fire pit), **plants** (2 for each fully green square) and **shelter** (1 for each wall, floor or roof, 2 each for a chest and a workbench). The map lists the parts. Milestones give comforts while the score holds them:
+- **25, Settled:** you heal twice as fast at the base.
+- **50, Cool camp:** you rest through the midday heat at the base (no faster thirst there).
+- **75, Homestead:** your buildings mend 10% of their hit points every morning.
+
+Green land spreads by itself: a fully green square keeps the sand next to it turning to soil (in about 3 mornings), ready for your water. Grown **date palms** drop saplings on watered soil within 4 m now and then, so a palm grove grows if you keep it watered.
 
 **Animals and hunting.** Water brings life. Between 07:00 and 17:00 animals come in from the desert to graze on your green land and drink at the main well: the greener the land round the base, the more come (about one gazelle for every 3 fully green squares, a jackal for every four grazers, birds in flocks of three). **Gazelles** bolt when you get within 20 m (10 m crouching), so creep up or use the rifle. **Jackals** come for you and bite when you get close, and run when badly hurt. **Birds** peck on the green and fly off when disturbed. Gunshots scare everything nearby. Look at a dead animal and press **E** to butcher it for **raw meat** (a gazelle gives 3). Raw meat has to be cooked: light a **fire pit** with wood, then **E** with raw meat cooks up to 5 pieces at once (each burns 10 seconds of the fire). **Cooked meat** is a big meal (F). At dusk the animals head back out into the desert.
 

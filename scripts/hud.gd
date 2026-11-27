@@ -16,6 +16,7 @@ var day_night  # DayNight
 var waves  # Waves
 var guns  # Guns
 var shop  # Shop
+var livable  # Livable: green % and the livable score (v1.17)
 var hint_box: PanelContainer
 var _hint_label: Label
 var _hint_queue: Array = []
@@ -226,6 +227,8 @@ func _process(delta: float) -> void:
 		var text: String = "Day %d  %s" % [day_night.day, day_night.clock_text()]
 		if shop:
 			text = "$%d     " % shop.cash + text
+		if livable:
+			text += "\n" + livable.hud_text()
 		var left: float = day_night.seconds_until_night()
 		if day_night.is_night():
 			text += "\nNight"

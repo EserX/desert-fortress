@@ -1563,6 +1563,23 @@ func repair(key: String) -> void:
 		_update_cracks(rec)
 
 
+## Every damaged piece gets back `share` of its hit points (v1.17: a livable
+## base mends each morning). Returns how many pieces mended.
+func mend_all(share: float) -> int:
+	var n := 0
+	for key in pieces:  # once a morning, every piece (a few hundred at most); no pieces added or removed
+		var rec: Dictionary = pieces[key]
+		var top := max_hp(rec)
+		if rec.hp >= top:
+			continue
+		rec.hp = minf(rec.hp + top * share, top)
+		_update_cracks(rec)
+		n += 1
+	if n > 0:
+		revision += 1
+	return n
+
+
 ## Hurts a piece. At 0 hit points it breaks and is gone. Returns true if it broke.
 func damage(key: String, amount: float) -> bool:
 	key = occupied.get(key, key)

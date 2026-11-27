@@ -3035,6 +3035,7 @@ func _process(_delta: float) -> bool:
 			_start_life()
 		4070:
 			_check_life()
+			_test_livable()
 		4080:
 			for e in catcher.errors:
 				print("  ERROR ", e)
@@ -3735,3 +3736,178 @@ func _check_life() -> void:
 	check(res.get("node") == t and t.health < hp, "a rifle shot hits the gazelle (%s)" % str(res.get("kind", "")))
 	gun.set_item("")
 	main.animals.clear()
+
+
+## v1.17: the green % of the map, the livable score of the base, milestones and
+## their comforts, green land and palms spreading, saving.
+func _test_livable() -> void:
+	var lv = main.livable
+	var w = main.water
+	var f = main.farming
+	var b = main.building
+	var sv = main.survival
+	var player = main.player
+	var L = load("res://scripts/livable.gd")
+	var W = load("res://scripts/water.gd")
+	var F = load("res://scripts/farming.gd")
+	var Prefabs = load("res://scripts/prefabs.gd")
+	var banners: Array = []
+	lv.message.connect(func(t): banners.append(t))
+	b.load_data([])
+	w.load_data({})
+	f.load_data({})
+	main.shop.upgrades.well = 0
+	main.shop.upgrades.pump = 0
+	main.shop.upgrades.zone = 0
+	main.apply_upgrades()
+	lv.load_data({})
+	check(L.land_squares() > 9000 and L.land_squares() < 11000, "the map has %d ground squares" % L.land_squares())
+	check(lv.green_percent() == 0.0 and lv.hud_text().begins_with("Green 0.00%"), "dead desert: 0%% green (%s)" % lv.hud_text())
+	check(lv.score == 6 and lv.parts.water == 6 and lv.parts.shade == 0 and lv.parts.shelter == 0, "a bare base is only the main well: livable %d (%s)" % [lv.score, str(lv.parts)])
+	check(lv.level() == 0 and lv.reached == 0, "no milestone yet")
+	# Green land near the base and far out.
+	for x in range(0, 5):
+		for z in range(3, 5):
+			var c := Vector2i(x, z)
+			w.water_cell(c, W.SOIL_NEED)
+			w.cells[c].green = 1.0
+	var far := Vector2i(30, 30)
+	w.water_cell(far, W.SOIL_NEED)
+	w.cells[far].green = 1.0
+	lv.refresh()
+	check(absf(lv.green_percent() - 11.0 / L.land_squares() * 100.0) < 0.0001, "green %% counts the whole map (%s)" % lv.percent_text())
+	check(lv.parts.plants == 20, "10 green squares in the build zone give full plant points, the far one doesn't count (%d)" % lv.parts.plants)
+	main.hud._process(0.0)
+	check(main.hud.clock.text.contains(lv.hud_text()), "the HUD shows it: " + lv.hud_text())
+	# Food plants, a fire pit, palms for shade.
+	var spots := [Vector2i(2, 7), Vector2i(3, 7), Vector2i(4, 7), Vector2i(5, 7)]
+	for s in spots:
+		f.plants[s] = {"crop": "melon", "grow": 1.0, "hp": 1.0, "dead": false, "fruited": false}
+	f.plants[Vector2i(6, 7)] = {"crop": "date_palm", "grow": 6.0, "hp": 1.0, "dead": false, "fruited": true}
+	f.plants[Vector2i(7, 7)] = {"crop": "millet", "grow": 1.0, "hp": 1.0, "dead": true, "fruited": false}
+	var fs := {"kind": "obj", "cx": -3, "cz": 6, "dir": 0, "level": 0}
+	b.place("fire_pit", fs, b.evaluate("fire_pit", fs).y)
+	lv.refresh()
+	check(lv.parts.food == 16, "4 melons, a date palm and a fire pit: food %d (dead plants don't count)" % lv.parts.food)
+	check(lv.parts.shade == 4, "a grown date palm gives shade (%d)" % lv.parts.shade)
+	check(lv.score == 46 and lv.level() == 1 and lv.reached == 1, "livable %d reaches the first milestone" % lv.score)
+	check(banners.size() == 1 and banners[0].contains("Settled"), "and it is announced: " + (banners[0] if banners.size() > 0 else "nothing"))
+	lv.refresh()
+	check(banners.size() == 1, "only once")
+	# Comforts: faster healing at the base.
+	player.position = Vector3(0, main.terrain.surface_height(0, 8), 8)
+	lv._apply_comforts()
+	check(sv.regen_mult == L.HEAL_MULT and not sv.heat_shelter, "settled: you heal twice as fast at the base, but still feel the heat")
+	sv.health = 50.0
+	sv.food = 100.0
+	sv.water = 100.0
+	sv.tick(4.0, 9.0, false, false)
+	check(absf(sv.health - (50.0 + sv.REGEN * 2.0 * 4.0)) < 0.01, "healing %.1f in 4 s" % (sv.health - 50.0))
+	player.position = Vector3(0, main.terrain.surface_height(0, 60), 60)
+	lv._apply_comforts()
+	check(sv.regen_mult == 1.0, "away from the base, normal healing")
+	# A cabin, its roof and walls: shelter and shade.
+	var at := Vector2i(-8, -8)
+	for e in Prefabs.entries("cabin"):
+		var slot: Dictionary = {"kind": e.kind, "cx": e.cx + at.x, "cz": e.cz + at.y, "dir": e.dir, "level": e.level}
+		var ev: Dictionary = b.evaluate(e.type, slot)
+		if ev.ok:
+			b.place(e.type, slot, ev.y)
+	var cs := {"kind": "obj", "cx": -2, "cz": -9, "dir": 0, "level": 0}
+	b.place("chest", cs, b.evaluate("chest", cs).y)
+	lv.refresh()
+	check(b.keys_of(["roof"]).size() == 4 and lv.parts.shade == 12, "the cabin's 4 roofs add shade (%d)" % lv.parts.shade)
+	check(lv.parts.shelter >= 14, "its walls, roof and a chest give shelter (%d)" % lv.parts.shelter)
+	check(lv.level() == 2 and banners.size() == 2 and banners[1].contains("Cool camp"), "livable %d: Cool camp" % lv.score)
+	player.position = Vector3(0, main.terrain.surface_height(0, 8), 8)
+	lv._apply_comforts()
+	sv.tick(1.0, 13.0, false, false)
+	check(sv.heat_shelter and not sv.hot, "at the base you rest through the midday heat")
+	player.position = Vector3(0, main.terrain.surface_height(0, 60), 60)
+	lv._apply_comforts()
+	sv.tick(1.0, 13.0, false, false)
+	check(sv.hot, "out in the desert the heat still gets you")
+	# Water upgrades.
+	main.shop.upgrades.well = 3
+	main.shop.upgrades.pump = 1
+	main.apply_upgrades()
+	lv.refresh()
+	check(lv.parts.water == 18, "a deep well and a pump: water %d" % lv.parts.water)
+	check(lv.level() == 3 and banners[-1].contains("Homestead"), "livable %d: Homestead" % lv.score)
+	# Homestead: buildings mend each morning.
+	var wk: String = b.keys_of(["wall"])[0]
+	var top: float = b.max_hp(b.pieces[wk])
+	b.pieces[wk].hp = top * 0.5
+	lv.on_morning(0)
+	check(absf(b.pieces[wk].hp - top * 0.6) < 0.5, "a damaged wall mends 10%% in the morning (%d / %d)" % [int(b.pieces[wk].hp), int(top)])
+	check(lv.summary_lines().any(func(l): return l.begins_with("[x] 75")), "the map lists the milestones reached")
+	# Saving.
+	var data: Dictionary = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	check(int(data.livable.reached) == 3, "the milestones reached are saved")
+	var n := banners.size()
+	main.apply_save_data(data)
+	check(lv.reached == 3 and lv.score > 75 and banners.size() == n, "and load back without announcing them again (%d)" % lv.score)
+	data.erase("livable")
+	main.apply_save_data(data)
+	check(lv.reached == 3 and banners.size() == n, "an older save takes the milestones it has as already reached")
+	lv.load_data({"reached": "lots"})
+	check(lv.reached == 3, "a broken save falls back to the score")
+	# Greening spreads round a fully green square.
+	b.load_data([])
+	w.load_data({})
+	f.load_data({})
+	main.shop.upgrades.well = 0
+	main.shop.upgrades.pump = 0
+	main.apply_upgrades()
+	var core := Vector2i(10, 10)
+	w.water_cell(core, W.SOIL_NEED)
+	w.cells[core].green = 1.0
+	for i in 3:
+		w.water_cell(core, W.DAY_NEED)
+		w.on_morning()
+	var ring := [core + Vector2i(1, 0), core + Vector2i(-1, 0), core + Vector2i(0, 1), core + Vector2i(0, -1)]
+	check(ring.all(func(c): return w.is_soil(c)), "a watered, fully green square turns the sand next to it to soil in 3 mornings")
+	check(not w.is_soil(core + Vector2i(1, 1)) and not w.is_soil(core + Vector2i(2, 0)), "only the squares right next to it")
+	for i in 6:
+		w.water_cell(core, W.DAY_NEED)
+		w.on_morning()
+	check(ring.all(func(c): return w.is_soil(c) and w.green_of(c) < 0.01), "it stays soil while the green holds, but needs your water to go green")
+	for i in 6:
+		w.on_morning()
+	check(w.green_of(core) < 0.999 and not ring.any(func(c): return w.cells.has(c)), "left dry, the green fades and the soil round it goes back to sand")
+	# Palms drop saplings on watered soil.
+	w.load_data({})
+	f.load_data({})
+	for x in range(4, 8):
+		for z in range(4, 8):
+			w.water_cell(Vector2i(x, z), W.SOIL_NEED)
+	var palm: Vector2i = F.spot_of(4.0 * 5 + 2.0, 4.0 * 5 + 2.0)
+	f.plants[palm] = {"crop": "date_palm", "grow": 6.0, "hp": 1.0, "dead": false, "fruited": true}
+	var first_day := -1
+	var first: Array = []
+	for d in range(1, 40):
+		f.plants = {palm: {"crop": "date_palm", "grow": 6.0, "hp": 1.0, "dead": false, "fruited": true}}
+		for x in range(4, 8):
+			for z in range(4, 8):
+				w.cells[Vector2i(x, z)].wet = W.DAY_NEED
+		var got: Array = lv.sprout_palms(d)
+		if not got.is_empty():
+			first_day = d
+			first = got
+			break
+	check(first_day > 0 and first.size() == 1, "a grown palm drops a sapling now and then (day %d)" % first_day)
+	if first_day > 0:
+		var sp: Vector2i = first[0]
+		check(f.plants.has(sp) and f.plants[sp].crop == "date_palm" and f.plants[sp].grow == 0.0, "a young date palm comes up")
+		check(absi(sp.x - palm.x) <= L.SPROUT_REACH and absi(sp.y - palm.y) <= L.SPROUT_REACH, "next to its parent")
+		f.plants = {palm: {"crop": "date_palm", "grow": 6.0, "hp": 1.0, "dead": false, "fruited": true}}
+		check(lv.sprout_palms(first_day) == first, "the same world and day drop it in the same spot")
+		f.plants = {palm: {"crop": "date_palm", "grow": 6.0, "hp": 1.0, "dead": false, "fruited": true}}
+		for c in w.cells:
+			w.cells[c].wet = 0.0
+		check(lv.sprout_palms(first_day).is_empty(), "but only on watered soil")
+	check(not f.sprout(F.spot_of(W.WELL_POS.x, W.WELL_POS.y), "date_palm") and not f.sprout(Vector2i(60, 60), "date_palm"), "never on the main well or on sand")
+	lv.message.disconnect(lv.message.get_connections().back().callable)
+	w.load_data({})
+	f.load_data({})
+	lv.refresh(false)

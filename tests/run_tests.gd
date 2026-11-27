@@ -2367,6 +2367,146 @@ func _test_building_v19() -> void:
 	player.stamina = player.STAMINA_MAX
 
 
+## v1.11: trees and the axe, loose stones, machines, log stakes.
+func _test_resources() -> void:
+	var b = main.building
+	var inv = main.inventory
+	var props = main.props
+	var player = main.player
+	var Items = load("res://scripts/items.gd")
+	b.load_data([])
+	inv.load_data({})
+	main.mutants.clear()
+	# Trees and stones in the world.
+	check(props.trees.size() >= 80, "trees grow in groves and alone (%d)" % props.trees.size())
+	var nearest := INF
+	for t in props.trees:
+		nearest = minf(nearest, Vector2(t.node.position.x, t.node.position.z).length())
+	check(nearest > 42.0, "none inside the biggest build zone (nearest %.0f m)" % nearest)
+	var close: int = props.pebbles.filter(func(pb): return Vector2(pb.pos.x, pb.pos.z).length() < 41.0).size()
+	check(props.pebbles.size() >= 150 and close >= 20, "loose stones lie about, %d near the base" % close)
+	# Aiming at a tree with the axe.
+	var tid := 0
+	var tn: Node3D = props.trees[tid].node
+	var tp: Vector3 = tn.global_position
+	player.position = Vector3(tp.x + 1.6, main.terrain.surface_height(tp.x + 1.6, tp.z), tp.z)
+	player.rotation.y = PI * 0.5  # facing -x, the tree
+	player.head.rotation.x = 0.0
+	inv.add("axe", 1)
+	inv.selected = 0
+	check(main.tree_under_crosshair() == tid, "the axe finds the tree in front of you (%d)" % main.tree_under_crosshair())
+	check(main.axe_prompt().contains("[LMB] Chop"), "prompt: " + main.axe_prompt().replace("\n", " / "))
+	# Chopping it down.
+	var hits: int = props.trees[tid].hits
+	var logs := 0
+	for i in hits - 1:
+		logs += main.chop_tree(tid)
+	check(logs == 0 and main.tree_hits_left(tid) == 1, "each blow brings it closer (%d hits)" % hits)
+	var data: Dictionary = main.collect_save_data()
+	main.apply_save_data(JSON.parse_string(JSON.stringify(data)))
+	check(main.tree_hits_left(tid) == 1, "a half-chopped tree is saved")
+	logs = main.chop_tree(tid)
+	check(logs == props.trees[tid].logs and inv.count_of("log") == logs and main.felled_trees.has(tid), "the last blow fells it: %d logs" % logs)
+	check(main.tree_under_crosshair() == -1, "a felled tree can't be chopped again")
+	data = main.collect_save_data()
+	main.felled_trees = {}
+	main.apply_save_data(JSON.parse_string(JSON.stringify(data)))
+	check(main.felled_trees.has(tid) and not props.trees[tid].node.visible, "felled trees stay felled after loading")
+	var day: int = main.day_night.day
+	main._regrow(day + 2)
+	check(main.felled_trees.has(tid), "not grown back after 2 days")
+	main._regrow(day + 3)
+	check(not main.felled_trees.has(tid) and props.trees[tid].node.visible and props.trees[tid].node.collision_layer == 1, "grown back after 3")
+	# Logs: split by hand at the workbench, or 5 wood each at a sawmill.
+	check(Items.RECIPES.has("axe") and Items.RECIPES.wood.cost == {"log": 1} and Items.RECIPES.wood.count == 2, "the workbench makes axes and splits logs into 2 wood")
+	# Loose stones.
+	var pid := 0
+	var stone0: int = inv.count_of("stone")
+	check(main._prompt_for("pebble:0") == "[E] Pick up stone", "loose stones say E picks them up")
+	check(main.pick_pebble(pid) and inv.count_of("stone") == stone0 + 1, "E picks a stone up")
+	check(not main.pick_pebble(pid), "and it is gone")
+	data = main.collect_save_data()
+	main.taken_pebbles = {}
+	main.apply_save_data(JSON.parse_string(JSON.stringify(data)))
+	check(main.taken_pebbles.has(pid), "picked stones stay picked after loading")
+	main._regrow(day + 2)
+	check(not main.taken_pebbles.has(pid) and props.pebbles[pid].area.collision_layer != 0, "and turn up again two days later")
+	# Machines come by drone.
+	var kits := {}
+	for e in main.shop.DRONE:
+		for it in e.items:
+			if it.begins_with("kit_"):
+				kits[it] = e.price
+	check(kits.size() == 3, "the drone flies in a sawmill, a rock crusher and a nail press (%s)" % str(kits))
+	# A sawmill next to a fuelled generator, by day.
+	main.day_night.restore(day, 10.0)
+	var gs := {"kind": "obj", "cx": -9, "cz": 9, "dir": 0, "level": 0}
+	var gk: String = b.place("generator", gs, b.evaluate("generator", gs).y)
+	b.pieces[gk].fuel = 2.0
+	var ss := {"kind": "obj", "cx": -8, "cz": 9, "dir": 0, "level": 0}
+	var sk: String = b.place("sawmill", ss, b.evaluate("sawmill", ss).y)
+	main.power.tick(0.25)
+	check(not b.pieces[gk].running, "by day an idle generator stays off")
+	inv.load_data({})
+	inv.add("log", 4)
+	check(main._prompt_for("machine:" + sk).contains("[E] Load log"), "the sawmill prompt: " + main._prompt_for("machine:" + sk).replace("\n", " / "))
+	var r: Array = main.use_machine(sk)
+	check(r[0] == 4 and b.pieces[sk].input == 4 and inv.count_of("log") == 0, "E loads the logs into it")
+	main.power.tick(0.25)
+	check(b.pieces[gk].running and b.pieces[sk].powered, "the generator starts up for it, by day")
+	for i in 24:
+		main.power.tick(0.25)
+	check(b.pieces[sk].output == 5 and b.pieces[sk].input == 3, "a log becomes 5 wood in 6 s (%d)" % b.pieces[sk].output)
+	data = main.collect_save_data()
+	b.load_data([])
+	main.apply_save_data(JSON.parse_string(JSON.stringify(data)))
+	check(b.pieces.has(sk) and b.pieces[sk].output == 5 and b.pieces[sk].input == 3, "what is in a machine is saved")
+	r = main.use_machine(sk)
+	check(r[1] == 5 and inv.count_of("wood") == 5, "E takes the wood")
+	# A crusher out of reach of power does nothing.
+	var cs := {"kind": "obj", "cx": -14, "cz": 9, "dir": 0, "level": 0}
+	var ck: String = b.place("crusher", cs, b.evaluate("crusher", cs).y)
+	inv.add("stone", 6)
+	main.use_machine(ck)
+	for i in 70:
+		main.power.tick(0.25)
+	check(b.pieces[ck].output == 0 and main._prompt_for("machine:" + ck).contains("no power"), "a crusher without power waits")
+	b.connect_cable(gk, ck)
+	b.pieces[gk].fuel = 2.0
+	for i in 70:
+		main.power.tick(0.25)
+	check(b.pieces[ck].output == 1 and b.pieces[ck].input == 3, "cabled up it grinds 3 stone into a cement bag in 15 s")
+	# Demolishing gives the machine back in its crate.
+	inv.load_data({})
+	main.hammer_demolish(ck)
+	main.hammer_demolish(ck)
+	check(inv.count_of("kit_crusher") == 1, "demolished, the crusher goes back in its crate")
+	# Log stakes.
+	var ls := {"kind": "obj", "cx": -12, "cz": 12, "dir": 0, "level": 0}
+	var lk: String = b.place("log_stakes", ls, b.evaluate("log_stakes", ls).y)
+	check(b.PIECES.log_stakes.cost.has("log"), "log stakes are made of logs")
+	var w = main.mutants.spawn("walker", b.pieces[lk].node.global_position)
+	w.set_physics_process(false)
+	main.traps.tick(0.1)
+	check(w.health < 100.0, "log stakes bite a mutant on them (%.0f)" % w.health)
+	main.mutants.clear()
+	b.load_data([])
+	inv.load_data({})
+	main.day_night.restore(day, 10.0)
+	# Build mode colours a weakly held piece.
+	var bm = main.build_mode
+	bm.can_build = true
+	bm.support_preview = 90.0
+	var solid = bm.ghost_material()
+	bm.support_preview = 40.0
+	var mid = bm.ghost_material()
+	bm.support_preview = 22.0
+	var weak = bm.ghost_material()
+	check(solid != mid and mid != weak and weak != bm._bad_mat, "the preview goes green, yellow, orange as support drops")
+	bm.support_preview = -INF
+	bm.can_build = false
+
+
 func Building_index(t: String) -> int:
 	return main.building.ORDER.find(t)
 
@@ -2681,6 +2821,7 @@ func _process(_delta: float) -> bool:
 			_test_fast_building()
 			_test_wiring()
 			_test_building_v19()
+			_test_resources()
 			_start_ladder()
 		3300:
 			_check_debris()

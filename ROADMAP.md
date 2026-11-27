@@ -64,6 +64,11 @@ Building is to be a big part of the game, with the fine-tuned feel of survival-b
 - [x] v1.9: **Building overhaul:** objects turn in 15° steps (Z / X) and the preview swings round smoothly; ready-made buildings (shelter, cabin, big cabin, watchtower, gatehouse) laid as free blueprints and built piece by piece with E (hold to keep going), paid from pockets and chests; the **horde button** stand at the spawn point calls a wave on demand; build-mode key help; walls at corners no longer blocked
 - [ ] Later building ideas (not scheduled): more ready-made buildings (a walled compound, a bunker with a well), choosing the tier of a blueprint, a blueprint menu with pictures
 
+### Owner requests (2026-11-27, later)
+Resource gathering and processing: trees and an axe, rocks to pick up, machines bought for cash and delivered by drone (a rock crusher for cement), and traps made from gathered resources.
+- [x] v1.11: **Gathering and processing:** groves of palms and acacias felled with an axe for logs (they grow back), loose stones to pick up, a sawmill, rock crusher and nail press bought by drone and run on generator power, splitting logs by hand at the workbench, log stakes trap
+- [ ] Later resource ideas (not scheduled): a furnace and the v2.2 crafting chain feeding off these machines, a water purifier, machines that feed a chest automatically
+
 ### M9: Game logic, AI and physics
 - [x] v1.10: **Mutant navigation:** a navigation mesh, rebuilt when the base or the ground changes, so mutants path round walls to an open gate or the weakest wall instead of walking straight in. Brutes go straight through, pits and wire are taken into account, and groups pick the same weak point
 - [ ] v2.0: **Physics pass:** explosions push mutants and loose items, dropped items become physics props, throwables (molotov, pipe bomb, rocks) with arcs and bounces, knockback and stagger tuned per weapon, mutants falling into pits and off roofs

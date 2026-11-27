@@ -54,6 +54,12 @@ var _ghost: Node3D
 var _ghost_type := ""
 var _ok_mat: StandardMaterial3D
 var _bad_mat: StandardMaterial3D
+## Upstairs the preview shows how well it would be held up: green when solid,
+## yellow, then orange close to the limit (red can't be built).
+var _mid_mat: StandardMaterial3D
+var _weak_mat: StandardMaterial3D
+const SUPPORT_SOLID := 60.0
+const SUPPORT_WEAK := 35.0
 ## Dashed circle on the sand showing a turret's reach while placing one.
 var range_ring: MultiMeshInstance3D
 var _ring_at := Vector3.INF
@@ -64,6 +70,8 @@ const RING_DASHES := 90
 func _ready() -> void:
 	_ok_mat = _ghost_mat(Color(0.3, 1.0, 0.35, 0.38))
 	_bad_mat = _ghost_mat(Color(1.0, 0.25, 0.2, 0.38))
+	_mid_mat = _ghost_mat(Color(0.95, 0.9, 0.25, 0.38))
+	_weak_mat = _ghost_mat(Color(1.0, 0.55, 0.15, 0.38))
 	_ghost = Node3D.new()
 	_ghost.visible = false
 	add_child(_ghost)
@@ -218,8 +226,18 @@ func _set_ghost(t: Transform3D, delta: float) -> void:
 	_ghost_yaw = yaw if delta >= 1.0 or not _ghost.visible else lerp_angle(_ghost_yaw, yaw, clampf(delta * TURN_SPEED, 0.0, 1.0))
 	_ghost.transform = Transform3D(Basis(Vector3.UP, _ghost_yaw), t.origin)
 	_ghost.visible = true
+	var m := ghost_material()
 	for mi in _ghost.get_children():
-		mi.material_override = _ok_mat if can_build else _bad_mat
+		mi.material_override = m
+
+
+## The preview's colour: red if it can't be built, else by support upstairs.
+func ghost_material() -> StandardMaterial3D:
+	if not can_build:
+		return _bad_mat
+	if support_preview == -INF or support_preview >= SUPPORT_SOLID:
+		return _ok_mat
+	return _mid_mat if support_preview >= SUPPORT_WEAK else _weak_mat
 
 
 ## The ready-made building under the crosshair, turned with R / Z / X: its

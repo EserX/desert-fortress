@@ -54,6 +54,11 @@ const STAMINA_DIG := 7.0
 const STAMINA_PICK := 9.0
 const STAMINA_BUILD := 6.0
 const STAMINA_HAMMER := 5.0
+const STAMINA_CHOP := 8.0
+const AXE_REACH := 2.8
+## Felled trees grow back after this many mornings; picked-up stones after PEBBLE_DAYS.
+const TREE_REGROW_DAYS := 3
+const PEBBLE_DAYS := 2
 const AREA_R := 8.0  # hammer R / G: repair or upgrade everything this close
 const CHEST_REACH := 4.0  # walk further than this from an open chest or bench and it closes
 
@@ -112,6 +117,11 @@ var cable_from := ""
 ## Rocks broken with the pickaxe (id -> true) and hits left on started ones.
 var broken_rocks := {}
 var rock_hits := {}
+## Trees felled with the axe (id -> day felled), chops left on started ones,
+## and loose stones picked up (id -> day).
+var felled_trees := {}
+var tree_hits := {}
+var taken_pebbles := {}
 var caches: Caches
 var _beep: AudioStreamPlayer
 var _beep_t := 0.0
@@ -456,6 +466,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 	elif holding("cable") and _cable_input(event):
 		get_viewport().set_input_as_handled()
+	elif holding("axe") and _axe_input(event):
+		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("rotate") and lock_door(player.interact_target()):
 		get_viewport().set_input_as_handled()
 	elif guns.item != "" and _gun_input(event):
@@ -499,6 +511,8 @@ func _process(delta: float) -> void:
 				text = detector_text()
 			elif text == "" and holding("cable"):
 				text = cable_prompt(piece_under_crosshair())
+			elif text == "" and holding("axe"):
+				text = axe_prompt()
 		hud.set_prompt(text)
 		_hold_site(delta)
 		_update_dig_marker()
@@ -701,6 +715,130 @@ func mine_rock(id: int) -> int:
 	else:
 		rock_hits[id] = left
 	return 1
+
+
+# --- Trees, loose stones and machines (v1.11) ---------------------------------
+
+## Id of the standing tree under the crosshair (within axe reach), or -1.
+func tree_under_crosshair() -> int:
+	var hit := player.look_hit(AXE_REACH)
+	if hit.is_empty() or not hit.collider.has_meta("tree_id"):
+		return -1
+	var id := int(hit.collider.get_meta("tree_id"))
+	return -1 if felled_trees.has(id) else id
+
+
+func tree_hits_left(id: int) -> int:
+	return int(tree_hits.get(id, props.trees[id].hits))
+
+
+func axe_prompt() -> String:
+	var id := tree_under_crosshair()
+	if id < 0:
+		return ""
+	var t: Dictionary = props.trees[id]
+	return "%s\n[LMB] Chop (%d hits left, about %d logs)" % ["Date palm" if t.kind == "palm" else "Acacia", tree_hits_left(id), t.logs]
+
+
+## One axe blow on a tree. On the last one it falls and its logs go in your
+## bag (what doesn't fit drops in a bag beside you). Returns the logs it gave.
+func chop_tree(id: int) -> int:
+	if id < 0 or id >= props.trees.size() or felled_trees.has(id):
+		return 0
+	var left := tree_hits_left(id) - 1
+	if left > 0:
+		tree_hits[id] = left
+		return 0
+	tree_hits.erase(id)
+	felled_trees[id] = day_night.day
+	var t: Dictionary = props.trees[id]
+	var logs: int = t.logs
+	var over := inventory.add("log", logs)
+	if over > 0:
+		loot.spawn_drop({"log": over}, _drop_spot())
+		hud.show_banner("Your bag is full: the rest of the logs are in a bag on the ground")
+	hud.show_pickup(["Timber! +%d Log" % logs])
+	# It topples away from you, then it is gone (no collision on the way down).
+	var body: StaticBody3D = t.node
+	body.collision_layer = 0
+	var away: Vector3 = (body.global_position - player.global_position)
+	away.y = 0
+	var tw := create_tween()
+	var target_rot := Vector3(-away.normalized().z * 1.5, body.rotation.y, away.normalized().x * -1.5) if away.length() > 0.01 else Vector3(1.5, body.rotation.y, 0)
+	tw.tween_property(body, "rotation", target_rot, 1.2).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_callback(func():
+		if felled_trees.has(id):
+			props.set_tree_felled(id, true))
+	return logs
+
+
+## Axe: left click on a tree chops it; anywhere else it swings like a weapon.
+func _axe_input(event: InputEvent) -> bool:
+	if not (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT) or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+		return false
+	var id := tree_under_crosshair()
+	if id < 0:
+		return false
+	if melee.swing_time >= 0.0 and melee.swing_time < 0.6:
+		return true
+	if not use_stamina(STAMINA_CHOP):
+		return true
+	melee.play_swing(0.6)
+	chop_tree(id)
+	return true
+
+
+## E on a loose stone.
+func pick_pebble(id: int) -> bool:
+	if id < 0 or id >= props.pebbles.size() or taken_pebbles.has(id):
+		return false
+	if inventory.add("stone", 1) > 0:
+		hud.show_banner("No room in your bag for the stone")
+		return false
+	taken_pebbles[id] = day_night.day
+	props.set_pebble_taken(id, true)
+	hud.show_pickup(["+1 Stone"])
+	return true
+
+
+## E on a machine: loads what it takes from your pockets and takes what it made.
+## Returns [loaded, taken].
+func use_machine(key: String) -> Array:
+	var rec: Dictionary = building.pieces.get(key, {})
+	if rec.is_empty():
+		return [0, 0]
+	var m: Dictionary = Building.MACHINES[rec.type]
+	var load_n := mini(inventory.count_of(m.in), Building.MACHINE_IN_MAX - int(rec.input))
+	if load_n > 0:
+		inventory.remove(m.in, load_n)
+		rec.input += load_n
+	var take := int(rec.output)
+	if take > 0:
+		var over := inventory.add(m.out, take)
+		take -= over
+		rec.output = over
+	var lines: Array = []
+	if load_n > 0:
+		lines.append("Loaded %d %s" % [load_n, Items.display_name(m.in).to_lower()])
+	if take > 0:
+		lines.append("+%d %s" % [take, Items.display_name(m.out)])
+	if lines.is_empty():
+		hud.show_banner("Bring %s to feed it" % Items.display_name(m.in).to_lower() if int(rec.output) == 0 else "No room in your bag")
+	else:
+		hud.show_pickup(lines)
+	return [load_n, take]
+
+
+## Morning: felled trees grow back after a few days, loose stones turn up again.
+func _regrow(d: int) -> void:
+	for id in felled_trees.keys():
+		if d - int(felled_trees[id]) >= TREE_REGROW_DAYS:
+			felled_trees.erase(id)
+			props.set_tree_felled(id, false)
+	for id in taken_pebbles.keys():
+		if d - int(taken_pebbles[id]) >= PEBBLE_DAYS:
+			taken_pebbles.erase(id)
+			props.set_pebble_taken(id, false)
 
 
 ## Shovel: left click digs, right click fills. Pickaxe: left click breaks rocks or digs.
@@ -970,6 +1108,14 @@ func _prompt_for(id: String) -> String:
 		return horde_prompt()
 	if id.begins_with("site:"):
 		return building.site_prompt(int(id.trim_prefix("site:")), _cost_text, player.global_position)
+	if id.begins_with("pebble:"):
+		return "[E] Pick up stone"
+	if id.begins_with("machine:"):
+		var mk := id.trim_prefix("machine:")
+		var mrec: Dictionary = building.pieces.get(mk, {})
+		if mrec.is_empty():
+			return ""
+		return building.machine_prompt(mk, inventory.count_of(Building.MACHINES[mrec.type].in))
 	for prefix in ["gate:", "hatch:", "chest:", "bench:", "gen:", "fire:", "turret:", "well:", "switch:"]:
 		if id.begins_with(prefix):
 			return building.prompt(id)
@@ -1091,6 +1237,12 @@ func interact(id: String) -> void:
 		return
 	if id == "horde":
 		press_horde_button()
+		return
+	if id.begins_with("pebble:"):
+		pick_pebble(int(id.trim_prefix("pebble:")))
+		return
+	if id.begins_with("machine:"):
+		use_machine(id.trim_prefix("machine:"))
 		return
 	if id.begins_with("site:"):
 		build_site_step(int(id.trim_prefix("site:")))
@@ -1436,6 +1588,7 @@ func place_has_loot(place: Dictionary) -> bool:
 ## New day: clear out empty supply crates, refill a few searched spots and
 ## maybe drop a new supply crate.
 func _on_morning(d: int) -> void:
+	_regrow(d)
 	loot.remove_empty_supplies()
 	var n := loot.refill(d, REFILLS_PER_MORNING)
 	var rng := RandomNumberGenerator.new()
@@ -1603,6 +1756,9 @@ func collect_save_data() -> Dictionary:
 		"tiers": Building.TIER_NAMES.size(),
 		"cables": building.cables.duplicate(true),
 		"sites": building.sites_save_data(),
+		"nature": {"felled": felled_trees.keys().map(func(k): return [k, felled_trees[k]]),
+			"hits": tree_hits.keys().map(func(k): return [k, tree_hits[k]]),
+			"pebbles": taken_pebbles.keys().map(func(k): return [k, taken_pebbles[k]])},
 	}
 
 
@@ -1621,6 +1777,22 @@ func apply_save_data(data: Dictionary) -> void:
 		props.set_rock_broken(int(id), true)
 	for e in mining.get("hits", []):
 		rock_hits[int(e[0])] = int(e[1])
+	for id in felled_trees:
+		props.set_tree_felled(id, false)
+	for id in taken_pebbles:
+		props.set_pebble_taken(id, false)
+	felled_trees = {}
+	tree_hits = {}
+	taken_pebbles = {}
+	var nature: Dictionary = data.get("nature", {})
+	for e in nature.get("felled", []):
+		felled_trees[int(e[0])] = int(e[1])
+		props.set_tree_felled(int(e[0]), true)
+	for e in nature.get("hits", []):
+		tree_hits[int(e[0])] = int(e[1])
+	for e in nature.get("pebbles", []):
+		taken_pebbles[int(e[0])] = int(e[1])
+		props.set_pebble_taken(int(e[0]), true)
 	var w: Dictionary = data.get("world", {})
 	day_night.restore(int(w.get("day", 1)), float(w.get("hour", 9.0)))
 	# Upgrades first: chests must be big enough before their contents load.

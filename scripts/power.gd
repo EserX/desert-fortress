@@ -27,6 +27,10 @@ func power_wanted() -> bool:
 
 func _process(delta: float) -> void:
 	_flicker += delta
+	for key in building.keys_of(building.MACHINES.keys()):
+		var mrec: Dictionary = building.pieces[key]
+		if mrec.get("working", false) and mrec.has("rotor"):
+			mrec.rotor.rotate_object_local(Vector3.UP, delta * 14.0)
 	for key in building.keys_of(["fire_pit"]):
 		var rec: Dictionary = building.pieces[key]
 		if rec.flame.visible:
@@ -45,7 +49,7 @@ func _process(delta: float) -> void:
 func tick(dt: float) -> void:
 	var running: Array = []
 	var running_keys: Array = []
-	var want := power_wanted()
+	var want := power_wanted() or machines_have_work()
 	for key in building.keys_of(["well"]):
 		var w: Dictionary = building.pieces[key]
 		w.water = minf(w.water + dt / building.WELL_SECONDS, building.WELL_MAX)
@@ -73,7 +77,7 @@ func tick(dt: float) -> void:
 				if rec.flame.visible != lit:
 					rec.flame.visible = lit
 	var net: Dictionary = building.power_network(running_keys)
-	for key in building.keys_of(["floodlight", "electric_fence", "turret", "switch"]):
+	for key in building.keys_of(["floodlight", "electric_fence", "turret", "switch"] + building.MACHINES.keys()):
 		var rec: Dictionary = building.pieces[key]
 		var on := net.has(key)
 		if not on:
@@ -81,7 +85,10 @@ func tick(dt: float) -> void:
 				if (g as Vector3).distance_to(rec.node.global_position) <= building.PLUG_RANGE:
 					on = true
 					break
-		if rec.type in ["turret", "switch"]:
+		if building.MACHINES.has(rec.type):
+			building.set_powered(rec, on)
+			rec.working = building.run_machine(rec, dt)
+		elif rec.type in ["turret", "switch"]:
 			rec.powered = on and (rec.type != "switch" or rec.open)
 		else:
 			building.set_powered(rec, on)
@@ -90,6 +97,16 @@ func tick(dt: float) -> void:
 		if not building.pieces.has(k):
 			_hums[k].queue_free()
 			_hums.erase(k)
+
+
+## True if a machine has something to work on (generators start up for it by day).
+func machines_have_work() -> bool:
+	for key in building.keys_of(building.MACHINES.keys()):
+		var rec: Dictionary = building.pieces[key]
+		var m: Dictionary = building.MACHINES[rec.type]
+		if rec.input >= m.need and rec.output + m.make <= building.MACHINE_OUT_MAX:
+			return true
+	return false
 
 
 ## At night a gate left open closes by itself after AUTO_CLOSE seconds, once

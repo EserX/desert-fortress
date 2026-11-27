@@ -2,6 +2,29 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v1.11.0 (2026-11-27): Gathering and processing
+The owner asked for resource gathering and processing: trees and an axe, rocks to pick up, machines bought with cash and flown in by drone (a rock crusher for cement), and traps made from gathered resources.
+- **Trees:** seven groves of date palms and dry acacias round old water holes (62 to 195 m out) and about 30 lone trees, 110 or so in all, none inside even the biggest build zone. They have their own random stream, so older saves' rocks and containers keep their ids.
+- **Axe** (workbench: 3 scrap, 2 wood; shop $40). Left click on a tree chops it (8 stamina a blow, 3 to 9 blows by size; the prompt shows how many are left and about how many logs). The last blow topples it away from you and its **logs** (2 to 5) go in your bag; what doesn't fit lands in a bag beside you. Felled trees grow back after **3 mornings**. Swung at anything else, the axe is a weapon (34 damage, between the pipe and the machete). Half-chopped and felled trees are saved.
+- **Logs** (3 kg, stack 10): split by hand at the workbench into **2 wood**, or into **5** at a sawmill. Log stakes are made from them.
+- **Loose stones:** 150 small stones lie about the sand, most beside rocks and 24 within 40 m of the base. **E** picks one up (+1 stone). They turn up again after 2 mornings. Saved.
+- **Machines, by drone** (drone section of the shop): **Sawmill** $150 (1 log makes 5 wood every 6 s), **Rock crusher** $250 (3 stone make 1 cement bag every 15 s), **Nail press** $200 (1 scrap makes 8 nails every 8 s). Each arrives as a crate in your bag. Place it in build mode (end of the list), where it turns freely like the other objects.
+  - They **run on power**: put one within 4 m of a generator or run a cable to it. **E** loads everything it takes from your pockets (its hopper holds 30) and takes what it has made (it stops when 60 are waiting). The prompt says what is in, what is ready and why it isn't running ("no power", "waiting for stone", "full").
+  - Generators now also start up **by day** when a machine has work, and burn fuel for it. The saw blade, crusher wheel or flywheel spins while a machine works.
+  - Demolishing a machine with the hammer gives you back its crate. What is in a machine is saved.
+- **Log stakes** (trap, 3 logs + 2 nails, end of the build list): sharpened logs crossed over a rail. They slow a mutant on them to 45% and bite for 26 a second, wearing down 5 per bite. Mutant pathfinding counts them as a trap, like the others.
+- **Support colours (build mode, from Valheim):** an upstairs piece's preview is green when it is well held (60% or more), yellow from 35%, and orange close to the 20% limit. Red still means it can't be built.
+- **Merged with v1.10 from main:** a separate v1.10 run on main added mutant navigation (`scripts/nav.gd`) while this branch had its own flow field. Main's version is more complete (paths to the player, stepping onto foundations, work spread over frames), so this branch dropped its own and kept main's. Log stakes cost 9 in its trap costs.
+- Everything new is in the test box (it fills from every item), the machine crates included.
+- **Tests (32 new):**
+  - Trees and stones: trees in groves and none in the zone, stones near the base, the axe finding the tree in front of you and its prompt, blows counting down, a half-chopped tree saved, the last blow giving its logs, no second felling, felled trees loaded, regrowth after 3 days but not 2, the axe and log recipes, picking up a stone (once), picked stones saved and coming back.
+  - Machines: the three on the drone, an idle generator staying off by day, the sawmill prompt and loading, the generator starting up for it, 5 wood in 6 s, machine contents saved, taking the wood, a crusher without power waiting then grinding cement once cabled, demolishing giving the crate back.
+  - Log stakes biting, and the preview colours.
+  - New screenshot views `52_trees` and `53_machines`.
+
+**Try:** buy a sawmill and a rock crusher from the drone, put them beside your generator with a can of fuel, then chop a grove and pick up stones on the way back: logs and stone in, wood and cement out.
+**Next:** v2.0, the physics pass (explosions, throwables, knockback), or more processing (a furnace) if the owner prefers.
+
 ## v1.10.0 (2026-11-27): Mutant navigation
 Mutants no longer walk straight at you and claw at the first wall they meet. They find a way round.
 - **Paths round the base:** a 1 m grid covers the build zone and 16 m round it. Mutants inside it follow a shared **flow field** to you (or to the flag if you are out in the desert). Going round costs walking; a wall, closed gate, fence or sandbag wall in the way costs its **hit points** (tearing it down takes time). So:
@@ -97,7 +120,7 @@ Eight new pieces at the end of the build list (scroll the mouse wheel in build m
 - **Reaching down holes:** looking steeply down, the shovel and pickaxe reach further (about 4 m out, up to 6.4 m along the line of sight), so you can dig a shaft from its edge.
 - **Stamina for hard work:** a dig costs 7 (a fill 3.5), a pickaxe hit 9, building a piece 6, a hammer repair or upgrade 5. With too little: "Too tired: catch your breath".
 - That finishes **M7, digging and terrain**.
-- **Tests (14 new):** a well needing a deep shaft (the reason says 3.5 m and the pickaxe), the shaft depth, reaching its bottom looking down, the well standing at ground level, the footprint filled round the shaft, the filling prompt, a bottle every 75 s, taking it, the 6-bottle limit, the well staying put when you dig next to it, water saved, and stamina for digging. New screenshot view `45_well`.
+- **Tests (16 new):** a well needing a deep shaft (the reason says 3.5 m and the pickaxe), the shaft depth, reaching its bottom looking down, the well standing at ground level, the footprint filled round the shaft, the filling prompt, a bottle every 75 s, taking it, the 6-bottle limit, the well staying put when you dig next to it, water saved, and stamina for digging. New screenshot view `45_well`.
 
 **Try:** dig a shaft with the pickaxe next to your base, build a well over it, and stop hauling water bottles in from the wrecks.
 **Next:** M8, v1.5 structural stability: a support value for each piece counted from the ground, overhangs and tall towers that collapse, and debris.

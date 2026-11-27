@@ -30,6 +30,15 @@ var rocks: Array = []
 var containers: Array = []
 ## Separate random stream for loot crates so adding them didn't move the rest of the world.
 var crate_rng := RandomNumberGenerator.new()
+## Trees and loose stones (v1.11) have their own stream too, so older saves'
+## rock and container ids stay the same.
+var nature_rng := RandomNumberGenerator.new()
+## Trees an axe can fell: {"node", "hits", "logs", "kind"}; the index is the id.
+var trees: Array = []
+## Loose stones to pick up with E: {"pos", "area"}; the index is the id.
+var pebbles: Array = []
+var pebble_mm: MultiMesh
+var _pebble_xf: Array = []
 
 ## Physics layer used by interaction areas (not collided with, only ray-cast).
 const INTERACT_LAYER := 2
@@ -50,6 +59,9 @@ func populate(terrain_node: Terrain, seed_value: int) -> void:
 		_place_wreck()
 	for i in 9:
 		_place_ruin()
+	nature_rng.seed = seed_value * 17 + 11
+	_place_trees()
+	_place_pebbles(150)
 
 
 func _build_shared() -> void:
@@ -328,3 +340,135 @@ func _place_base_marker() -> void:
 		var cb := _body_at(Vector3(c.x, y + c.y, c.z), rng.randf_range(-0.3, 0.3))
 		_mesh(cb, crate, wood_mat, Vector3.ZERO, Vector3(0.8, 0.8, 0.8))
 		_box_collider(cb, Vector3(0.8, 0.8, 0.8))
+
+
+# --- Trees and loose stones (v1.11) -------------------------------------------
+
+## Groves of date palms and dry acacias round old water holes, and lone trees.
+func _place_trees() -> void:
+	var palm_trunk := CylinderMesh.new()
+	palm_trunk.top_radius = 0.14
+	palm_trunk.bottom_radius = 0.22
+	palm_trunk.height = 1.0
+	palm_trunk.radial_segments = 6
+	palm_trunk.rings = 1
+	var trunk_m := LowPoly.flat(palm_trunk)
+	var frond := BoxMesh.new()
+	frond.size = Vector3(0.5, 0.05, 2.4)
+	var canopy := SphereMesh.new()
+	canopy.radial_segments = 7
+	canopy.rings = 3
+	var canopy_m := LowPoly.flat(canopy)
+	var bark := LowPoly.material(Color(0.42, 0.31, 0.2))
+	var bark_dry := LowPoly.material(Color(0.5, 0.42, 0.32))
+	var leaf := LowPoly.material(Color(0.32, 0.47, 0.2))
+	var leaf_dry := LowPoly.material(Color(0.45, 0.48, 0.24))
+	var spots: Array = []
+	for g in 7:
+		var c := _nature_spot(62.0, 195.0)  # clear of the biggest build zone
+		for i in nature_rng.randi_range(7, 13):
+			var a := nature_rng.randf() * TAU
+			var r := nature_rng.randf_range(1.5, 13.0)
+			spots.append([Vector3(c.x + cos(a) * r, 0, c.z + sin(a) * r), "palm" if nature_rng.randf() < 0.65 else "acacia"])
+	for i in 30:
+		spots.append([_nature_spot(46.0, 205.0), "acacia" if nature_rng.randf() < 0.7 else "palm"])
+	for sp in spots:
+		var p: Vector3 = sp[0]
+		p.y = terrain.surface_height(p.x, p.z) - 0.15
+		var s := nature_rng.randf_range(0.8, 1.3)
+		var body := _body_at(p, nature_rng.randf() * TAU)
+		body.scale = Vector3.ONE * s
+		var h: float
+		if sp[1] == "palm":
+			h = nature_rng.randf_range(4.0, 6.0)
+			var lean := nature_rng.randf_range(-0.12, 0.12)
+			_mesh(body, trunk_m, bark, Vector3(0, h * 0.5, 0), Vector3(1, h, 1), Vector3(lean, 0, 0))
+			var top := Vector3(0, h * 0.5, 0) + Basis(Vector3.RIGHT, lean) * Vector3(0, h * 0.5, 0)
+			for f in 7:
+				var yaw := f * TAU / 7.0 + nature_rng.randf_range(-0.2, 0.2)
+				var fb := Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, 0.35)
+				var mi := _mesh(body, frond, leaf, top + fb * Vector3(0, 0, -1.1))
+				mi.basis = fb
+		else:
+			h = nature_rng.randf_range(2.6, 3.6)
+			_mesh(body, trunk_m, bark_dry, Vector3(0, h * 0.5, 0), Vector3(1.2, h, 1.2))
+			for b in 3:
+				var yaw := b * TAU / 3.0 + nature_rng.randf_range(-0.4, 0.4)
+				var bb := Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, 0.7)
+				var mi := _mesh(body, trunk_m, bark_dry, Vector3(0, h * 0.8, 0) + bb * Vector3(0, 0.6, 0), Vector3(0.6, 1.3, 0.6))
+				mi.basis = bb.scaled(Vector3(0.6, 1.3, 0.6))
+			_mesh(body, canopy_m, leaf_dry, Vector3(0, h + 0.5, 0), Vector3(4.0, 0.9, 3.6))
+		var col := CollisionShape3D.new()
+		var shape := CylinderShape3D.new()
+		shape.radius = 0.28
+		shape.height = h
+		col.shape = shape
+		col.position.y = h * 0.5
+		body.add_child(col)
+		body.set_meta("tree_id", trees.size())
+		trees.append({"node": body, "hits": clampi(int(round(h * s * 1.2)), 3, 9), "logs": clampi(int(round(h * s * 0.6)), 2, 5), "kind": sp[1]})
+
+
+func _nature_spot(min_r: float, max_r: float) -> Vector3:
+	var ang := nature_rng.randf() * TAU
+	var r := sqrt(nature_rng.randf_range(min_r * min_r, max_r * max_r))
+	return Vector3(cos(ang) * r, 0, sin(ang) * r)
+
+
+## Hides a felled tree (or brings it back).
+func set_tree_felled(id: int, felled: bool) -> void:
+	if id < 0 or id >= trees.size():
+		return
+	var body: StaticBody3D = trees[id].node
+	body.visible = not felled
+	body.collision_layer = 0 if felled else 1
+	body.rotation.x = 0.0
+	body.rotation.z = 0.0
+
+
+## Loose stones on the sand, by rocks and some near the base: E picks one up.
+func _place_pebbles(count: int) -> void:
+	var sphere := SphereMesh.new()
+	sphere.radial_segments = 5
+	sphere.rings = 3
+	pebble_mm = MultiMesh.new()
+	pebble_mm.transform_format = MultiMesh.TRANSFORM_3D
+	pebble_mm.mesh = LowPoly.flat(sphere)
+	pebble_mm.instance_count = count
+	for i in count:
+		var p: Vector3
+		if i < 24:
+			p = _nature_spot(14.0, 40.0)  # a few within easy reach of the base
+		else:
+			var rock: Node3D = rocks[nature_rng.randi() % rocks.size()].node
+			var a := nature_rng.randf() * TAU
+			p = rock.position + Vector3(cos(a), 0, sin(a)) * nature_rng.randf_range(1.5, 4.0)
+		p.y = terrain.surface_height(p.x, p.z) + 0.06
+		var s := nature_rng.randf_range(0.22, 0.34)
+		var xf := Transform3D(Basis(Vector3.UP, nature_rng.randf() * TAU).scaled(Vector3(s * 1.3, s * 0.7, s)), p)
+		pebble_mm.set_instance_transform(i, xf)
+		_pebble_xf.append(xf)
+		var area := Area3D.new()
+		area.collision_layer = 1 << (INTERACT_LAYER - 1)
+		area.collision_mask = 0
+		area.monitoring = false
+		area.monitorable = false
+		area.position = p
+		area.set_meta("interact_id", "pebble:%d" % i)
+		_box_collider(area, Vector3(0.6, 0.5, 0.6))
+		add_child(area)
+		pebbles.append({"pos": p, "area": area})
+	var mmi := MultiMeshInstance3D.new()
+	mmi.name = "Pebbles"
+	mmi.multimesh = pebble_mm
+	mmi.material_override = rock_mats[1]
+	add_child(mmi)
+
+
+## Hides a picked-up stone (or puts it back).
+func set_pebble_taken(id: int, taken: bool) -> void:
+	if id < 0 or id >= pebbles.size():
+		return
+	var xf: Transform3D = _pebble_xf[id]
+	pebble_mm.set_instance_transform(id, Transform3D(Basis().scaled(Vector3.ZERO), xf.origin) if taken else xf)
+	pebbles[id].area.collision_layer = 0 if taken else 1 << (INTERACT_LAYER - 1)

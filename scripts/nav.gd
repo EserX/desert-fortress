@@ -33,7 +33,7 @@ const LOOKAHEAD := 4        # cells ahead a mutant aims along a straight stretch
 ## Cost per cell of things standing in it (level 0 objects); anything else that
 ## blocks costs OBJ_DEFAULT. Landmines and ladders cost nothing (they don't know).
 const OBJ_COST := {
-	"spikes": 14.0, "barbed_wire": 7.0, "spike_strip": 5.0, "spiked_pit": 16.0, "fire_pit": 4.0,
+	"spikes": 14.0, "barbed_wire": 7.0, "spike_strip": 5.0, "log_stakes": 9.0, "spiked_pit": 16.0, "fire_pit": 4.0,
 	"landmine": 0.0, "ladder": 0.0, "landing_pad": 0.0, "switch": 0.5,
 }
 const OBJ_DEFAULT := 4.0

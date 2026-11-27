@@ -23,6 +23,9 @@ const FIRE_DPS := 12.0
 const PIT_DAMAGE := 30.0       # spiked pit, per bite
 const PIT_EVERY := 1.0
 const PIT_WEAR := 8.0
+const STAKE_DAMAGE := 26.0     # log stakes, per bite
+const STAKE_EVERY := 1.0
+const STAKE_WEAR := 5.0
 
 signal player_hurt(damage: float, from: Vector3, cause: String)
 signal exploded(pos: Vector3)
@@ -74,7 +77,7 @@ func _physics_process(delta: float) -> void:
 ## One check of every trap against every mutant.
 func tick(dt: float) -> void:
 	var traps: Array = []
-	for key in building.keys_of(["spike_strip", "barbed_wire", "landmine", "electric_fence", "fire_pit", "spiked_pit"]):
+	for key in building.keys_of(["spike_strip", "barbed_wire", "landmine", "electric_fence", "fire_pit", "spiked_pit", "log_stakes"]):
 		var rec: Dictionary = building.pieces[key]
 		if building.PIECES[rec.type].get("trap", false) or rec.get("powered", false) or rec.get("burn", 0.0) > 0.0:
 			traps.append(key)
@@ -102,6 +105,13 @@ func tick(dt: float) -> void:
 						_bites[bk] = PIT_EVERY
 						m.hurt(PIT_DAMAGE)
 						building.damage(key, PIT_WEAR)
+				"log_stakes":
+					m.slow(0.45)
+					var bk := "%s|%d" % [key, m.get_instance_id()]
+					if not _bites.has(bk):
+						_bites[bk] = STAKE_EVERY
+						m.hurt(STAKE_DAMAGE)
+						building.damage(key, STAKE_WEAR)
 				"barbed_wire":
 					m.slow(WIRE_SLOW)
 					m.hurt(WIRE_DPS * dt)

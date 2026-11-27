@@ -9,6 +9,7 @@ extends Node3D
 
 const LowPoly = preload("res://scripts/lowpoly.gd")
 const Inventory = preload("res://scripts/inventory.gd")
+const Prefabs = preload("res://scripts/prefabs.gd")
 
 const CELL := 2.0
 const WALL_H := 2.4
@@ -131,6 +132,12 @@ const SLIT_H := 0.16
 const SLIT_W := 1.0
 const PILLAR_T := 0.3
 const HATCH := 1.0    # trapdoor opening, on the north side of its square
+## Objects that turn freely in TURN_STEP steps (Z / X in build mode), not just
+## the four grid ways: slot "turn" holds the extra steps (0..5) past "dir".
+const FREE_TURN := ["chest", "workbench", "spikes", "spike_strip", "barbed_wire", "landmine", "fire_pit", "generator", "floodlight", "turret", "switch"]
+const TURN_STEP := PI / 12.0
+## Blueprints of ready-made buildings (see prefabs.gd) sit on interact layer 2.
+const SITE_LAYER := 2
 
 var terrain  # Terrain
 ## type -> {key: true}, kept up to date by place() and remove(), so systems
@@ -150,6 +157,10 @@ var _bulk := false  # loading: work out support once at the end
 var cables: Array = []
 var _cable_root: Node3D
 var _mats := {}
+## Blueprints of ready-made buildings still going up: id -> {"prefab", "y"
+## (top of its foundations), "todo": [{"type", "slot"}] in build order, "node"}.
+var sites := {}
+var _site_next := 1
 
 
 func _ready() -> void:
@@ -183,6 +194,11 @@ func _ready() -> void:
 	_mats.lamp.emission_energy_multiplier = 0.0
 	_mats.lamp_on = _mats.lamp.duplicate()
 	_mats.lamp_on.emission_energy_multiplier = 4.0
+	_mats.blueprint = StandardMaterial3D.new()
+	_mats.blueprint.albedo_color = Color(0.35, 0.7, 1.0, 0.28)
+	_mats.blueprint.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_mats.blueprint.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_mats.blueprint.cull_mode = BaseMaterial3D.CULL_DISABLED
 	_mats.flame = StandardMaterial3D.new()
 	_mats.flame.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_mats.flame.albedo_color = Color(1.0, 0.6, 0.15)
@@ -261,7 +277,7 @@ static func piece_transform(type: String, slot: Dictionary, y: float) -> Transfo
 	if slot.kind == "edge":
 		yaw = 0.0 if slot.dir == 0 else PI / 2
 	elif PIECES[type].get("long", false) or slot.kind == "obj" or type in TRIS or type == "trapdoor":
-		yaw = -slot.dir * PI / 2
+		yaw = -slot.dir * PI / 2 - int(slot.get("turn", 0)) * TURN_STEP
 	return Transform3D(Basis(Vector3.UP, yaw), Vector3(c.x, y, c.z))
 
 
@@ -1263,7 +1279,14 @@ func remove(key: String, spill := true) -> String:
 func space_free(type: String, slot: Dictionary, y: float) -> bool:
 	var b := piece_bounds(type)
 	var shape := BoxShape3D.new()
-	shape.size = b[0] - Vector3(0.12, 0.12, 0.12)
+	# A little smaller than the piece, so neighbours touching it don't count. Pieces a
+	# whole square long lose a wall's thickness at each end, for walls meeting at corners.
+	var shrink := Vector3(0.12, 0.12, 0.12)
+	if b[0].x >= CELL - 0.01:
+		shrink.x = WALL_T * 2.0 + 0.1
+	if b[0].z >= CELL - 0.01:
+		shrink.z = WALL_T * 2.0 + 0.1
+	shape.size = (b[0] - shrink).max(Vector3(0.02, 0.02, 0.02))  # thin roofs stay positive
 	var q := PhysicsShapeQueryParameters3D.new()
 	q.shape = shape
 	q.transform = piece_transform(type, slot, y) * Transform3D(Basis.IDENTITY, b[1])
@@ -1827,6 +1850,8 @@ func _update_cracks(rec: Dictionary) -> void:
 func piece_data(key: String) -> Dictionary:
 	var p: Dictionary = pieces[key]
 	var d := {"type": p.type, "kind": p.slot.kind, "cx": p.slot.cx, "cz": p.slot.cz, "dir": p.slot.dir, "level": p.slot.level, "y": p.y, "open": p.open, "tier": p.tier, "hp": p.hp}
+	if int(p.slot.get("turn", 0)) != 0:
+		d.turn = int(p.slot.turn)
 	if p.has("storage"):
 		d.items = p.storage.save_data()
 	for k in ["fuel", "burn", "ammo", "water", "locked"]:
@@ -1842,6 +1867,8 @@ func restore_piece(p: Dictionary, slot := {}, y := NAN, old_tiers := false) -> S
 		return ""
 	if slot.is_empty():
 		slot = {"kind": str(p.kind), "cx": int(p.cx), "cz": int(p.cz), "dir": int(p.dir), "level": int(p.get("level", 0))}
+		if int(p.get("turn", 0)) != 0 and p.type in FREE_TURN:
+			slot.turn = posmod(int(p.turn), 6)
 	if is_nan(y):
 		y = float(p.y)
 	var tier := int(p.get("tier", -1))
@@ -1902,3 +1929,188 @@ func load_data(data: Array, old_tiers := false) -> void:
 		restore_piece(p, {}, NAN, old_tiers)
 	_bulk = false
 	_refresh_support()
+
+
+# --- Blueprints of ready-made buildings ----------------------------------------
+
+## Lays out a blueprint: `todo` is prefabs.placed() (pieces in build order),
+## y the height its foundations' tops come to. Returns its id.
+func add_site(prefab: String, todo: Array, y: float) -> int:
+	var id := _site_next
+	_site_next += 1
+	var list: Array = []
+	for e in todo:
+		list.append({"type": str(e.type), "slot": e.slot.duplicate()})
+	sites[id] = {"prefab": prefab, "y": y, "todo": list, "node": null}
+	_rebuild_site(id)
+	return id
+
+
+## Every slot key that a blueprint still has a piece planned for.
+func site_keys() -> Dictionary:
+	var out := {}
+	for id in sites:
+		for e in sites[id].todo:
+			for k in slot_keys(e.type, e.slot):
+				out[k] = id
+	return out
+
+
+func remove_site(id: int) -> void:
+	var s: Dictionary = sites.get(id, {})
+	if s.is_empty():
+		return
+	if s.node:
+		s.node.queue_free()
+	sites.erase(id)
+
+
+## Where a blueprint piece would stand.
+func site_piece_y(site: Dictionary, e: Dictionary) -> float:
+	if e.type in FOUNDATIONS:
+		return site.y
+	var ev := evaluate(e.type, e.slot)
+	return ev.y if ev.ok else site.y + int(e.slot.get("level", 0)) * WALL_H
+
+
+## The next piece of a blueprint that can go up now: {"i", "type", "slot", "y"},
+## or {"reason"} when none can. Pieces someone already built are dropped.
+func site_next(id: int, person := Vector3.INF) -> Dictionary:
+	var s: Dictionary = sites.get(id, {})
+	if s.is_empty():
+		return {"reason": "Nothing to build"}
+	var todo: Array = s.todo
+	for i in range(todo.size() - 1, -1, -1):
+		var have := piece_at(slot_key(todo[i].slot))
+		if not have.is_empty() and have.type == todo[i].type:
+			todo.remove_at(i)
+	var first_reason := ""
+	for i in todo.size():
+		var e: Dictionary = todo[i]
+		var ev := evaluate(e.type, e.slot)
+		var y: float = s.y if e.type in FOUNDATIONS else ev.y
+		var why: String = ev.reason
+		if ev.ok and not space_free(e.type, e.slot, y):
+			why = "Something is in the way"
+		elif ev.ok and person != Vector3.INF and blocks_person(e.type, e.slot, y, person):
+			why = "Step out of the way of the %s" % PIECES[e.type].name.to_lower()
+		elif ev.ok:
+			return {"i": i, "type": e.type, "slot": e.slot, "y": y}
+		if first_reason == "":
+			first_reason = why
+	return {"reason": first_reason if first_reason != "" else "Nothing to build"}
+
+
+## Builds one piece of a blueprint (found with site_next) and takes it off the
+## list; the blueprint goes when its last piece is up. Returns the piece key.
+func build_site_piece(id: int, nxt: Dictionary) -> String:
+	var s: Dictionary = sites.get(id, {})
+	if s.is_empty() or not nxt.has("i"):
+		return ""
+	var key := place(nxt.type, nxt.slot, nxt.y)
+	level_under(key)
+	s.todo.remove_at(int(nxt.i))
+	if s.todo.is_empty():
+		remove_site(id)
+	else:
+		_rebuild_site(id)
+	return key
+
+
+## "[E] Build Cabin: next wooden wall (3 wood, 3 nails)   12 of 30 pieces left"
+func site_prompt(id: int, cost_text: Callable, person := Vector3.INF) -> String:
+	var s: Dictionary = sites.get(id, {})
+	if s.is_empty():
+		return ""
+	var nxt := site_next(id, person)
+	var name: String = Prefabs.display_name(s.prefab)
+	if not nxt.has("i"):
+		return "Blueprint: %s   (%s)" % [name, nxt.reason]
+	return "[E] Build %s: next %s (%s)   %d piece%s left, hold E to keep going" % [name, PIECES[nxt.type].name.to_lower(),
+		cost_text.call(PIECES[nxt.type].cost), s.todo.size(), "" if s.todo.size() == 1 else "s"]
+
+
+## What a blueprint still needs, summed up.
+func site_cost(id: int) -> Dictionary:
+	var out := {}
+	for e in sites.get(id, {}).get("todo", []):
+		var c: Dictionary = PIECES[e.type].cost
+		for item in c:
+			out[item] = int(out.get(item, 0)) + int(c[item])
+	return out
+
+
+## Draws a blueprint: see-through blue pieces, each an interact area ("site:id").
+func _rebuild_site(id: int) -> void:
+	var s: Dictionary = sites[id]
+	if s.node:
+		s.node.queue_free()
+	var root := Node3D.new()
+	root.name = "Site%d" % id
+	add_child(root)
+	s.node = root
+	for e in s.todo:
+		var area := Area3D.new()
+		area.collision_layer = SITE_LAYER
+		area.collision_mask = 0
+		area.monitoring = false
+		area.set_meta("interact_id", "site:%d" % id)
+		area.transform = piece_transform(e.type, e.slot, site_piece_y(s, e))
+		root.add_child(area)
+		add_ghost_meshes(area, e.type, Transform3D.IDENTITY, _mats.blueprint)
+		var b := piece_bounds(e.type)
+		var col := CollisionShape3D.new()
+		col.shape = BoxShape3D.new()
+		col.shape.size = b[0]
+		col.position = b[1]
+		area.add_child(col)
+
+
+## Adds see-through meshes of a piece under `parent`, at `xform` (build-mode
+## ghosts and blueprints).
+static func add_ghost_meshes(parent: Node3D, type: String, xform: Transform3D, mat: Material = null) -> void:
+	if type in TRIS:
+		var tri := MeshInstance3D.new()
+		tri.mesh = prism_mesh(type)
+		tri.transform = xform
+		tri.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		tri.material_override = mat
+		parent.add_child(tri)
+	for b in piece_boxes(type):
+		var mi := MeshInstance3D.new()
+		var mesh := BoxMesh.new()
+		mesh.size = b[0] + Vector3(0.02, 0.02, 0.02)
+		mi.mesh = mesh
+		var t := Transform3D(Basis.IDENTITY, b[1])
+		if b.size() > 3:
+			t.basis = Basis(Vector3.RIGHT, b[3])
+		if b.size() > 4:
+			t.origin += Basis(Vector3.RIGHT, b[3]) * b[4]
+		mi.transform = xform * t
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.material_override = mat
+		parent.add_child(mi)
+
+
+func sites_save_data() -> Array:
+	var out: Array = []
+	for id in sites:
+		var s: Dictionary = sites[id]
+		var todo: Array = []
+		for e in s.todo:
+			todo.append({"type": e.type, "kind": e.slot.kind, "cx": e.slot.cx, "cz": e.slot.cz, "dir": e.slot.dir, "level": e.slot.get("level", 0)})
+		out.append({"prefab": s.prefab, "y": s.y, "todo": todo})
+	return out
+
+
+func sites_load_data(data: Array) -> void:
+	for id in sites.keys():
+		remove_site(id)
+	_site_next = 1
+	for d in data:
+		var todo: Array = []
+		for e in d.get("todo", []):
+			if PIECES.has(str(e.get("type", ""))):
+				todo.append({"type": str(e.type), "slot": {"kind": str(e.kind), "cx": int(e.cx), "cz": int(e.cz), "dir": int(e.dir), "level": int(e.get("level", 0))}})
+		if not todo.is_empty():
+			add_site(str(d.get("prefab", "")), todo, float(d.get("y", 0.0)))

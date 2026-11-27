@@ -55,6 +55,9 @@ var shots := [
 	{"name": "45_well", "pos": Vector3(-11, 0, -1.6), "yaw": 0.0, "pitch": -0.3, "hour": 10.0, "well": true},
 	{"name": "46_support", "pos": Vector3(15, 0, -1.5), "yaw": 0.0, "pitch": 0.12, "hour": 16.0, "support": true},
 	{"name": "47_pieces", "pos": Vector3(-7, 0, 25), "yaw": 0.0, "pitch": -0.08, "hour": 15.0, "pieces2": true},
+	{"name": "48_prefabs", "pos": Vector3(6, 0, 16), "yaw": 0.25, "pitch": -0.1, "hour": 16.5, "prefabs": true},
+	{"name": "49_blueprint", "pos": Vector3(10, 0, 15), "yaw": 0.0, "pitch": -0.2, "hour": 11.0, "prefab_ghost": true},
+	{"name": "50_horde", "pos": Vector3(-1.4, 0, 8.9), "yaw": 1.5, "pitch": -0.35, "hour": 12.0, "horde": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -145,6 +148,12 @@ func _process(_d: float) -> bool:
 			_layers_sample()
 		if s.get("pieces2", false):
 			_pieces2_sample()
+		if s.get("prefabs", false):
+			_prefabs_sample()
+		if s.get("horde", false):
+			main.building.load_data([])
+			main.building.sites_load_data([])
+			main.mutants.clear()
 		if s.get("support", false):
 			var b = main.building
 			main.terrain.load_data({})
@@ -240,6 +249,15 @@ func _process(_d: float) -> bool:
 			main.hud._summary_time = 5.0
 		if s.get("build", false):
 			_build_sample()
+		elif s.get("prefab_ghost", false):
+			_prefabs_sample(true)
+			var bm = main.build_mode
+			if not bm.active:
+				bm.toggle()
+			if not bm.prefab_mode:
+				bm.toggle_prefabs()
+			bm.select(1)  # cabin
+			bm.dir = 1
 		elif s.get("zone", false):
 			main.build_mode.active = true
 			main.build_mode.select(10)
@@ -613,3 +631,29 @@ func _pieces2_sample() -> void:
 		put.call("pillar", {"kind": "post", "cx": o.x, "cz": o.y, "dir": 0})
 	put.call("floor", {"kind": "cell", "cx": -8, "cz": 9, "dir": 0, "level": 1})
 	put.call("tri_roof", {"kind": "cell", "cx": -9, "cz": 9, "dir": 1, "level": 1})
+
+
+## v1.9: a cabin, a big cabin and a watchtower built from blueprints, and a
+## shelter blueprint half built. With half_only, just a half-built blueprint.
+func _prefabs_sample(half_only := false) -> void:
+	var b = main.building
+	var bm = main.build_mode
+	main.terrain.load_data({})
+	main.mutants.clear()
+	b.load_data([])
+	b.sites_load_data([])
+	var spots: Array = [["cabin", Vector2i(5, -3), 0, 9]] if half_only else [["cabin", Vector2i(-2, -3), 0, 99], ["long_cabin", Vector2i(3, -6), 1, 99], ["watchtower", Vector2i(-5, 0), 0, 99], ["shelter", Vector2i(2, 0), 0, 7], ["gatehouse", Vector2i(-4, -8), 0, 99]]
+	for sp in spots:
+		var ev: Dictionary = bm.evaluate_prefab(sp[0], sp[1].x, sp[1].y, sp[2])
+		if not ev.ok:
+			print("prefab ", sp[0], " does not fit: ", ev.reason)
+			continue
+		var id: int = b.add_site(sp[0], ev.plan, ev.y)
+		for i in sp[3]:
+			if not b.sites.has(id):
+				break
+			var nxt: Dictionary = b.site_next(id)
+			if not nxt.has("i"):
+				print("prefab ", sp[0], " stuck: ", nxt.reason)
+				break
+			b.build_site_piece(id, nxt)

@@ -33,6 +33,7 @@ const Drone = preload("res://scripts/drone.gd")
 const Hints = preload("res://scripts/hints.gd")
 const LowPoly = preload("res://scripts/lowpoly.gd")
 const Caches = preload("res://scripts/caches.gd")
+const HordeStand = preload("res://scripts/horde_stand.gd")
 
 ## Testing aid (temporary): a green box by the spawn point that holds a full
 ## stack of every item and tops your cash up to $2000 each time you open it.
@@ -93,6 +94,11 @@ var shop_ui: ShopUI
 var drone: Drone
 var hints: Hints
 var test_box: StaticBody3D
+## The horde button stand by the spawn point.
+var horde_stand: StaticBody3D
+## Holding E at a blueprint keeps building it, one piece every SITE_STEP s.
+const SITE_STEP := 0.3
+var _site_hold := 0.0
 var test_storage: Inventory
 ## Wrecks and ruins: {"key": "w3", "kind": "wreck", "pos": Vector3}.
 var places: Array = []
@@ -162,6 +168,13 @@ func _ready() -> void:
 		_make_test_box()
 		terrain.add_no_dig(test_box.position, 1.3)
 	terrain.add_no_dig(shop.position, 1.3)
+	if not menu_mode:
+		horde_stand = HordeStand.new()
+		horde_stand.name = "HordeStand"
+		horde_stand.position = Vector3(-3.6, terrain.surface_height(-3.6, 8.6), 8.6)
+		horde_stand.rotation.y = 1.46  # button and sign face the spawn point
+		add_child(horde_stand)
+		terrain.add_no_dig(horde_stand.position, 1.0)
 
 	drone = Drone.new()
 	drone.name = "Drone"
@@ -253,6 +266,8 @@ func _ready() -> void:
 	waves.cash_mult = Game.diff("cash")
 	add_child(waves)
 	power.waves = waves
+	if horde_stand:
+		horde_stand.wave_active = func() -> bool: return waves.active
 	day_night.dusk_started.connect(waves.on_dusk)
 	day_night.night_started.connect(func(_d): waves.start_wave())
 	day_night.day_started.connect(waves.on_dawn)
@@ -370,7 +385,9 @@ func _ready() -> void:
 	_connect_hints()
 	survival.died.connect(waves.note_death)
 	waves.wave_started.connect(func(n, size):
-		if shop.upgrades.radio > 0:
+		if waves.called:
+			hud.show_banner("The horde is coming: %s. Here they come!" % Waves.mix_text(waves.queue))
+		elif shop.upgrades.radio > 0:
 			hud.show_banner("Wave %d is coming: %s. Defend the base!" % [n, Waves.mix_text(waves.queue)])
 		else:
 			hud.show_banner("Wave %d: %d mutants are coming. Defend the base!" % [n, size]))
@@ -471,6 +488,7 @@ func _process(delta: float) -> void:
 			elif text == "" and holding("cable"):
 				text = cable_prompt(piece_under_crosshair())
 		hud.set_prompt(text)
+		_hold_site(delta)
 		_update_dig_marker()
 		for i in Inventory.HOTBAR:
 			if Input.is_action_just_pressed("hotbar_%d" % (i + 1)) and not inventory_ui.is_open():
@@ -503,6 +521,20 @@ func _process(delta: float) -> void:
 		var target := Vector3(0, terrain.BASE_HEIGHT + 3.0, 0)
 		_orbit_camera.position = target + Vector3(cos(_orbit_angle) * 48.0, 16.0, sin(_orbit_angle) * 48.0)
 		_orbit_camera.look_at(target)
+
+
+## Holding E at a blueprint keeps building it.
+func _hold_site(delta: float) -> void:
+	if not Input.is_action_pressed("interact"):
+		_site_hold = 0.0
+		return
+	_site_hold -= delta
+	if _site_hold > 0.0:
+		return
+	_site_hold = SITE_STEP
+	var target := player.interact_target()
+	if target.begins_with("site:") and not inventory_ui.is_open():
+		build_site_step(int(target.trim_prefix("site:")))
 
 
 func _setup_orbit_camera() -> void:
@@ -922,16 +954,82 @@ func _prompt_for(id: String) -> String:
 		return "[E] Use the shop terminal   ($%d)" % shop.cash
 	if id == "testbox":
 		return "[E] Open the TEST box (every item, cash to $%d)" % TEST_CASH
+	if id == "horde":
+		return horde_prompt()
+	if id.begins_with("site:"):
+		return building.site_prompt(int(id.trim_prefix("site:")), _cost_text, player.global_position)
 	for prefix in ["gate:", "hatch:", "chest:", "bench:", "gen:", "fire:", "turret:", "well:", "switch:"]:
 		if id.begins_with(prefix):
 			return building.prompt(id)
 	return loot.prompt(id)
 
 
+## "[E] Press the red button: call the horde (8 mutants)"
+func horde_prompt() -> String:
+	if waves.active:
+		return "Horde button   (a wave is already out: %d left)" % waves.remaining()
+	var n := maxi(waves.wave, 1)
+	var rng := RandomNumberGenerator.new()
+	return "[E] Press the red button: call the horde now (about %d mutants, like night %d)" % [Waves.wave_mix(n, rng, waves.size_mult).size(), n]
+
+
+## E at the horde stand: a wave comes for you straight away.
+func press_horde_button() -> bool:
+	horde_stand.press()
+	if not waves.call_horde(horde_stand.global_position):
+		hud.show_banner("A wave is already out. Finish it first.")
+		return false
+	return true
+
+
+## Builds the next piece of a blueprint, paid from your pockets and the chests
+## in reach. Returns the new piece's key, or "".
+func build_site_step(id: int) -> String:
+	var nxt: Dictionary = building.site_next(id, player.global_position)
+	if not nxt.has("i"):
+		hud.show_banner(str(nxt.get("reason", "Nothing to build")))
+		return ""
+	var cost: Dictionary = Building.PIECES[nxt.type].cost
+	if not has_near(cost):
+		hud.show_banner("Not enough for the next %s: %s" % [Building.PIECES[nxt.type].name.to_lower(), _cost_text(cost)])
+		return ""
+	if not use_stamina(STAMINA_BUILD):
+		return ""
+	pay_near(cost)
+	var key := building.build_site_piece(id, nxt)
+	if not building.sites.has(id):
+		hud.show_pickup(["Finished building!"])
+	return key
+
+
 ## Mouse and R while building. Returns true if the event was used.
 func _build_input(event: InputEvent) -> bool:
 	if event.is_action_pressed("rotate"):
 		build_mode.rotate_piece()
+		return true
+	if event.is_action_pressed("turn_left") or event.is_action_pressed("turn_right"):
+		build_mode.fine_turn(-1 if event.is_action_pressed("turn_left") else 1)
+		return true
+	if event.is_action_pressed("build_menu"):
+		build_mode.toggle_prefabs()
+		hud.show_pickup(["Ready-made buildings" if build_mode.prefab_mode else "Single pieces"])
+		return true
+	if build_mode.prefab_mode and event is InputEventMouseButton and event.pressed and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		if event.button_index == MOUSE_BUTTON_LEFT:
+			if build_mode.place_prefab() > 0:
+				hud.show_pickup(["Blueprint laid: " + build_mode.Prefabs.display_name(build_mode.current_prefab()), "Press E at it to build"])
+			elif build_mode.reason != "":
+				hud.show_banner(build_mode.reason)
+			return true
+		if event.button_index == MOUSE_BUTTON_RIGHT:
+			var target := player.interact_target()
+			if target.begins_with("site:"):
+				building.remove_site(int(target.trim_prefix("site:")))
+				hud.show_pickup(["Blueprint scrapped"])
+			return true
+	if build_mode.prefab_mode and event.is_action_pressed("move_piece"):
+		return true
+	if build_mode.prefab_mode and event is InputEventMouseButton and event.button_index in [MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT]:
 		return true
 	if event.is_action_pressed("move_piece"):
 		if not build_mode.carrying.is_empty():
@@ -978,6 +1076,13 @@ func interact(id: String) -> void:
 		return
 	if id == "testbox":
 		open_test_box()
+		return
+	if id == "horde":
+		press_horde_button()
+		return
+	if id.begins_with("site:"):
+		build_site_step(int(id.trim_prefix("site:")))
+		_site_hold = SITE_STEP + 0.15
 		return
 	if id.begins_with("gate:") or id.begins_with("hatch:"):
 		var gk := id.substr(id.find(":") + 1)
@@ -1485,6 +1590,7 @@ func collect_save_data() -> Dictionary:
 		"mining": {"broken": broken_rocks.keys(), "hits": rock_hits.keys().map(func(k): return [k, rock_hits[k]])},
 		"tiers": Building.TIER_NAMES.size(),
 		"cables": building.cables.duplicate(true),
+		"sites": building.sites_save_data(),
 	}
 
 
@@ -1521,6 +1627,7 @@ func apply_save_data(data: Dictionary) -> void:
 		building._rebuild_cables()
 	else:
 		building.auto_wire(power.POWER_RANGE)  # older saves: power reached 18 m without cables
+	building.sites_load_data(data.get("sites", []))
 	waves.load_data(data.get("waves", {"wave": maxi(day_night.day - 1, 0)}))
 	guns.load_data(data.get("guns", {}))
 	# Older saves: a little starting cash plus pay for the nights already survived.
@@ -1532,8 +1639,8 @@ func apply_save_data(data: Dictionary) -> void:
 			if Building.PIECES[t].get("blueprint", false):
 				shop.unlocked[t] = true
 	drone.load_data(data.get("drone", {}))
-	if waves.active and not day_night.is_night():
-		waves.active = false  # never carry a wave into the day
+	if waves.active and not day_night.is_night() and not waves.called:
+		waves.active = false  # never carry a night wave into the day
 	if data.has("mutants"):
 		mutants.load_data(data.mutants)  # older saves keep the freshly spawned walkers
 	discovered = {}

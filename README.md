@@ -38,6 +38,10 @@ If `git pull` complains about untracked `.uid` files, they are safe to delete.
 
 **Faster building.** In build mode, hold left click on the first square (or edge) and let go on the last to build a whole **line** of up to 12 walls, foundations, floors or pillars, each one paid as it goes. With the hammer, **R** repairs everything damaged within 8 m and **G** upgrades every piece of the same tier as the one you look at within 8 m; both pay from your pockets and any chest within reach. In build mode, **G** picks up the piece you look at (a chest keeps its contents, a turret its ammo, damage stays) and left click puts it down elsewhere for free; G again (or leaving build mode) puts it back. Foundations and pieces that hold something up can't be moved.
 
+**Ready-made buildings and turning.** In build mode, **Z / X** turn the piece (chests, turrets, traps and other objects in 15° steps, so they don't have to sit square). **T** switches to ready-made buildings: shelter, cabin, big cabin, watchtower and gatehouse. Left click lays a free blue blueprint of the whole building; then walk up to it and press **E** to build the next piece (hold E to keep going), paid from your pockets and chests in reach. Right click on a blueprint in build mode scraps it. Blueprints are saved, so you can finish one later.
+
+**The horde button.** The yellow post with the red button by the spawn point calls a horde of mutants right away, day or night. It pays the kill bounty.
+
 **More pieces.** Half walls (1.2 m) and low walls (0.7 m) to shoot over, a gun slit wall with a slot at eye height, **pillars** that stand on the corners of the grid and hold up floors in the open, a **floor with a trapdoor** (E opens the hatch; put a ladder under it), **triangle foundations and roofs** for rounder towers, and a **metal door** (8 scrap, 4 nails, 1400 hit points).
 
 **Support.** Every piece has a **support** value counted from the ground: 100% at ground level, 10 points less for each piece resting on what is below it (a floor on walls, a wall on a wall), and 25 less for a floor hanging off the floor next to it. Heavier tiers lose more (scrap metal ×1.15, stone ×1.4, concrete ×1.3). Below **20%** a piece can't be built, and if it drops below that (a wall under it breaks), it comes down in a shower of chunks. So a floor can reach about three squares out from the nearest wall. Build mode shows the support of an upstairs piece before you build it, the hammer shows it on built pieces, and the hammer won't upgrade a piece if the heavier tier would bring something down.
@@ -83,6 +87,8 @@ If `git pull` complains about untracked `.uid` files, they are safe to delete.
 | Right click | Aim a gun; hammer: demolish; shovel: fill; build mode: undo |
 | R | Reload; build mode: turn the piece; hammer: repair everything nearby; lock or unlock a metal door |
 | G | Build mode: pick a piece up and move it; hammer: upgrade everything like it nearby |
+| Z / X | Build mode: turn the piece back / on (objects in 15° steps) |
+| T | Build mode: switch between single pieces and ready-made buildings |
 | E | Search, open, use (gates, chests, workbench, generator, fire pit, turret, switch, well, shop) |
 | Tab / I | Inventory |
 | 1–9, mouse wheel | Hotbar slot (build mode: piece) |

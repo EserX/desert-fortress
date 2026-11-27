@@ -2048,6 +2048,171 @@ func _test_fast_building() -> void:
 	player.stamina = player.STAMINA_MAX
 
 
+## v1.9: free turning, ready-made buildings (blueprints) and the horde button.
+func _test_building_v19() -> void:
+	var b = main.building
+	var bm = main.build_mode
+	var inv = main.inventory
+	var player = main.player
+	var Prefabs = load("res://scripts/prefabs.gd")
+	main.terrain.load_data({})
+	b.load_data([])
+	inv.load_data({})
+	player.position = Vector3(-14, main.terrain.surface_height(-14, 12), 12)
+	# Turning a grid slot four times brings it back; walls stay round their squares.
+	var ok_turns := true
+	for e in Prefabs.entries("long_cabin") + Prefabs.entries("watchtower"):
+		var sl: Dictionary = {"kind": e.kind, "cx": e.cx, "cz": e.cz, "dir": e.dir, "level": e.level}
+		var t: Dictionary = sl
+		for i in 4:
+			t = Prefabs.turn_slot(t)
+		if t.cx != sl.cx or t.cz != sl.cz or posmod(int(t.dir), 4) != posmod(int(sl.dir), 4):
+			ok_turns = false
+	check(ok_turns, "a blueprint slot turned four times comes back to where it was")
+	var all_round := true
+	for turns in 4:
+		var plan: Array = Prefabs.placed("cabin", 3, -2, turns, b.PIECES)
+		var cells := {}
+		for e in plan:
+			if e.type == "foundation":
+				cells[Vector2i(e.slot.cx, e.slot.cz)] = true
+		for e in plan:
+			if e.slot.kind == "edge" and e.slot.level == 0:
+				if not b.edge_cells(e.slot).any(func(c): return cells.has(c)):
+					all_round = false
+			if e.slot.kind == "cell" and not cells.has(Vector2i(e.slot.cx, e.slot.cz)):
+				all_round = false
+		if cells.size() != 4:
+			all_round = false
+	check(all_round, "a turned cabin keeps its walls and roof on its own squares (all 4 ways)")
+	# Laying a blueprint is free; E builds it piece by piece.
+	bm.toggle()
+	bm.toggle_prefabs()
+	check(bm.prefab_mode and bm.status_text().begins_with("BUILDING: Shelter"), "T switches build mode to ready-made buildings")
+	bm.select(Prefabs.ORDER.find("cabin"))
+	var ev: Dictionary = bm.evaluate_prefab("cabin", 4, -7, 1)
+	check(ev.ok, "a cabin fits on open sand in the base (%s)" % ev.reason)
+	bm.dir = 1
+	bm.can_build = true
+	bm.prefab_plan = ev.plan
+	bm.prefab_y = ev.y
+	var sid: int = bm.place_prefab()
+	check(sid > 0 and b.sites.has(sid) and b.pieces.is_empty(), "left click lays its blueprint and builds nothing yet")
+	check(inv.weight() < 0.01, "laying a blueprint costs nothing")
+	check(not bm.evaluate_prefab("cabin", 4, -7, 1).ok, "a second one can't go on top of it")
+	check(b.sites[sid].node.get_child_count() == Prefabs.entries("cabin").size(), "every piece shows as a blue blueprint (%d)" % b.sites[sid].node.get_child_count())
+	var cost: Dictionary = b.site_cost(sid)
+	check(cost == Prefabs.total_cost("cabin", b.PIECES), "the blueprint needs %s" % str(cost))
+	check(main.build_site_step(sid) == "", "without materials nothing goes up")
+	check(b.site_prompt(sid, main._cost_text).contains("next wooden foundation"), "the prompt names the next piece: " + b.site_prompt(sid, main._cost_text))
+	inv.add_all({"wood": 4, "nails": 4})
+	player.stamina = player.STAMINA_MAX
+	var k1: String = main.build_site_step(sid)
+	check(k1 != "" and b.pieces.has(k1) and b.pieces[k1].type == "foundation" and inv.count_of("wood") == 0, "E builds the first foundation and pays for it")
+	check(b.sites[sid].todo.size() == Prefabs.entries("cabin").size() - 1, "and it comes off the blueprint")
+	# The rest: wood and nails in a chest in reach, scrap for the roof in pockets.
+	var need: Dictionary = b.site_cost(sid)
+	var cs := {"kind": "obj", "cx": -7, "cz": 5, "dir": 0, "level": 0}
+	var ck: String = b.place("chest", cs, b.evaluate("chest", cs).y)
+	b.storage_of(ck).add_all({"wood": need.get("wood", 0), "nails": need.get("nails", 0)})
+	player.position = Vector3(-13, main.terrain.surface_height(-13, 9), 9)
+	inv.add("scrap", need.get("scrap", 0))
+	var built := 1
+	for i in 60:
+		player.stamina = player.STAMINA_MAX
+		if not b.sites.has(sid) or main.build_site_step(sid) == "":
+			break
+		built += 1
+	check(not b.sites.has(sid) and built == Prefabs.entries("cabin").size(), "holding E builds the whole cabin (%d of %d pieces)" % [built, Prefabs.entries("cabin").size()])
+	check(b.storage_of(ck).count_of("wood") == 0 and inv.count_of("scrap") == 0, "paid from the chest and your pockets")
+	var roofs: Array = b.keys_of(["roof"])
+	check(roofs.size() == 4 and roofs.all(func(k): return b.support.get(k, 0.0) >= b.MIN_SUPPORT), "its roof stands on the walls (%d squares)" % roofs.size())
+	check(b.keys_of(["doorway"]).size() == 1 and b.keys_of(["window"]).size() == 1, "with a door and a window")
+	# Every ready-made building can be built in full.
+	var spots := {"shelter": Vector2i(-2, -10), "watchtower": Vector2i(1, 4), "gatehouse": Vector2i(-9, -4), "long_cabin": Vector2i(3, 2)}
+	for id in spots:
+		var at: Vector2i = spots[id]
+		var pev: Dictionary = bm.evaluate_prefab(id, at.x, at.y, 0)
+		if not pev.ok:
+			check(false, "%s fits (%s)" % [id, pev.reason])
+			continue
+		var site: int = b.add_site(id, pev.plan, pev.y)
+		inv.load_data({})
+		inv.add_all(b.site_cost(site))
+		var n := 0
+		for i in 80:
+			player.stamina = player.STAMINA_MAX
+			if not b.sites.has(site) or main.build_site_step(site) == "":
+				break
+			n += 1
+		check(not b.sites.has(site), "the %s goes up in full (%d of %d)" % [id, n, Prefabs.entries(id).size()])
+	# Blueprints are saved.
+	var pev2: Dictionary = bm.evaluate_prefab("shelter", -6, 8, 2)
+	var s2: int = b.add_site("shelter", pev2.plan, pev2.y)
+	inv.load_data({})
+	inv.add_all({"wood": 4, "nails": 4})
+	main.build_site_step(s2)
+	var data: Dictionary = main.collect_save_data()
+	b.sites_load_data([])
+	main.apply_save_data(JSON.parse_string(JSON.stringify(data)))
+	check(b.sites.size() == 1 and b.sites.values()[0].todo.size() == Prefabs.entries("shelter").size() - 1, "a half-built blueprint is saved and loaded")
+	bm.toggle_prefabs()
+	# Walls meeting at a corner both fit (the room check left room for the corner).
+	var wa := {"kind": "edge", "cx": -10, "cz": 10, "dir": 1, "level": 0}
+	b.place("wall", wa, b.evaluate("wall", wa).y)
+	var wb := {"kind": "edge", "cx": -11, "cz": 10, "dir": 0, "level": 0}
+	check(b.space_free("wall", wb, b.evaluate("wall", wb).y), "a wall fits against the end of another at a corner")
+	b.remove(b.slot_key(wa), false)
+	# Free turning: objects in 15° steps, walls a quarter at a time.
+	bm.select(Building_index("chest"))
+	bm.dir = 0
+	bm.turn = 0
+	bm.fine_turn(1)
+	check(bm.dir == 0 and bm.turn == 1 and bm.heading() == 15, "X turns a chest 15°")
+	bm.fine_turn(-1)
+	bm.fine_turn(-1)
+	check(bm.dir == 3 and bm.turn == 5 and bm.heading() == 345, "Z turns it back past north (%d°)" % bm.heading())
+	var ts := {"kind": "obj", "cx": -9, "cz": 9, "dir": 1, "level": 0, "turn": 2}
+	var tk: String = b.place("chest", ts, b.evaluate("chest", ts).y)
+	var yaw: float = b.pieces[tk].node.rotation.y
+	check(absf(angle_difference(yaw, -PI / 2 - PI / 6)) < 0.01, "a chest turned 90° + 30° stands that way (%.2f)" % yaw)
+	data = main.collect_save_data()
+	b.load_data([])
+	main.apply_save_data(JSON.parse_string(JSON.stringify(data)))
+	check(b.pieces.has(tk) and absf(angle_difference(b.pieces[tk].node.rotation.y, yaw)) < 0.01, "and stays turned after loading")
+	bm.select(Building_index("wall"))
+	bm.dir = 0
+	bm.fine_turn(1)
+	check(bm.dir == 1 and bm.turn == 0, "walls turn a quarter with X")
+	check(bm.status_text().contains("[T] ready-made"), "build mode lists its keys")
+	bm.toggle()
+	# The horde button.
+	var w = main.waves
+	main.day_night.restore(main.day_night.day, 10.0)
+	main.mutants.clear()
+	check(main.horde_stand != null and main.horde_prompt().begins_with("[E] Press the red button"), "the horde stand by the spawn point: " + main.horde_prompt())
+	var cash0: int = main.shop.cash
+	check(main.press_horde_button() and w.active and w.called and w.to_spawn > 0, "pressing it calls a horde by day (%d mutants)" % w.to_spawn)
+	check(not main.press_horde_button(), "it can't be pressed again while the horde is out")
+	w._spawn_group()
+	var stand: Vector3 = main.horde_stand.global_position
+	var near: Array = main.mutants.alive().filter(func(m): return m.hunter and Vector2(m.position.x - stand.x, m.position.z - stand.z).length() < w.CALL_RADIUS + 8.0)
+	check(not near.is_empty() and near.size() == w.hunters().size(), "they come from about %d m away (%d so far)" % [int(w.CALL_RADIUS), near.size()])
+	data = main.collect_save_data()
+	main.apply_save_data(JSON.parse_string(JSON.stringify(data)))
+	check(w.active and w.called, "a horde out by day is saved and loaded")
+	var c: Dictionary = w.cash_for({"called": true, "bounty": 30, "wave": 5, "pieces": 10, "cleared": false})
+	check(c.cash == 30 and c.cash_night == 0, "a horde pays only the bounty (%d)" % c.cash)
+	check(w.summary_lines({"called": true, "cleared": true})[0] == "Horde wiped out!", "and has its own summary")
+	w.end_wave(false)
+	main.mutants.clear()
+	check(main.shop.cash >= cash0, "the horde ends")
+	b.load_data([])
+	b.sites_load_data([])
+	inv.load_data({})
+	player.stamina = player.STAMINA_MAX
+
+
 func Building_index(t: String) -> int:
 	return main.building.ORDER.find(t)
 
@@ -2361,6 +2526,7 @@ func _process(_delta: float) -> bool:
 			_test_more_pieces_2()
 			_test_fast_building()
 			_test_wiring()
+			_test_building_v19()
 			_start_ladder()
 		3300:
 			_check_debris()

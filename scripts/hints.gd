@@ -6,7 +6,7 @@ extends Node
 const HINTS := {
 	"welcome": "Welcome to the desert! Search wrecks and ruins with E for supplies. Build your fortress around the flag with B. Every night mutants attack.",
 	"loot": "Tab opens your bag. 1–9 picks a hotbar slot; F eats, drinks or uses what you hold.",
-	"build": "Build mode: left click builds, R turns the piece, the mouse wheel picks another. Stay inside the ring of stakes.",
+	"build": "Build mode: left click builds, R / Z / X turn the piece, the mouse wheel picks another, T switches to ready-made cabins and towers. Stay inside the ring of stakes.",
 	"shovel": "Shovel: left click digs out a 1 m patch and gives sand, right click fills it back in. Deeper down comes clay, then stone (that needs a pickaxe). Dig too close to a wall and it falls down.",
 	"detector": "Metal detector: walk around the base and listen. The faster it beeps, the closer a buried cache is. At the steady tone, dig that square 1 m down.",
 	"hammer": "Hammer: left click a piece to repair or upgrade it, right click twice to demolish it for half the cost back.",

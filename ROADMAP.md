@@ -59,8 +59,13 @@ Keep the visuals simple (low-poly primitives, no art or animation work) and put 
 - [x] v1.7: **Faster building:** drag to lay a line of walls or foundations, upgrade or repair everything in an area at once (paid from your pockets or a chest in reach), pick up a piece and put it down elsewhere
 - [x] v1.8: **Doors, switches and wiring:** gates that close by themselves at night, a lockable metal gate, and power carried by cables you lay from the generator to switches, lights, fences and turrets (instead of the fixed 18 m range)
 
+### Owner requests (2026-11-27)
+Building is to be a big part of the game, with the fine-tuned feel of survival-builder games: turn pieces freely before placing them, ready-made buildings such as cabins, and a stand with a button that calls the enemies to you.
+- [x] v1.9: **Building overhaul:** objects turn in 15° steps (Z / X) and the preview swings round smoothly; ready-made buildings (shelter, cabin, big cabin, watchtower, gatehouse) laid as free blueprints and built piece by piece with E (hold to keep going), paid from pockets and chests; the **horde button** stand at the spawn point calls a wave on demand; build-mode key help; walls at corners no longer blocked
+- [ ] Later building ideas (not scheduled): more ready-made buildings (a walled compound, a bunker with a well), choosing the tier of a blueprint, a blueprint menu with pictures
+
 ### M9: Game logic, AI and physics
-- [ ] v1.9: **Mutant navigation:** a navigation mesh, rebuilt when the base or the ground changes, so mutants path round walls to an open gate or the weakest wall instead of walking straight in. Brutes go straight through, pits and wire are taken into account, and groups pick the same weak point
+- [ ] v1.10: **Mutant navigation:** a navigation mesh, rebuilt when the base or the ground changes, so mutants path round walls to an open gate or the weakest wall instead of walking straight in. Brutes go straight through, pits and wire are taken into account, and groups pick the same weak point
 - [ ] v2.0: **Physics pass:** explosions push mutants and loose items, dropped items become physics props, throwables (molotov, pipe bomb, rocks) with arcs and bounces, knockback and stagger tuned per weapon, mutants falling into pits and off roofs
 - [ ] v2.1: **Survival depth:** cold nights (fire pits and walls keep you warm), bleeding wounds fixed with bandages, cooking at the fire pit, food that spoils, and carried weight slowing digging and climbing
 - [ ] v2.2: **Crafting chain:** a furnace (scrap to metal plates, sand to glass, clay to bricks), building parts made at the workbench, better tools (a steel shovel digs faster, a sledgehammer demolishes)

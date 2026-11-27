@@ -167,8 +167,13 @@ func _ready() -> void:
 	build_label = _label("", 18)
 	build_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	build_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	build_label.size = Vector2(900, 50)
-	build_label.position = Vector2(-450, -170)
+	# Grows upwards from just above the hotbar, however many lines it has.
+	build_label.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+	build_label.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	build_label.offset_left = -640
+	build_label.offset_right = 640
+	build_label.offset_top = -170
+	build_label.offset_bottom = -116
 	build_label.add_theme_color_override("font_color", Color(0.75, 1.0, 0.75))
 	root.add_child(build_label)
 
@@ -227,7 +232,7 @@ func _process(delta: float) -> void:
 		elif left < 120.0:
 			text += "\nNight in %d:%02d" % [int(left) / 60, int(left) % 60]
 		if waves and waves.active:
-			text += "\nWave %d: %d left" % [waves.wave, waves.remaining()]
+			text += ("\nHorde: %d left" % waves.remaining()) if waves.called else ("\nWave %d: %d left" % [waves.wave, waves.remaining()])
 		clock.text = text
 	if _banner_time > 0.0:
 		_banner_time -= delta

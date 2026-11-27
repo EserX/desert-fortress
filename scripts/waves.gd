@@ -6,6 +6,8 @@ extends Node
 
 const MIX_RATE := 22050.0
 const SPAWN_RADIUS := 205.0
+## A horde called with the button comes from this far out, round where you are.
+const CALL_RADIUS := 60.0
 const GROUP_GAP := 9.0      # seconds between groups
 const MAX_SIZE := 30
 ## Cash for each mutant of the wave you kill.
@@ -24,6 +26,10 @@ var active := false
 var to_spawn := 0
 var queue: Array = []       # types still to come, in order
 var spawn_timer := 0.0
+## The wave was called with the horde button (not a night wave): it comes
+## from CALL_RADIUS round call_at and pays only the bounty.
+var called := false
+var call_at := Vector3.ZERO
 var stats := {}             # this wave: kills, damage, lost, deaths
 var _rng := RandomNumberGenerator.new()
 var _siren: AudioStreamPlayer
@@ -100,12 +106,34 @@ func on_dusk(_day: int) -> void:
 func start_wave() -> void:
 	wave += 1
 	active = true
+	called = false
 	_rng.seed = hash("wave:%d:%d" % [world_seed, wave])
 	queue = wave_mix(wave, _rng, size_mult)
 	to_spawn = queue.size()
 	spawn_timer = 1.0
 	stats = {"kills": 0, "damage": 0.0, "lost": 0, "deaths": 0, "size": to_spawn, "bounty": 0, "pieces": 0}
 	wave_started.emit(wave, to_spawn)
+
+
+## The horde button: a wave as big as the last night's (at least night 1's)
+## comes for `at` straight away, day or night. It doesn't count as a night.
+## Returns false if a wave is already out.
+func call_horde(at: Vector3) -> bool:
+	if active:
+		return false
+	active = true
+	called = true
+	call_at = Vector3(at.x, 0, at.z)
+	var n := maxi(wave, 1)
+	_rng.seed = hash("horde:%d:%d:%d" % [world_seed, wave, Time.get_ticks_msec()])
+	queue = wave_mix(n, _rng, size_mult)
+	to_spawn = queue.size()
+	spawn_timer = 1.0
+	stats = {"kills": 0, "damage": 0.0, "lost": 0, "deaths": 0, "size": to_spawn, "bounty": 0, "pieces": 0, "called": true}
+	siren.emit()
+	_siren.play()
+	wave_started.emit(n, to_spawn)
+	return true
 
 
 ## Mutants of this wave still to come or still alive.
@@ -135,11 +163,14 @@ func _spawn_group() -> void:
 	var a := _rng.randf() * TAU
 	var out := Vector3(cos(a), 0, sin(a))
 	var side := out.cross(Vector3.UP)
+	var center := call_at if called else Vector3.ZERO
+	var radius := CALL_RADIUS if called else SPAWN_RADIUS
 	for i in n:
-		var p := out * (SPAWN_RADIUS + _rng.randf_range(-4, 4)) + side * (i - (n - 1) * 0.5) * 2.5
+		var p := center + out * (radius + _rng.randf_range(-4, 4)) + side * (i - (n - 1) * 0.5) * 2.5
+		p = p.limit_length(SPAWN_RADIUS)
 		var kind: String = queue.pop_front() if not queue.is_empty() else "walker"
 		var m = mutants.spawn(kind, p)
-		m.make_hunter(Vector3.ZERO)
+		m.make_hunter(center)
 	to_spawn -= n
 
 
@@ -176,10 +207,10 @@ func note_kill(m: Node) -> void:
 ## killed the whole wave. Returns {"cash", "cash_kills", "cash_night", "cash_base"}.
 static func cash_for(s: Dictionary) -> Dictionary:
 	var kills: int = int(s.get("bounty", 0))
-	var night: int = 25 + 10 * int(s.get("wave", 1))
+	var night: int = 0 if s.get("called", false) else 25 + 10 * int(s.get("wave", 1))
 	var base := 0
 	var pieces: int = int(s.get("pieces", 0))
-	if pieces > 0:
+	if pieces > 0 and not s.get("called", false):
 		base = int(round(60.0 * clampf(1.0 - float(s.get("lost", 0)) / pieces, 0.0, 1.0)))
 	var total := kills + night + base
 	if s.get("cleared", false):
@@ -205,7 +236,10 @@ func note_death() -> void:
 ## Lines for the end-of-wave summary.
 static func summary_lines(s: Dictionary) -> Array:
 	var lines: Array = []
-	lines.append(("Wave %d cleared!" if s.get("cleared", false) else "Dawn: you survived night %d") % int(s.get("wave", 0)))
+	if s.get("called", false):
+		lines.append("Horde wiped out!" if s.get("cleared", false) else "The horde is gone")
+	else:
+		lines.append(("Wave %d cleared!" if s.get("cleared", false) else "Dawn: you survived night %d") % int(s.get("wave", 0)))
 	lines.append("Mutants killed: %d" % int(s.get("kills", 0)))
 	lines.append("Damage taken: %d" % int(s.get("damage", 0)))
 	if int(s.get("lost", 0)) > 0:
@@ -218,7 +252,8 @@ static func summary_lines(s: Dictionary) -> Array:
 
 
 func save_data() -> Dictionary:
-	return {"wave": wave, "active": active, "to_spawn": to_spawn, "queue": queue, "stats": stats}
+	return {"wave": wave, "active": active, "to_spawn": to_spawn, "queue": queue, "stats": stats,
+		"called": called, "call_at": [call_at.x, call_at.z]}
 
 
 func load_data(data: Dictionary) -> void:
@@ -230,6 +265,9 @@ func load_data(data: Dictionary) -> void:
 		queue.append(str(t))
 	while queue.size() < to_spawn:
 		queue.append("walker")  # saves from v0.14
+	called = bool(data.get("called", false))
+	var ca: Array = data.get("call_at", [0.0, 0.0])
+	call_at = Vector3(float(ca[0]), 0, float(ca[1])) if ca.size() == 2 else Vector3.ZERO
 	stats = data.get("stats", {})
 	for k in ["kills", "lost", "deaths", "size", "bounty", "pieces"]:
 		stats[k] = int(stats.get(k, 0))

@@ -22,6 +22,9 @@ const ACTIONS := {
 	"build": [KEY_B],
 	"rotate": [KEY_R],  # also reloads a gun outside build mode, and repairs an area with the hammer
 	"move_piece": [KEY_G],  # build mode: pick a piece up; hammer: upgrade an area
+	"turn_left": [KEY_Z],   # build mode: turn the piece back (objects 15°)
+	"turn_right": [KEY_X],  # build mode: turn the piece on (objects 15°)
+	"build_menu": [KEY_T],  # build mode: single pieces / ready-made buildings
 	"hotbar_1": [KEY_1], "hotbar_2": [KEY_2], "hotbar_3": [KEY_3],
 	"hotbar_4": [KEY_4], "hotbar_5": [KEY_5], "hotbar_6": [KEY_6],
 	"hotbar_7": [KEY_7], "hotbar_8": [KEY_8], "hotbar_9": [KEY_9],

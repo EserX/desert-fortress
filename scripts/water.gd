@@ -34,9 +34,18 @@ const MAX_PLANTS := 3         # and small plants
 
 ## Emitted when the ground's soil or green changed (for the map and tests).
 signal ground_changed
+## Something to tell the player: a banner, or pick-up lines.
+signal message(text: String)
+signal pickup(lines: Array)
 
 var terrain  # Terrain
 var building  # Building
+var player  # Player (looking at the ground, the well and sprinklers)
+var inventory  # Inventory (the can, water pipes)
+## main.piece_under_crosshair: key of the built piece under the crosshair, or "".
+var piece_at_crosshair := func() -> String: return ""
+## Water pipe being laid: the end clicked first ("main" is the main well).
+var pipe_from := ""
 var store := STORE_BASE
 var capacity := STORE_BASE
 var pump := false
@@ -226,6 +235,7 @@ func well_prompt(has_can: bool) -> String:
 func on_morning(_day := 0) -> void:
 	store = capacity
 	_set_level()
+	# Once a day, over every watered square (a few hundred at most); .keys() as squares go back to sand.
 	for c in cells.keys():
 		var e: Dictionary = cells[c]
 		var soil: bool = e.total >= SOIL_NEED
@@ -241,6 +251,124 @@ func on_morning(_day := 0) -> void:
 		e.wet = 0.0
 	_mark_dirty(0.0)
 	ground_changed.emit()
+
+
+# --- In your hands ---------------------------------------------------------------
+
+func _has_can() -> bool:
+	return inventory != null and inventory.count_of("watering_can") > 0
+
+
+## E at the main well: fills the watering can if you carry one. Returns litres taken.
+func use_well() -> float:
+	if not _has_can():
+		message.emit("You need a watering can to carry water: make one at the workbench or buy one")
+		return 0.0
+	var n := fill_can()
+	if n > 0.0:
+		pickup.emit(["Watering can: %d / %d L" % [int(round(can)), int(CAN_MAX)]])
+	elif can < CAN_MAX:
+		message.emit("The main well is dry until morning")
+	return n
+
+
+## Where the watering can pours: a point on the ground in reach, or null.
+func pour_point() -> Variant:
+	var hit: Dictionary = player.look_hit(POUR_REACH)
+	if hit.is_empty() or hit.collider != terrain:
+		return null
+	return hit.position
+
+
+## The pipe end under the crosshair: "main" (the main well), a sprinkler's key, or "".
+func pipe_target() -> String:
+	var hit: Dictionary = player.look_hit(4.5)
+	if not hit.is_empty() and hit.collider == well:
+		return "main"
+	var key: String = piece_at_crosshair.call()
+	if key != "" and building.pieces.get(key, {}).get("type", "") == "sprinkler":
+		return key
+	return ""
+
+
+## The prompt for the watering can or water pipe in your hands.
+func held_prompt(item: String) -> String:
+	if item == "watering_can":
+		var p = pour_point()
+		if p == null:
+			return "Watering can: %d / %d L" % [int(ceil(can)), int(CAN_MAX)]
+		return ground_prompt(p)
+	if item == "water_pipe":
+		return pipe_prompt(pipe_target())
+	return ""
+
+
+## Mouse clicks with the can or pipe in hand. Returns true if used.
+func handle_input(event: InputEvent, item: String) -> bool:
+	if not (event is InputEventMouseButton and event.pressed) or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+		return false
+	var why := ""
+	if item == "watering_can":
+		if event.button_index != MOUSE_BUTTON_LEFT:
+			return false
+		var p = pour_point()
+		if p == null:
+			return false
+		why = try_pour(p)
+	elif item == "water_pipe":
+		if event.button_index != MOUSE_BUTTON_LEFT and event.button_index != MOUSE_BUTTON_RIGHT:
+			return false
+		var id := pipe_target()
+		if id == "":
+			return false
+		why = pipe_click(id, event.button_index == MOUSE_BUTTON_RIGHT)
+	else:
+		return false
+	if why != "":
+		message.emit(why)
+	return true
+
+
+## What the water pipe does at this end (like the cable).
+func pipe_prompt(id: String) -> String:
+	if id == "":
+		return "Water pipe: look at the main well or a sprinkler" if pipe_from != "" else ""
+	var name := "Main well" if id == "main" else "Sprinkler"
+	var n := pipes_of(id).size()
+	var have: int = inventory.count_of("water_pipe")
+	var take := ("   [RMB] Take up its %d pipe%s" % [n, "" if n == 1 else "s"]) if n > 0 else ""
+	var need_pump := "" if pump else "\n(the pipes need the hand pump on the main well: shop, base upgrades)"
+	if pipe_from == "" or not _valid_end(pipe_from):
+		return "%s\n[LMB] Start a pipe here (%d pipe)%s%s" % [name, have, take, need_pump]
+	if pipe_from == id:
+		return "%s\n[LMB] Cancel this pipe" % name
+	var why := pipe_problem(pipe_from, id)
+	if why != "":
+		return "%s\n%s" % [name, why]
+	return "%s\n[LMB] Connect (%d pipe of your %d)%s%s" % [name, pipe_cost(pipe_from, id), have, take, need_pump]
+
+
+## Left click an end to start a pipe, then another to connect it (paid in water
+## pipe); right click takes up an end's pipes. Returns "" or why not.
+func pipe_click(id: String, take_up_pipes := false) -> String:
+	if id == "" or not _valid_end(id):
+		return "Water pipes join the main well and sprinklers"
+	if take_up_pipes:
+		inventory.add("water_pipe", take_up(id))
+		return ""
+	if pipe_from == "" or not _valid_end(pipe_from) or pipe_from == id:
+		pipe_from = "" if pipe_from == id else id
+		return ""
+	var why := pipe_problem(pipe_from, id)
+	if why != "":
+		return why
+	var cost := pipe_cost(pipe_from, id)
+	if inventory.count_of("water_pipe") < cost:
+		return "Not enough water pipe: this needs %d" % cost
+	inventory.remove("water_pipe", cost)
+	connect_pipe(pipe_from, id)
+	pipe_from = ""
+	return ""
 
 
 # --- Ground squares --------------------------------------------------------------
@@ -328,7 +456,7 @@ func ground_prompt(p: Vector3) -> String:
 ## Squares counted as soil, and how green the land is on average over them.
 func soil_count() -> int:
 	var n := 0
-	for c in cells:
+	for c in cells:  # every watered square: only for prompts and tests
 		if cells[c].total >= SOIL_NEED:
 			n += 1
 	return n
@@ -399,6 +527,7 @@ func prune_pipes() -> bool:
 
 ## Every sprinkler joined to the main well by pipes (through other sprinklers).
 func fed_sprinklers() -> Dictionary:
+	# A queue with a visited set over the pipes (a few dozen at most).
 	var seen := {"main": true}
 	var todo: Array = ["main"]
 	while not todo.is_empty():
@@ -465,6 +594,7 @@ func tick(delta: float, daytime: bool) -> void:
 	_spray_t = 0.0
 	prune_pipes()
 	var fed := fed_sprinklers() if pump else {}
+	# Once a second: every sprinkler (a handful) times the 4 to 9 squares round it.
 	for key in building.keys_of(["sprinkler"]):
 		var rec: Dictionary = building.pieces[key]
 		var on: bool = daytime and rec.get("open", true) and fed.has(key) and store > 0.05
@@ -553,6 +683,8 @@ func redraw() -> void:
 	var grass: Array = []
 	var plants: Array = []
 	var n := 0
+	# Every watered square, 32 triangles and up to 17 plants each; at most twice a
+	# second, and only after something changed.
 	for c in cells:
 		var e: Dictionary = cells[c]
 		var col := _cell_color(e)
@@ -678,16 +810,24 @@ func save_data() -> Dictionary:
 	return {"store": store, "can": can, "cells": list, "pipes": pipes.duplicate(true)}
 
 
+## A number from a save, or `fallback` if it isn't one (hand-edited or broken saves).
+static func _num(v, fallback := 0.0) -> float:
+	return float(v) if (v is float or v is int) else fallback
+
+
 ## Older saves (no "water"): a full well, an empty can and dry sand everywhere.
 func load_data(data: Dictionary) -> void:
-	store = clampf(float(data.get("store", capacity)), 0.0, capacity)
-	can = clampf(float(data.get("can", 0.0)), 0.0, CAN_MAX)
+	store = clampf(_num(data.get("store", capacity), capacity), 0.0, capacity)
+	can = clampf(_num(data.get("can", 0.0)), 0.0, CAN_MAX)
 	cells = {}
-	for e in data.get("cells", []):
+	var list = data.get("cells", [])
+	for e in (list if list is Array else []):
 		if e is Array and e.size() >= 6:
-			cells[Vector2i(int(e[0]), int(e[1]))] = {"wet": float(e[2]), "total": float(e[3]), "green": clampf(float(e[4]), 0.0, 1.0), "dry": int(e[5])}
+			cells[Vector2i(int(_num(e[0])), int(_num(e[1])))] = {"wet": clampf(_num(e[2]), 0.0, WET_MAX),
+				"total": clampf(_num(e[3]), 0.0, SOIL_NEED * 4.0), "green": clampf(_num(e[4]), 0.0, 1.0), "dry": int(_num(e[5]))}
 	pipes = []
-	for p in data.get("pipes", []):
+	var plist = data.get("pipes", [])
+	for p in (plist if plist is Array else []):
 		if p is Array and p.size() == 2 and _valid_end(str(p[0])) and _valid_end(str(p[1])):
 			pipes.append([str(p[0]), str(p[1])])
 	_rebuild_pipes()

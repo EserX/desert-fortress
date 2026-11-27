@@ -118,8 +118,6 @@ var discovered := {}
 var _shovel_ready_at := 0
 ## Cable in hand: the piece a cable is being run from ("" when none).
 var cable_from := ""
-## Water pipe being laid: the end clicked first ("main" is the main well).
-var pipe_from := ""
 ## Rocks broken with the pickaxe (id -> true) and hits left on started ones.
 var broken_rocks := {}
 var rock_hits := {}
@@ -175,6 +173,7 @@ func _ready() -> void:
 	water.name = "Water"
 	water.terrain = terrain
 	water.building = building
+	water.piece_at_crosshair = piece_under_crosshair
 	add_child(water)
 	terrain.add_no_dig(water.well.position, 2.0)
 
@@ -314,6 +313,8 @@ func _ready() -> void:
 	inventory.changed.connect(func(): player.overloaded = inventory.overloaded())
 	inventory.add("hammer", 1)  # everyone starts with a hammer
 	inventory.add("pipe", 1)    # and a rusty pipe
+	water.player = player
+	water.inventory = inventory
 
 	melee = Melee.new()
 	melee.name = "Hands"
@@ -452,6 +453,8 @@ func _ready() -> void:
 	guns.fired.connect(mutants.alert)
 	hud.guns = guns
 	survival.warning.connect(hud.show_banner)
+	water.message.connect(hud.show_banner)
+	water.pickup.connect(hud.show_pickup)
 
 	day_night.day_started.connect(_on_morning)
 	day_night.day_started.connect(water.on_morning)
@@ -482,9 +485,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 	elif holding("axe") and _axe_input(event):
 		get_viewport().set_input_as_handled()
-	elif holding("watering_can") and _can_input(event):
-		get_viewport().set_input_as_handled()
-	elif holding("water_pipe") and _pipe_input(event):
+	elif (holding("watering_can") or holding("water_pipe")) and water.handle_input(event, inventory.selected_stack().item):
 		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("rotate") and lock_door(player.interact_target()):
 		get_viewport().set_input_as_handled()
@@ -532,10 +533,8 @@ func _process(delta: float) -> void:
 				text = cable_prompt(piece_under_crosshair())
 			elif text == "" and holding("axe"):
 				text = axe_prompt()
-			elif text == "" and holding("watering_can"):
-				text = can_prompt()
-			elif text == "" and holding("water_pipe"):
-				text = pipe_prompt(pipe_target())
+			elif text == "" and (holding("watering_can") or holding("water_pipe")):
+				text = water.held_prompt(inventory.selected_stack().item)
 		hud.set_prompt(text)
 		_hold_site(delta)
 		_update_dig_marker()
@@ -1267,7 +1266,7 @@ func interact(id: String) -> void:
 		press_horde_button()
 		return
 	if id == "mainwell":
-		fill_can()
+		water.use_well()
 		return
 	if id.begins_with("sprinkler:"):
 		water.toggle_sprinkler(id.trim_prefix("sprinkler:"))
@@ -1438,116 +1437,6 @@ func _cable_input(event: InputEvent) -> bool:
 	if key == "":
 		return false
 	var why := cable_click(key, event.button_index == MOUSE_BUTTON_RIGHT)
-	if why != "":
-		hud.show_banner(why)
-	return true
-
-
-## E at the main well: fills the watering can if you carry one.
-func fill_can() -> float:
-	if inventory.count_of("watering_can") == 0:
-		hud.show_banner("You need a watering can to carry water: make one at the workbench or buy one")
-		return 0.0
-	var n := water.fill_can()
-	if n > 0.0:
-		hud.show_pickup(["Watering can: %d / %d L" % [int(round(water.can)), int(Water.CAN_MAX)]])
-	elif water.can < Water.CAN_MAX:
-		hud.show_banner("The main well is dry until morning")
-	return n
-
-
-## Where the watering can pours: a point on the ground in reach, or null.
-func pour_point() -> Variant:
-	var hit := player.look_hit(Water.POUR_REACH)
-	if hit.is_empty() or hit.collider != terrain:
-		return null
-	return hit.position
-
-
-func can_prompt() -> String:
-	var p = pour_point()
-	if p == null:
-		return "Watering can: %d / %d L" % [int(ceil(water.can)), int(Water.CAN_MAX)]
-	return water.ground_prompt(p)
-
-
-func _can_input(event: InputEvent) -> bool:
-	if not (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT) or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
-		return false
-	var p = pour_point()
-	if p == null:
-		return false
-	var why: String = water.try_pour(p)
-	if why != "":
-		hud.show_banner(why)
-	return true
-
-
-## The pipe end under the crosshair: "main" (the main well), a sprinkler's key, or "".
-func pipe_target() -> String:
-	var hit := player.look_hit(HAMMER_REACH + 1.0)
-	if not hit.is_empty() and hit.collider == water.well:
-		return "main"
-	var key := piece_under_crosshair()
-	if key != "" and building.pieces[key].type == "sprinkler":
-		return key
-	return ""
-
-
-func _pipe_end_name(id: String) -> String:
-	return "Main well" if id == "main" else "Sprinkler"
-
-
-## What the water pipe does at this end (like the cable).
-func pipe_prompt(id: String) -> String:
-	if id == "":
-		return "Water pipe: look at the main well or a sprinkler" if pipe_from != "" else ""
-	var name := _pipe_end_name(id)
-	var n := water.pipes_of(id).size()
-	var take := ("   [RMB] Take up its %d pipe%s" % [n, "" if n == 1 else "s"]) if n > 0 else ""
-	var pump := "" if water.pump else "\n(the pipes need the hand pump on the main well: shop, base upgrades)"
-	if pipe_from == "" or not water._valid_end(pipe_from):
-		return "%s\n[LMB] Start a pipe here (%d pipe)%s%s" % [name, inventory.count_of("water_pipe"), take, pump]
-	if pipe_from == id:
-		return "%s\n[LMB] Cancel this pipe" % name
-	var why := water.pipe_problem(pipe_from, id)
-	if why != "":
-		return "%s\n%s" % [name, why]
-	return "%s\n[LMB] Connect (%d pipe of your %d)%s%s" % [name, water.pipe_cost(pipe_from, id), inventory.count_of("water_pipe"), take, pump]
-
-
-## Left click an end to start a pipe, then another to connect it (paid in water
-## pipe); right click takes up an end's pipes. Returns "" or why not.
-func pipe_click(id: String, take_up := false) -> String:
-	if id == "" or not water._valid_end(id):
-		return "Water pipes join the main well and sprinklers"
-	if take_up:
-		inventory.add("water_pipe", water.take_up(id))
-		return ""
-	if pipe_from == "" or not water._valid_end(pipe_from) or pipe_from == id:
-		pipe_from = "" if pipe_from == id else id
-		return ""
-	var why := water.pipe_problem(pipe_from, id)
-	if why != "":
-		return why
-	var cost := water.pipe_cost(pipe_from, id)
-	if inventory.count_of("water_pipe") < cost:
-		return "Not enough water pipe: this needs %d" % cost
-	inventory.remove("water_pipe", cost)
-	water.connect_pipe(pipe_from, id)
-	pipe_from = ""
-	return ""
-
-
-func _pipe_input(event: InputEvent) -> bool:
-	if not (event is InputEventMouseButton and event.pressed) or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
-		return false
-	if event.button_index != MOUSE_BUTTON_LEFT and event.button_index != MOUSE_BUTTON_RIGHT:
-		return false
-	var id := pipe_target()
-	if id == "":
-		return false
-	var why := pipe_click(id, event.button_index == MOUSE_BUTTON_RIGHT)
 	if why != "":
 		hud.show_banner(why)
 	return true
@@ -1964,7 +1853,8 @@ func apply_save_data(data: Dictionary) -> void:
 	else:
 		building.auto_wire(power.POWER_RANGE)  # older saves: power reached 18 m without cables
 	building.sites_load_data(data.get("sites", []))
-	water.load_data(data.get("water", {}))  # after the sprinklers it pipes to
+	var wd = data.get("water", {})
+	water.load_data(wd if wd is Dictionary else {})  # after the sprinklers it pipes to
 	waves.load_data(data.get("waves", {"wave": maxi(day_night.day - 1, 0)}))
 	guns.load_data(data.get("guns", {}))
 	# Older saves: a little starting cash plus pay for the nights already survived.

@@ -25,6 +25,8 @@ var water  # Water
 var farming  # Farming
 var mutants  # Mutants
 var waves  # Waves (the night's summary counts what was wrecked)
+## func() -> float: green round wild oases (oases.gd), not counted in the lure.
+var wild_green := Callable()
 ## Plants trampled and pipes broken tonight (for the summary and tests).
 var trampled := 0
 var pipes_broken := 0
@@ -46,7 +48,8 @@ static func lure_for(drawn: float, green: float) -> int:
 func lure() -> int:
 	if water == null:
 		return 0
-	return lure_for(water.drawn_today(), water.green_total())
+	var wild: float = wild_green.call() if wild_green.is_valid() else 0.0
+	return lure_for(water.drawn_today(), maxf(water.green_total() - wild, 0.0))
 
 
 ## Where group `i` of a night wave heads: the main well, or for every third

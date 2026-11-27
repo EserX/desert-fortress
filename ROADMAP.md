@@ -84,7 +84,7 @@ Design notes for every M10 run:
 - [x] v1.15: **The market:** sell crops, flowers, fruit and goods at the shop terminal for cash; daily prices, prices that drop when you sell a lot of one thing, exotic crops worth the most; buy food and goods with the cash
 - [x] v1.16: **Water draws life:** by day animals (gazelles, birds, jackals) come to water and green land, hunted for meat (cooked at the fire pit); by night mutants are drawn to the main well, wave size grows with water use and green land rather than only the night count, and they go for fields and pipes too
 - [x] v1.17: **Green and livable:** a **green %** for the whole map and a **livable** score for the base (shade, water, food, plants, shelter) on the HUD and map; fruit trees and groves spread on their own; livable milestones give comforts (faster healing, resting through the heat, a better shelter)
-- [ ] v1.18: **Oases and outposts:** 3 to 5 hidden oases with springs, rare and exotic seeds, clay and reeds, guarded by mutants or a nest; claim one as an outpost with its own build zone, water and defences; nests keep the land round them dead until burned out
+- [x] v1.18: **Oases and outposts:** 3 to 5 hidden oases with springs, rare and exotic seeds, clay and reeds, guarded by mutants or a nest; claim one as an outpost with its own build zone, water and defences; nests keep the land round them dead until burned out
 - [ ] v1.19: **Goals and an ending:** green % milestones (10, 25, 50) unlock new seeds, machines and a weather station; the final milestone brings back rain (an ending, then free play); a peaceful terraform-only mode in the difficulty settings
 
 ### M9: Game logic, AI and physics

@@ -416,6 +416,13 @@ func water_cell(c: Vector2i, litres: float) -> float:
 	return n
 
 
+## A square goes back to dead sand (a mutant nest, v1.18).
+func clear_cell(c: Vector2i) -> void:
+	if cells.erase(c):
+		_mark_dirty(0.0)
+		ground_changed.emit()
+
+
 ## Life from plants (v1.14): `soil` litres towards turning the square to soil (not
 ## today's water) and `green` more green if it is soil. Keeps it from drying out.
 func add_life(c: Vector2i, soil: float, green: float) -> void:

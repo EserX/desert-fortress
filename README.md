@@ -2,7 +2,7 @@
 
 A 3D low-poly survival and fortress-defence game for Linux, made with Godot 4.5. Scavenge the desert by day, build and arm a fortress around the flag, and survive a bigger mutant wave every night. Each night pays cash you spend at the shop terminal on supplies, weapons, drone deliveries and base upgrades. Now also: turning the desert green from a main well at the centre, farming it and selling the harvest at the market, and hunting the animals the green land draws in (by night the water draws the mutants); oases and more are coming (see the roadmap).
 
-**Current version: v1.17.0.** See [ROADMAP.md](ROADMAP.md) for the plan and [DEVLOG.md](DEVLOG.md) for what changed in each update.
+**Current version: v1.18.0.** See [ROADMAP.md](ROADMAP.md) for the plan and [DEVLOG.md](DEVLOG.md) for what changed in each update.
 
 ## Play (Linux Mint)
 
@@ -82,6 +82,8 @@ Eat millet, melons, dates and dragon fruit with **F**. Sell the harvest at the m
 - **75, Homestead:** your buildings mend 10% of their hit points every morning.
 
 Green land spreads by itself: a fully green square keeps the sand next to it turning to soil (in about 3 mornings), ready for your water. Grown **date palms** drop saplings on watered soil within 4 m now and then, so a palm grove grows if you keep it watered.
+
+**Oases and outposts.** Three to five **oases** lie hidden out in the desert, 85 to 195 m from the base (the map marks each one once you've been within 35 m). Each has a **spring** (**E** to drink your fill and fill the watering can), **reeds** to cut (**E**, 8 a day; 3 reeds make 2 fibre at the workbench), a **clay bank** to dig (**E**, 6 a day) and an **old stash** of rare seeds (saffron, dragon fruit, date palm). Mutant **guards** come out when you get within about 55 m. Some oases have a **mutant nest**: while it stands the land round it stays dead, the palms are bare stumps and it keeps breeding guards. Bring a **fuel can** and press **E** on the nest to burn it out; then the spring brings the oasis back to life over a few mornings. With the nest gone and the guards dead, press **E** on the marker post to **claim** the oasis as an **outpost** (6 wood, 2 cloth): it gets its own build zone of 16 m round the post (build there just like at the base), and its spring waters the land further out every morning. The green round wild oases doesn't draw the night waves, but a claimed outpost's does, and an outpost's buildings don't count for the base's livable score.
 
 **Animals and hunting.** Water brings life. Between 07:00 and 17:00 animals come in from the desert to graze on your green land and drink at the main well: the greener the land round the base, the more come (about one gazelle for every 3 fully green squares, a jackal for every four grazers, birds in flocks of three). **Gazelles** bolt when you get within 20 m (10 m crouching), so creep up or use the rifle. **Jackals** come for you and bite when you get close, and run when badly hurt. **Birds** peck on the green and fly off when disturbed. Gunshots scare everything nearby. Look at a dead animal and press **E** to butcher it for **raw meat** (a gazelle gives 3). Raw meat has to be cooked: light a **fire pit** with wood, then **E** with raw meat cooks up to 5 pieces at once (each burns 10 seconds of the fire). **Cooked meat** is a big meal (F). At dusk the animals head back out into the desert.
 

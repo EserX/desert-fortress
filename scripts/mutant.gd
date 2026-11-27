@@ -85,6 +85,9 @@ var state := State.WANDER
 var home := Vector3.ZERO
 ## Part of a night wave: marches to the base instead of idling, sees further.
 var hunter := false
+## v1.18: guards an oasis (its index; -1 = not a guard). Guards go back to the
+## oasis when they lose you instead of settling where they stopped.
+var guard_of := -1
 ## Where a wave mutant ends up when there is nothing left to wreck where it
 ## was sent (the main well; v1.16 raiders are sent to a field first).
 var base_goal := Vector3.ZERO
@@ -783,7 +786,7 @@ func _decide(night: bool) -> void:
 			var d: float = target.global_position.distance_to(global_position)
 			if d > stats.lose * (1.5 if hunter else 1.0):
 				state = State.WANDER
-				if not hunter:
+				if not hunter and guard_of < 0:
 					home = global_position
 				_wander_to = home
 
@@ -820,4 +823,4 @@ func _play(name: String, pitch: float) -> void:
 
 func save_data() -> Dictionary:
 	return {"type": type, "pos": [position.x, position.y, position.z], "home": [home.x, home.y, home.z], "hp": health, "hunter": hunter,
-		"base": [base_goal.x, base_goal.y, base_goal.z]}
+		"base": [base_goal.x, base_goal.y, base_goal.z], "guard": guard_of}

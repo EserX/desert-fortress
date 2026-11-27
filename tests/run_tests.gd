@@ -3036,6 +3036,7 @@ func _process(_delta: float) -> bool:
 		4070:
 			_check_life()
 			_test_livable()
+			_test_oases()
 		4080:
 			for e in catcher.errors:
 				print("  ERROR ", e)
@@ -3911,3 +3912,197 @@ func _test_livable() -> void:
 	w.load_data({})
 	f.load_data({})
 	lv.refresh(false)
+
+
+## v1.18: hidden oases with springs, reeds, clay and a stash, guards and nests, claimed as outposts.
+func _test_oases() -> void:
+	var oa = main.oases
+	var w = main.water
+	var b = main.building
+	var inv = main.inventory
+	var sv = main.survival
+	var mu = main.mutants
+	var O = load("res://scripts/oases.gd")
+	var W = load("res://scripts/water.gd")
+	var B = load("res://scripts/building.gd")
+	var banners: Array = []
+	oa.message.connect(func(t): banners.append(t))
+	b.load_data([])
+	mu.clear()
+	inv.load_data({})
+	w.load_data({})
+	main.farming.load_data({})
+	oa.load_data({})
+	var n: int = oa.count()
+	check(n >= 3 and n <= 5, "%d oases in this world" % n)
+	var far_ok := true
+	var apart_ok := true
+	for i in n:
+		var p: Vector3 = oa.list[i].pos
+		far_ok = far_ok and Vector2(p.x, p.z).length() >= O.MIN_R - 0.01 and Vector2(p.x, p.z).length() <= O.MAX_R + 0.01
+		for j in range(i + 1, n):
+			apart_ok = apart_ok and Vector2(p.x, p.z).distance_to(Vector2(oa.list[j].pos.x, oa.list[j].pos.z)) >= O.SPACING
+	check(far_ok and apart_ok, "out in the desert (%d to %d m from the base) and far apart" % [int(O.MIN_R), int(O.MAX_R)])
+	var again: Array = O.find_spots(main.world_seed, main.terrain, oa._avoid)
+	check(again.size() == n and again.all(func(q): return oa.list.any(func(o): return o.pos.distance_to(q) < 0.01)), "the same world has the same oases")
+	var other: Array = O.find_spots(main.world_seed + 99, main.terrain, oa._avoid)
+	check(not other.is_empty() and not (other.size() == n and other.all(func(q): return oa.list.any(func(o): return o.pos.distance_to(q) < 0.01))), "another world has others")
+	check(not oa.list[0].has_nest and oa.list.any(func(o): return o.has_nest), "the nearest has no nest, but at least one has (%s)" % str(oa.list.map(func(o): return o.has_nest)))
+	var clear_ok := true
+	for o in oa.list:
+		for v in oa._avoid:
+			if Vector2(v.x, v.z).distance_to(Vector2(o.pos.x, o.pos.z)) < O.CLEAR_R:
+				clear_ok = false
+	check(clear_ok, "no rock, tree or wreck in the ponds")
+	var wild: int = 0
+	var nest_i: int = -1
+	for i in n:
+		if oa.list[i].has_nest:
+			nest_i = i if nest_i < 0 else nest_i
+	var wp: Vector3 = oa.list[wild].pos
+	var wc: Vector2i = W.cell_of(wp.x, wp.z)
+	check(w.is_soil(wc) and w.green_of(wc) > 0.5, "a wild spring keeps the land round it green (%.2f)" % w.green_of(wc))
+	var np: Vector3 = oa.list[nest_i].pos
+	check(not w.cells.has(W.cell_of(np.x, np.z)), "a nest's oasis is dead sand")
+	check(oa.wild_green() > 1.0 and main.raids.lure() == 0, "wild oasis green doesn't draw the waves (wild %.1f, lure %d)" % [oa.wild_green(), main.raids.lure()])
+	# Finding it.
+	main.player.global_position = wp + Vector3(0, 1, O.FIND_R - 5.0)
+	mu.clear()
+	oa.list[wild].guards = 0  # guards are tested below
+	oa.tick(0.5)
+	check(oa.list[wild].found and banners.size() > 0 and banners.back().contains("found an oasis"), "walking up finds it: " + (banners.back() if banners.size() > 0 else ""))
+	# The spring.
+	sv.water = 30.0
+	check(oa.prompt("oasis:spring:%d" % wild).contains("[E] Drink"), "spring: " + oa.prompt("oasis:spring:%d" % wild).replace("\n", " / "))
+	inv.add("watering_can", 1)
+	w.can = 0.0
+	check(oa.prompt("oasis:spring:%d" % wild).contains("fill the watering can"), "with a can it fills that too")
+	main.interact("oasis:spring:%d" % wild)
+	check(is_equal_approx(sv.water, sv.MAX) and is_equal_approx(w.can, W.CAN_MAX), "E: drunk your fill (%.0f) and the can is full (%.0f L)" % [sv.water, w.can])
+	check(oa.prompt("oasis:spring:%d" % wild).contains("had your fill"), "then: had your fill")
+	# Reeds and clay.
+	var got := 0
+	for k in 6:
+		got += oa.take(wild, "reeds")
+	check(got == O.REEDS_DAY and inv.count_of("reeds") == O.REEDS_DAY, "cut %d reeds a day" % got)
+	check(oa.prompt("oasis:reeds:%d" % wild).contains("Cut for today"), "then: " + oa.prompt("oasis:reeds:%d" % wild).replace("\n", " / "))
+	main.interact("oasis:clay:%d" % wild)
+	check(inv.count_of("clay") == O.TAKE and oa.prompt("oasis:clay:%d" % wild).contains("%d left" % (O.CLAY_DAY - O.TAKE)), "E digs %d clay" % O.TAKE)
+	var Items = load("res://scripts/items.gd")
+	check(Items.can_craft("fibre", inv), "reeds strip into fibre at the workbench")
+	oa.on_tally()
+	check(oa.list[wild].reeds == 0 and oa.list[wild].clay == 0, "they come back by morning")
+	# The stash.
+	check(oa.prompt("oasis:stash:%d" % wild).contains("Search it"), "an old stash")
+	main.interact("oasis:stash:%d" % wild)
+	check(inv.count_of("seed_saffron") >= 2 and inv.count_of("seed_dragon_fruit") >= 1, "it holds rare seeds (%d saffron, %d dragon fruit)" % [inv.count_of("seed_saffron"), inv.count_of("seed_dragon_fruit")])
+	check(oa.search_stash(wild).is_empty() and oa.prompt("oasis:stash:%d" % wild) == "" and not oa._nodes[wild].stash.visible, "once")
+	# Guards.
+	oa.list[wild].guards = O.GUARDS
+	main.player.global_position = wp + Vector3(0, 1, O.WAKE_R - 5.0)
+	mu.top_up(1)
+	var wanderers: int = mu.alive().filter(func(m): return m.guard_of < 0).size()
+	oa.tick(0.5)
+	var gs: Array = oa.guards_of(wild)
+	check(gs.size() == O.GUARD_CAP and oa.list[wild].guards == O.GUARDS - O.GUARD_CAP, "coming close wakes %d guards" % gs.size())
+	check(gs.all(func(m): return Vector2(m.position.x - wp.x, m.position.z - wp.z).length() < 8.0 and Vector2(m.home.x, m.home.z).distance_to(Vector2(wp.x, wp.z)) < 0.01), "they guard the pond")
+	check(mu.top_up(2) == 0 and mu.alive().filter(func(m): return m.guard_of < 0).size() == wanderers, "guards don't count as the desert's wanderers")
+	check(oa.prompt("oasis:post:%d" % wild).contains("Kill the guards first (3 left)"), "claim post: " + oa.prompt("oasis:post:%d" % wild).replace("\n", " / "))
+	check(not oa.claim(wild), "can't claim it while they're about")
+	var saved_guard: Dictionary = gs[0].save_data()
+	for m in gs:
+		m.take_hit(1000.0, m.global_position, Vector3.FORWARD)
+	check(oa.guards_of(wild).is_empty(), "guards killed")
+	check(oa.prompt("oasis:post:%d" % wild).contains("You need 6 wood, 2 cloth"), "then it needs materials: " + oa.prompt("oasis:post:%d" % wild).replace("\n", " / "))
+	inv.add("wood", 6)
+	inv.add("cloth", 2)
+	check(oa.prompt("oasis:post:%d" % wild).contains("[E] Claim it"), "with them: [E] Claim it")
+	var wg_before: float = oa.wild_green()
+	main.interact("oasis:post:%d" % wild)
+	check(oa.list[wild].claimed and inv.count_of("wood") == 0 and inv.count_of("cloth") == 0, "claimed (paid)")
+	check(b.outposts.size() == 1 and oa._nodes[wild].zone != null and oa._nodes[wild].flag.visible, "it gets a build zone, a ring of stakes and a flag")
+	var post: Vector3 = oa.list[wild].post_pos
+	var fslot: Dictionary = B.slot_for("foundation", post + Vector3(4, 0, 0), 0)
+	var ev: Dictionary = b.evaluate("foundation", fslot)
+	check(b.in_zone("foundation", fslot) and ev.ok, "a foundation can go down at the outpost (%s)" % ev.reason)
+	var far_slot: Dictionary = B.slot_for("foundation", post + Vector3(O.OUTPOST_R + 6.0, 0, 0), 0)
+	check(not b.in_zone("foundation", far_slot), "but not past its zone")
+	var fkey: String = b.place("foundation", fslot, ev.y)
+	check(b.pieces.has(fkey), "built a foundation at the outpost")
+	main.livable.refresh(false)
+	var shelter_before: int = int(main.livable.parts.shelter)
+	var wslot: Dictionary = B.slot_for("wall", post + Vector3(4, 0, 0), 0)
+	var wev: Dictionary = b.evaluate("wall", wslot)
+	var wkey: String = b.place("wall", wslot, wev.y) if wev.ok else ""
+	main.livable.refresh(false)
+	check(wkey != "" and int(main.livable.parts.shelter) == shelter_before, "a wall at the outpost doesn't count for the base's livable score (%s, shelter %d -> %d)" % [wev.reason, shelter_before, int(main.livable.parts.shelter)])
+	main._process(0.0)
+	check(oa._nodes[wild].zone.highlighted() == false, "the ring lights only in build mode")
+	oa.set_highlight(true)
+	check(oa._nodes[wild].zone.highlighted(), "and lights in build mode")
+	oa.set_highlight(false)
+	check(oa.wild_green() < wg_before - 1.0, "a claimed oasis' green is yours: it counts for the lure (wild green %.1f, was %.1f)" % [oa.wild_green(), wg_before])
+	# A claimed spring waters further.
+	var edge: Vector2i = W.cell_of(wp.x + O.SPRING_R + 2.0, wp.z)
+	w.clear_cell(edge)
+	oa.on_tally()
+	check(w.is_soil(edge) and w.cell_info(edge).wet >= W.DAY_NEED - 0.01, "a claimed spring waters the land further out (%.1f L)" % w.cell_info(edge).wet)
+	# The nest.
+	var no: Dictionary = oa.list[nest_i]
+	var nc: Vector2i = W.cell_of(no.nest_pos.x, no.nest_pos.z)
+	w.add_life(nc, W.SOIL_NEED, 0.5)
+	oa.on_tally()
+	check(not w.cells.has(nc), "a living nest kills the land round it every morning")
+	check(oa._nodes[nest_i].stumps.visible and not oa._nodes[nest_i].palms.visible, "its palms are dead stumps")
+	check(oa.prompt("oasis:post:%d" % nest_i).contains("Burn out the mutant nest first"), "claim post: burn the nest first")
+	inv.remove("fuel", inv.count_of("fuel"))
+	check(oa.prompt("oasis:nest:%d" % nest_i).contains("You need a fuel can"), "nest without fuel: " + oa.prompt("oasis:nest:%d" % nest_i).replace("\n", " / "))
+	check(not oa.burn_nest(nest_i), "can't burn it without fuel")
+	var g0: int = no.guards
+	no.guards = 1
+	oa.tick(O.NEST_BREED)
+	check(no.guards == 2, "a nest breeds more guards (%d)" % no.guards)
+	no.guards = g0
+	inv.add("fuel", 1)
+	check(oa.prompt("oasis:nest:%d" % nest_i).contains("[E] Burn it"), "with a fuel can: [E] Burn it")
+	main.interact("oasis:nest:%d" % nest_i)
+	check(no.nest == "burning" and inv.count_of("fuel") == 0 and oa._nodes[nest_i].flames.visible, "it burns (one fuel can)")
+	var sd: Dictionary = oa.save_data()
+	check(sd.list[nest_i].nest == "gone", "saved while burning, it counts as burned")
+	oa._process(O.BURN_TIME + 0.1)
+	check(no.nest == "gone" and not oa._nodes[nest_i].nest.visible and oa._nodes[nest_i].palms.visible, "it burns out and the palms come back")
+	oa.on_tally()
+	var npc: Vector2i = W.cell_of(no.pos.x, no.pos.z)
+	check(w.is_soil(npc) and w.cell_info(npc).wet >= W.DAY_NEED - 0.01, "the spring starts bringing the land back")
+	for k in 3:
+		w.on_morning()
+	check(w.green_of(npc) > 0.3, "and it greens over the mornings (%.2f)" % w.green_of(npc))
+	# Saving and loading.
+	sd = oa.save_data()
+	var mud: Dictionary = mu.save_data()
+	oa.load_data({"list": []})
+	check(not oa.list[wild].claimed and b.outposts.is_empty() and oa._nodes[wild].zone == null, "(reset)")
+	oa.load_data(sd)
+	check(oa.list[wild].claimed and oa.list[wild].stash and oa.list[wild].found and b.outposts.size() == 1 and oa._nodes[wild].zone != null, "loading brings the outpost back")
+	check(oa.list[nest_i].nest == "gone" and not oa._nodes[nest_i].nest.visible, "and the burned nest stays burned")
+	check(saved_guard.get("guard", -1) == wild, "guards are saved as guards")
+	mu.load_data({"list": [saved_guard]})
+	check(mu.alive().size() == 1 and mu.alive()[0].guard_of == wild, "and load as guards")
+	w.load_data({})
+	oa.load_data({})
+	check(not oa.list[wild].claimed and not oa.list[wild].found and oa.list[nest_i].nest == "alive" and w.green_of(wc) > 0.5, "an older save gets a new world's oases, green round the wild springs")
+	oa.load_data({"list": [5, "x", {"guards": "a", "claimed": "yes", "nest": 3, "reeds": 999}]})
+	check(oa.count() == n and oa.list[2].guards == (O.NEST_GUARDS if oa.list[2].has_nest else O.GUARDS) and not oa.list[2].claimed and oa.list[2].reeds == O.REEDS_DAY, "a broken save falls back to defaults")
+	oa.load_data({})
+	check(main.collect_save_data().has("oases"), "the game saves the oases")
+	# Map.
+	oa.list[wild].found = true
+	main.map_ui.toggle()
+	check(main.map_ui.is_open(), "the map opens with a found oasis on it")
+	main.map_ui.toggle()
+	oa.message.disconnect(oa.message.get_connections().back().callable)
+	inv.load_data({})
+	mu.clear()
+	b.load_data([])
+	w.load_data({})
+	oa.load_data({"list": []})

@@ -41,6 +41,7 @@ const Farming = preload("res://scripts/farming.gd")
 const Animals = preload("res://scripts/animals.gd")
 const Raids = preload("res://scripts/raids.gd")
 const Livable = preload("res://scripts/livable.gd")
+const Oases = preload("res://scripts/oases.gd")
 
 ## Testing aid (temporary): a green box by the spawn point that holds a full
 ## stack of every item and tops your cash up to $2000 each time you open it.
@@ -104,6 +105,7 @@ var farming: Farming
 var animals: Animals
 var raids: Raids
 var livable: Livable
+var oases: Oases
 var waves: Waves
 var guns: Guns
 var traps: Traps
@@ -486,6 +488,7 @@ func _ready() -> void:
 	farming.spilled.connect(loot.spawn_drop)
 	day_night.hour_changed.connect(farming.on_hour)
 	_setup_life()
+	_setup_oases()
 
 	day_night.day_started.connect(_on_morning)
 	day_night.day_started.connect(water.on_morning)
@@ -584,6 +587,7 @@ func _process(delta: float) -> void:
 					select_hotbar(i)
 		hud.build_label.text = build_mode.status_text() if build_mode.active else ""
 		base_zone.set_highlight(build_mode.active)
+		oases.set_highlight(build_mode.active)
 		var held: Dictionary = inventory.selected_stack()
 		var hand: String = "" if build_mode.active or survival.dead or held.is_empty() else held.item
 		if build_mode.active:
@@ -1180,6 +1184,8 @@ func _prompt_for(id: String) -> String:
 		return "[E] Pick up stone"
 	if id.begins_with("animal:"):
 		return animals.prompt(id)
+	if id.begins_with("oasis:"):
+		return oases.prompt(id)
 	if id.begins_with("fire:"):
 		return building.prompt(id) + animals.cook_prompt(building.pieces.get(id.trim_prefix("fire:"), {}))
 	if id.begins_with("machine:"):
@@ -1322,6 +1328,9 @@ func interact(id: String) -> void:
 		return
 	if id.begins_with("animal:"):
 		animals.butcher(id)
+		return
+	if id.begins_with("oasis:"):
+		oases.interact(id)
 		return
 	if id.begins_with("machine:"):
 		use_machine(id.trim_prefix("machine:"))
@@ -1762,6 +1771,37 @@ func _setup_life() -> void:
 	day_night.day_started.connect(livable.on_morning)
 
 
+## v1.18: hidden oases out in the desert, claimed as outposts (oases.gd).
+func _setup_oases() -> void:
+	oases = Oases.new()
+	oases.name = "Oases"
+	oases.terrain = terrain
+	oases.water = water
+	oases.building = building
+	oases.mutants = mutants
+	oases.inventory = inventory
+	oases.survival = survival
+	oases.player = player
+	oases.player_dead = func(): return survival == null or survival.dead
+	oases.pay = pay_near
+	oases.has_cost = has_near
+	oases.world_seed = world_seed
+	add_child(oases)
+	var avoid: Array = []
+	for c in props.get_children():  # once per world: every prop (a few hundred)
+		if c is Node3D:
+			avoid.append(c.position)
+	for p in props.pebbles:
+		avoid.append(p.pos)
+	oases.setup(avoid)
+	oases.green_new_world()
+	oases.message.connect(hud.show_banner)
+	oases.pickup.connect(hud.show_pickup)
+	oases.spilled.connect(loot.spawn_drop)
+	water.morning_tally.connect(oases.on_tally)
+	raids.wild_green = oases.wild_green
+
+
 ## A mutant clawed you: lose health, red flash on the side it came from.
 func _on_player_hit(dmg: float, from: Vector3, kind := "walker") -> void:
 	if survival.dead:
@@ -1926,6 +1966,7 @@ func collect_save_data() -> Dictionary:
 		"farming": farming.save_data(),
 		"animals": animals.save_data(),
 		"livable": livable.save_data(),
+		"oases": oases.save_data(),
 	}
 
 
@@ -1983,6 +2024,8 @@ func apply_save_data(data: Dictionary) -> void:
 	building.sites_load_data(data.get("sites", []))
 	var wd = data.get("water", {})
 	water.load_data(wd if wd is Dictionary else {})  # after the sprinklers it pipes to
+	var od = data.get("oases", {})
+	oases.load_data(od if od is Dictionary else {})  # after the water (older saves: green round the wild springs)
 	var fd = data.get("farming", {})
 	farming.load_data(fd if fd is Dictionary else {})
 	var ad = data.get("animals", {})

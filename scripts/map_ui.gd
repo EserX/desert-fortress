@@ -98,6 +98,20 @@ func _draw_map() -> void:
 		var col := Color(0.25, 0.4, 0.1) if not main.loot.is_opened(id) else Color(0.25, 0.4, 0.1, 0.35)
 		_canvas.draw_rect(Rect2(sp - Vector2(7, 7), Vector2(14, 14)), col)
 		_canvas.draw_string(font, sp + Vector2(10, 5), "Supply", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, INK)
+	# Oases you've found (v1.18): blue, a purple dot while a nest stands, a ring once claimed.
+	if main.oases:
+		var scale: float = RADIUS_PX / main.terrain.PLAY_RADIUS
+		for i in main.oases.list.size():
+			var o: Dictionary = main.oases.list[i]
+			if not o.found:
+				continue
+			var op := to_map(o.pos)
+			_canvas.draw_circle(op, 6.0, Color(0.2, 0.5, 0.78))
+			if main.oases.nest_alive(i):
+				_canvas.draw_circle(op + Vector2(8, -7), 4.0, Color(0.45, 0.12, 0.5))
+			if o.claimed:
+				_canvas.draw_arc(to_map(o.post_pos), main.oases.OUTPOST_R * scale, 0.0, TAU, 32, Color(0.8, 0.15, 0.1, 0.7), 1.5)
+			_canvas.draw_string(font, op + Vector2(10, 14), ("Outpost %d" % (i + 1)) if o.claimed else "Oasis", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, INK)
 	# During a wave: the mutants coming (the radio picks them up), and a ring
 	# for the build zone.
 	_canvas.draw_arc(b, main.building.zone_radius * RADIUS_PX / main.terrain.PLAY_RADIUS, 0.0, TAU, 48, Color(0.8, 0.15, 0.1, 0.5), 1.5)
@@ -112,7 +126,7 @@ func _draw_map() -> void:
 	_canvas.draw_colored_polygon(PackedVector2Array([pp + f * 12, pp - f * 7 + s * 7, pp - f * 3, pp - f * 7 - s * 7]), Color(0.1, 0.3, 0.9))
 	# Legend.
 	var y := 120.0
-	for line in ["MAP", "Brown block: wreck", "Grey corner: ruin", "Green dot: still has loot", "Green square: supply crate", "Red dots: tonight's wave", "Blue arrow: you", "Brown to green: your land", "", "M or Esc closes"]:
+	for line in ["MAP", "Brown block: wreck", "Grey corner: ruin", "Green dot: still has loot", "Green square: supply crate", "Blue: oasis (purple: nest)", "Red dots: tonight's wave", "Blue arrow: you", "Brown to green: your land", "", "M or Esc closes"]:
 		_canvas.draw_string(font, Vector2(30, y), line, HORIZONTAL_ALIGNMENT_LEFT, -1, 22 if line == "MAP" else 16, Color(1, 0.95, 0.85))
 		y += 26.0
 	_draw_livable(font)

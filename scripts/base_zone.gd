@@ -10,6 +10,8 @@ const DASHES := 140
 
 var terrain  # Terrain
 var radius := Building.ZONE_RADIUS
+## Centre of the ring (x, z): the flag at the origin, or an outpost's post (v1.18).
+var center := Vector2.ZERO
 var _glow: MultiMeshInstance3D
 
 
@@ -51,7 +53,7 @@ func _build() -> void:
 	var stakes := int(STAKES * r / Building.ZONE_RADIUS)
 	for i in stakes:
 		var a := TAU * i / stakes
-		var p := Vector3(cos(a) * r, 0, sin(a) * r)
+		var p := Vector3(center.x + cos(a) * r, 0, center.y + sin(a) * r)
 		p.y = terrain.surface_height(p.x, p.z)
 		var t := Transform3D(Basis(Vector3.UP, -a).rotated(Vector3(sin(a), 0, -cos(a)), 0.06), p + Vector3(0, 0.4, 0))
 		posts.append(t)
@@ -67,7 +69,7 @@ func _build() -> void:
 	var dashes: Array = []
 	for i in DASHES:
 		var a := TAU * (i + 0.5) / DASHES
-		var p := Vector3(cos(a) * r, 0, sin(a) * r)
+		var p := Vector3(center.x + cos(a) * r, 0, center.y + sin(a) * r)
 		p.y = terrain.surface_height(p.x, p.z) + 0.04
 		# The long side runs along the circle.
 		dashes.append(Transform3D(Basis(Vector3.UP, -a - PI / 2), p))

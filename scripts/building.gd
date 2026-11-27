@@ -160,6 +160,8 @@ var terrain  # Terrain
 var _by_type := {}
 ## Grown by base upgrades from the shop.
 var zone_radius := ZONE_RADIUS
+## v1.18: claimed outposts' build zones, [Vector2 centre, radius] (set by oases.gd).
+var outposts: Array = []
 var chest_slots := CHEST_SLOTS
 ## main slot key -> {"type", "slot", "y", "node", "open" (gates), "tier", "hp", "built_at"}
 var pieces := {}
@@ -473,10 +475,16 @@ func evaluate(type: String, slot: Dictionary) -> Dictionary:
 	return {"y": g.y, "ok": true, "reason": ""}
 
 
-## True if a piece in this slot is inside the base build zone.
+## True if a piece in this slot is inside the base build zone or an outpost's.
 func in_zone(type: String, slot: Dictionary) -> bool:
 	var c := slot_center(slot, type)
-	return Vector2(c.x, c.z).length() <= zone_radius
+	var p := Vector2(c.x, c.z)
+	if p.length() <= zone_radius:
+		return true
+	for o in outposts:
+		if p.distance_to(o[0]) <= o[1]:
+			return true
+	return false
 
 
 ## Storage upgrade: every chest (and every new one) gets n slots.

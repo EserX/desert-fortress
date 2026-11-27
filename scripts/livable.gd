@@ -89,6 +89,13 @@ func _in_zone(p: Vector2) -> bool:
 	return p.length() <= building.zone_radius
 
 
+## Pieces of these types inside the base's build zone (not at outposts).
+func _zone_keys(types: Array) -> Array:
+	return building.keys_of(types).filter(func(k):
+		var p: Vector3 = building.pieces[k].node.global_position
+		return _in_zone(Vector2(p.x, p.z)))
+
+
 ## The five parts of the livable score, each 0 to PART_MAX.
 func compute_parts() -> Dictionary:
 	var palms := 0
@@ -107,18 +114,18 @@ func compute_parts() -> Dictionary:
 	for c in water.cells:
 		if _in_zone(Water.cell_center(c)):
 			green += float(water.cells[c].green)
-	var roofs: int = building.keys_of(["roof", "tri_roof"]).size()
-	var shelter: int = building.keys_of(SHELTER_TYPES).size()
-	if not building.keys_of(["chest"]).is_empty():
+	var roofs: int = _zone_keys(["roof", "tri_roof"]).size()
+	var shelter: int = _zone_keys(SHELTER_TYPES).size()
+	if not _zone_keys(["chest"]).is_empty():
 		shelter += 2
-	if not building.keys_of(["workbench"]).is_empty():
+	if not _zone_keys(["workbench"]).is_empty():
 		shelter += 2
-	var wells: int = building.keys_of(["well"]).size()
+	var wells: int = _zone_keys(["well"]).size()
 	var wet: float = 6.0 + (water.capacity - Water.STORE_BASE) / 200.0 * 3.0 + (3.0 if water.pump else 0.0) + 2.0 * wells
 	var out := {
 		"shade": palms * PALM_SHADE + roofs * ROOF_SHADE,
 		"water": wet,
-		"food": food * FOOD_PLANT + (FIRE_FOOD if not building.keys_of(["fire_pit"]).is_empty() else 0.0),
+		"food": food * FOOD_PLANT + (FIRE_FOOD if not _zone_keys(["fire_pit"]).is_empty() else 0.0),
 		"plants": green * GREEN_PLANTS,
 		"shelter": float(shelter),
 	}

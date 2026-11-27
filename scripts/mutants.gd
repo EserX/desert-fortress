@@ -85,7 +85,7 @@ func top_up(day: int) -> int:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash("mutants:%d:%d" % [world_seed, day])
 	var n := 0
-	while alive().filter(func(m): return not m.hunter).size() < WANDERERS:
+	while alive().filter(func(m): return not m.hunter and m.guard_of < 0).size() < WANDERERS:
 		spawn("walker", random_spot(rng))
 		n += 1
 	return n
@@ -149,6 +149,8 @@ func load_data(data: Dictionary) -> void:
 		var h: Array = d.get("home", [])
 		if h.size() == 3:
 			m.home = Vector3(h[0], h[1], h[2])
+		var g = d.get("guard", -1)
+		m.guard_of = int(g) if (g is int or g is float) else -1
 		if d.get("hunter", false):
 			var b = d.get("base", [])
 			m.make_hunter(m.home, Vector3(float(b[0]), float(b[1]), float(b[2])) if b is Array and b.size() == 3 else Vector3.INF)

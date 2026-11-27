@@ -62,6 +62,8 @@ const ITEMS := {
 	# v1.16 hunting: animals give raw meat, cooked at a burning fire pit.
 	"raw_meat": {"name": "Raw meat", "weight": 0.5, "stack": 10},
 	"cooked_meat": {"name": "Cooked meat", "weight": 0.4, "stack": 10},
+	# v1.18 oases: reeds cut at the pond (clay is dug from the bank there too).
+	"reeds": {"name": "Reeds", "weight": 0.2, "stack": 30},
 }
 
 ## What each kind of container can hold: item -> [min, max]. A negative min
@@ -71,6 +73,7 @@ const LOOT_TABLES := {
 	"trunk": {"scrap": [2, 5], "nails": [2, 6], "cloth": [0, 2], "water": [0, 1], "ammo_9mm": [-6, 6], "shells": [-8, 4], "fuel": [-1, 2]},
 	"crate": {"wood": [2, 5], "nails": [1, 4], "canned_food": [0, 2], "water": [0, 2], "cement": [0, 1]},
 	"cache": {"scrap": [3, 8], "nails": [6, 14], "ammo_9mm": [6, 18], "cloth": [0, 3], "cement": [0, 2], "fuel": [0, 2], "shells": [-4, 6], "medkit": [-2, 1], "canned_food": [0, 2]},
+	"oasis": {"seed_saffron": [2, 4], "seed_dragon_fruit": [1, 3], "seed_date_palm": [0, 2], "water": [1, 2]},
 	"supply": {"wood": [4, 8], "scrap": [3, 7], "nails": [8, 16], "canned_food": [1, 3], "water": [2, 4], "cloth": [1, 3], "cement": [1, 3], "ammo_9mm": [8, 20], "pistol": [-1, 1], "shells": [2, 8], "ammo_762": [-2, 6], "shotgun": [-3, 1], "rifle": [-4, 1], "fuel": [1, 4]},
 }
 
@@ -87,6 +90,7 @@ const RECIPES := {
 	"watering_can": {"count": 1, "cost": {"scrap": 2, "nails": 2}, "info": "fill it at the main well, LMB pours water on the sand"},
 	"water_pipe": {"count": 4, "cost": {"scrap": 2, "nails": 1}, "info": "hold it: click the main well, then a sprinkler (needs the hand pump)"},
 	"cloth": {"count": 2, "cost": {"cotton": 3}, "info": "spin cotton from your fields into cloth"},
+	"fibre": {"count": 2, "cost": {"reeds": 3}, "info": "strip oasis reeds for fibre"},
 	"rope": {"count": 1, "cost": {"fibre": 3}, "info": "twist agave fibre into rope (sells well at the market)"},
 	"metal_detector": {"count": 1, "cost": {"scrap": 6, "nails": 4, "cloth": 2}, "info": "finds caches buried near the base"},
 	"spike_barricade": {"count": 1, "cost": {"wood": 4, "nails": 4}, "info": "build it in build mode"},

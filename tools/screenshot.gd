@@ -71,6 +71,11 @@ var shots := [
 	{"name": "61_raid", "pos": Vector3(24, 0, 31), "yaw": 0.0, "pitch": -0.3, "hour": 17.2, "raid": true},
 	{"name": "62_livable_map", "pos": Vector3(20, 0, 40), "yaw": 0.9, "pitch": 0.0, "hour": 10.0, "map": true, "farm": true, "livable": true},
 	{"name": "63_livable", "pos": Vector3(24, 0, 29.5), "yaw": 0.0, "pitch": -0.42, "hour": 12.5, "farm": true, "livable": true},
+	{"name": "64_oasis", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": -0.25, "hour": 9.5, "oasis": "wild"},
+	{"name": "65_nest", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": -0.25, "hour": 10.5, "oasis": "nest"},
+	{"name": "66_nest_burning", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": -0.25, "hour": 16.5, "oasis": "burning"},
+	{"name": "67_outpost", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": -0.3, "hour": 15.0, "oasis": "outpost"},
+	{"name": "68_oasis_map", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 10.0, "map": true, "oasis": "map"},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -201,6 +206,8 @@ func _process(_d: float) -> bool:
 			main.animals.clear()
 		if s.get("raid", false):
 			_raid_sample()
+		if s.has("oasis"):
+			_oasis_sample(p, s.oasis)
 		if s.get("horde", false):
 			main.building.load_data([])
 			main.building.sites_load_data([])
@@ -953,3 +960,57 @@ func _machines_sample() -> void:
 	put.call("log_stakes", -6, 6, 0, 1)
 	put.call("log_stakes", -4, 6, 0, 5)
 	main.power.tick(0.25)
+
+
+## The oases (v1.18): stand back from a wild one, a nest (burning), or a claimed outpost.
+func _oasis_sample(p: Node3D, kind: String) -> void:
+	var oa = main.oases
+	main.mutants.clear()
+	var want_nest := kind == "nest" or kind == "burning"
+	var i := 0
+	for k in oa.count():
+		if oa.list[k].has_nest == want_nest:
+			i = k
+			break
+	var o: Dictionary = oa.list[i]
+	if kind == "map":
+		for k in oa.count():
+			oa.list[k].found = true
+		oa.list[0].claimed = true
+		oa._apply_zones()
+		oa._refresh(0)
+		return
+	if kind == "burning":
+		main.inventory.add("fuel", 1)
+		oa.burn_nest(i)
+		oa.list[i].burn = 2.0
+		oa._process(0.0)
+		oa.set_process(false)
+	if kind == "outpost":
+		oa.set_process(true)
+		o.claimed = true
+		o.nest = "gone" if o.has_nest else "none"
+		oa._apply_zones()
+		oa._refresh(i)
+		var b = main.building
+		var B = load("res://scripts/building.gd")
+		var post: Vector3 = o.post_pos
+		var away: Vector3 = (post - o.pos).normalized()
+		for d in [Vector3(0, 0, 0), Vector3(2, 0, 0)]:
+			var fs: Dictionary = B.slot_for("foundation", post + away * 6.0 + d, 0)
+			var ev: Dictionary = b.evaluate("foundation", fs)
+			if ev.ok:
+				b.place("foundation", fs, ev.y)
+			else:
+				print("outpost foundation: ", ev.reason)
+		var ws: Dictionary = B.slot_for("wall", post + away * 6.0 + Vector3(0, 0, 1), 0)
+		var wv: Dictionary = b.evaluate("wall", ws)
+		if wv.ok:
+			b.place("wall", ws, wv.y)
+	var target: Vector3 = o.nest_pos.lerp(o.pos, 0.4) if want_nest else o.pos
+	var dir := Vector3(target.x, 0, target.z).normalized()
+	var from := target - dir * 17.0
+	from.y = main.terrain.surface_height(from.x, from.z)
+	p.position = from
+	var d := target - from
+	p.rotation.y = atan2(-d.x, -d.z)

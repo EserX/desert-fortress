@@ -47,6 +47,8 @@ var no_dig: Array = []
 var _chunks := {}  # Vector2i -> {"mesh": MeshInstance3D, "col": CollisionShape3D}
 var _mat: StandardMaterial3D
 var _seed := 0
+## Goes up when the whole dug ground is replaced (loading); single digs emit ground_changed.
+var revision := 0
 
 
 ## Exact height of the rendered/collision surface at world (x, z), matching the
@@ -470,6 +472,7 @@ func save_data() -> Dictionary:
 ## Doesn't emit ground_changed: what stands on it is loaded as saved.
 func load_data(data: Dictionary) -> void:
 	var old := delta.duplicate()
+	revision += 1
 	delta.fill(0.0)
 	var d: Array = data.get("deltas", [])
 	var n := DIG_CELLS + 1

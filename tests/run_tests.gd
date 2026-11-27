@@ -1351,12 +1351,17 @@ func _start_spitter() -> void:
 	chase_walker.rotation.y = PI
 
 
-## A wave mutant smells you behind a wall and breaks through it.
+## A wave mutant smells you behind a wall and breaks through it. You are shut
+## in a 2 x 2 m box (since v1.10 they walk round a lone wall); the wall facing
+## it is the weak one, so that is the way in.
 func _start_break_in() -> void:
 	var b = main.building
 	var player = main.player
 	var slot := {"kind": "edge", "cx": 0, "cz": -2, "dir": 0, "level": 0}
 	break_wall = b.place("wall", slot, b.evaluate("wall", slot).y, false, 0, 60.0)
+	for e in b.cell_edges(0, -2, 0):
+		if b.slot_key(e) != break_wall:
+			b.place("wall", e, b.evaluate("wall", e).y)
 	player.position = Vector3(1, main.terrain.surface_height(1, -3.45), -3.45)
 	player.velocity = Vector3.ZERO
 	main.survival.health = 100.0
@@ -1548,6 +1553,155 @@ func _check_digging() -> void:
 
 var pit_walker: Node
 var deep_walker: Node
+var nav_walker: Node
+var nav_inside := Vector3.ZERO
+
+
+## A ring of walls round squares cx0..cx0+2, cz0..cz0+2 (6 x 6 m), with a
+## doorway in the middle of the south side. Returns {"door", "east" (middle of
+## the east side), "walls": [keys]}.
+func _nav_box(cx0: int, cz0: int, door_open: bool, foundations := false) -> Dictionary:
+	var b = main.building
+	var out := {"walls": []}
+	if foundations:
+		for dz in 3:
+			for dx in 3:
+				var f := {"kind": "cell", "cx": cx0 + dx, "cz": cz0 + dz, "dir": 0, "level": 0}
+				b.place("foundation", f, b.evaluate("foundation", f).y)
+	for k in 3:
+		var sides := [
+			{"kind": "edge", "cx": cx0 + k, "cz": cz0, "dir": 0, "level": 0},
+			{"kind": "edge", "cx": cx0 + k, "cz": cz0 + 3, "dir": 0, "level": 0},
+			{"kind": "edge", "cx": cx0, "cz": cz0 + k, "dir": 1, "level": 0},
+			{"kind": "edge", "cx": cx0 + 3, "cz": cz0 + k, "dir": 1, "level": 0},
+		]
+		for i in 4:
+			var e: Dictionary = sides[i]
+			var door: bool = i == 1 and k == 1
+			var key: String = b.place("doorway" if door else "wall", e, b.evaluate("wall", e).y, door and door_open)
+			if door:
+				out.door = key
+			else:
+				out.walls.append(key)
+			if i == 3 and k == 1:
+				out.east = key
+	return out
+
+
+## v1.10: the nav grid and its flow fields (worked out on the spot, no physics).
+func _test_nav() -> void:
+	var b = main.building
+	var t = main.terrain
+	var nav = main.nav
+	main.mutants.clear()
+	b.load_data([])
+	t.load_data({})
+	check(nav != null and nav.get_parent() == main, "the game has a nav grid")
+	# A 6 x 6 m walled yard at x -12..-6, z 4..10, the gate in the south side open.
+	var box := _nav_box(-6, 2, true)
+	var inside := Vector3(-9, 0, 6)
+	var f = nav.compute_now("player", inside)
+	check(nav.n >= 2 * int(b.zone_radius) and f.ready, "the grid covers the build zone (%d x %d m)" % [nav.n, nav.n])
+	var north := Vector3(-9, 0, -4)
+	var path: Array = nav.trace(f, north)
+	var crossed: Array = nav.pieces_on(path)
+	check(path.size() > 14 and crossed == ["gate"], "from outside, the path goes round to the open gate (%d cells, %s)" % [path.size(), str(crossed)])
+	var straight: float = north.distance_to(inside)
+	check(f.dist[nav.cell_of(north.x, north.z).y * nav.n + nav.cell_of(north.x, north.z).x] > straight + 6.0, "the way round is longer than straight through, but cheaper than a wall")
+	var d: Vector3 = nav.direction("player", Vector3(-9, 0, 1))
+	check(d != Vector3.ZERO and absf(d.x) > 0.5, "a mutant facing the north wall is sent sideways round it (%s)" % str(d))
+	var s0: Vector3 = nav.cell_point(nav.cell_of(-9, 12))
+	var at_gate: Vector3 = nav.direction("player", s0)
+	check(at_gate.z < -0.7, "just outside the gate it heads in through it (%s)" % str(at_gate))
+	# Close the gate: now the way in is the weakest piece.
+	var rev: int = b.revision
+	b.set_gate(box.door, false)
+	check(b.revision > rev and nav.map_stale(), "closing a gate marks the paths out of date")
+	b.damage(box.east, 210.0)
+	f = nav.compute_now("player", inside)
+	var from_n: Array = nav.pieces_on(nav.trace(f, north))
+	var from_e: Array = nav.pieces_on(nav.trace(f, Vector3(4, 0, 2)))
+	var from_s: Array = nav.pieces_on(nav.trace(f, Vector3(-9, 0, 18)))
+	check(from_n == [box.east], "with the gate shut, it goes for the damaged wall (%s)" % str(from_n))
+	check(from_e == [box.east] and from_s == [box.east], "and so does everyone, from every side (%s, %s)" % [str(from_e), str(from_s)])
+	b.repair(box.east)
+	f = nav.compute_now("player", inside)
+	from_n = nav.pieces_on(nav.trace(f, north))
+	check(from_n.size() == 1 and from_n[0] != box.east, "repaired, it picks another wall (%s)" % str(from_n))
+	var lk: String = b.slot_key({"kind": "edge", "cx": -5, "cz": 2, "dir": 0, "level": 0})
+	b.upgrade(lk)
+	b.upgrade(lk)
+	f = nav.compute_now("player", inside)
+	check(not lk in nav.pieces_on(nav.trace(f, north)), "but never the stone wall right in front")
+	# Brutes don't use it.
+	var brute = main.mutants.spawn("brute", north)
+	brute.set_physics_process(false)
+	check(brute._nav_want("player", Vector3.FORWARD) == Vector3.FORWARD and brute.nav_field == "", "Brutes go straight through")
+	var w = main.mutants.spawn("walker", north)
+	w.set_physics_process(false)
+	var wd: Vector3 = w._nav_want("player", Vector3.FORWARD)
+	check(w.nav_field == "player" and wd != Vector3.FORWARD, "Walkers follow the path (%s)" % str(wd))
+	main.mutants.clear()
+	b.load_data([])
+	# Traps cost something; open sand nothing.
+	var ws := {"kind": "obj", "cx": 8, "cz": -8, "dir": 0, "level": 0}
+	b.place("barbed_wire", ws, b.evaluate("barbed_wire", ws).y)
+	nav.rebuild_map()
+	var wc: Vector2i = nav.cell_of(16.5, -15.5)
+	var oc: Vector2i = nav.cell_of(20.5, -15.5)
+	check(nav.cell_cost[wc.y * nav.n + wc.x] > 3.0 and nav.cell_cost[oc.y * nav.n + oc.x] == 0.0, "barbed wire makes a square dearer to cross")
+	b.load_data([])
+	# A deep trench from x -24 to -6 at z -6: the path goes round its end.
+	for k in 10:
+		_dig_pit(-23.0 + k * 2.0, -6.0, 9)
+	var goal := Vector3(-14, 0, 2)
+	f = nav.compute_now("base", goal)
+	var south := Vector3(-14, 0, -14)
+	path = nav.trace(f, south)
+	var lowest := INF
+	for c in path:
+		lowest = minf(lowest, nav.cell_point(c).y)
+	check(path.size() > 18 and lowest > t.BASE_HEIGHT - 1.0, "a 2.25 m trench is walked round, not through (%d cells, lowest %.2f)" % [path.size(), lowest])
+	var pc: Vector2i = nav.cell_of(-14.5, -6.5)
+	check(is_inf(f.dist[pc.y * nav.n + pc.x]), "and there is no way out of it")
+	t.load_data({})
+	nav.rebuild_map()
+	check(not nav.map_stale(), "the map is up to date after a rebuild")
+
+
+## v1.10, real physics: a walker goes round a walled yard on foundations, in
+## through the open gate (stepping up onto the foundation), without touching a wall.
+func _start_nav_walk() -> void:
+	var b = main.building
+	main.mutants.clear()
+	b.load_data([])
+	main.terrain.load_data({})
+	main.day_night.restore(main.day_night.day, 11.0)
+	var box := _nav_box(5, 5, true, true)  # x 10..16, z 10..16, gate at x 13, z 16
+	var top: float = b.foundation_top(6, 6)
+	nav_inside = Vector3(13, top, 11.6)
+	main.player.position = nav_inside
+	main.player.velocity = Vector3.ZERO
+	main.survival.health = 100.0
+	main.survival.dead = false
+	nav_walker = main.mutants.spawn("walker", Vector3(13, 0, 3))
+	nav_walker.make_hunter(Vector3.ZERO)
+	nav_walker.rotation.y = PI
+
+
+func _check_nav_walk() -> void:
+	var b = main.building
+	var p: Vector3 = nav_walker.global_position
+	var hurt: Array = b.pieces.values().filter(func(r): return r.hp < b.max_hp(r))
+	print("    nav walker at ", p, "  player health ", main.survival.health)
+	var in_yard: bool = p.x > 10.0 and p.x < 16.0 and p.z > 10.0 and p.z < 16.0
+	check(in_yard and p.y > b.foundation_top(6, 6) - 0.2, "a walker goes round the walls and in through the open gate, onto the foundations")
+	check(hurt.is_empty() and b.pieces.size() == 21, "without tearing at a wall (%d damaged)" % hurt.size())
+	check(main.survival.health < 100.0, "and gets to you (health %.0f)" % main.survival.health)
+	main.mutants.clear()
+	b.load_data([])
+	main.survival.health = 100.0
+	main.player.position = main.player.spawn_point
 
 
 ## Digs a 2 x 2 m pit centred on (x, z), `times` digs deep.
@@ -2531,7 +2685,11 @@ func _process(_delta: float) -> bool:
 		3300:
 			_check_debris()
 			_check_ladder()
-		3310:
+			_test_nav()
+			_start_nav_walk()
+		3900:
+			_check_nav_walk()
+		3910:
 			if failures.is_empty():
 				print("== ALL TESTS PASSED ==")
 				quit(0)

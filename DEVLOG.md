@@ -2,6 +2,27 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v1.10.0 (2026-11-27): Mutant navigation
+Mutants no longer walk straight at you and claw at the first wall they meet. They find a way round.
+- **Paths round the base:** a 1 m grid covers the build zone and 16 m round it. Mutants inside it follow a shared **flow field** to you (or to the flag if you are out in the desert). Going round costs walking; a wall, closed gate, fence or sandbag wall in the way costs its **hit points** (tearing it down takes time). So:
+  - an **open gate** is the way in, even round the far side of the base;
+  - with every gate shut they go for the **weakest** wall or gate: a damaged one, or wood before scrap or stone (a locked metal door counts double, an electric fence a bit more);
+  - **groups pick the same weak point**, from every side, because they all follow the same field;
+  - **pits and trenches:** a rise they can't climb (2 m or more) can't be taken, so they walk round the end of a trench; a ring with no gap still makes them come straight and fall in, as before. Shallow dips cost a little climbing;
+  - **traps:** barbed wire, spike strips, barricades and spiked pits cost a few metres, so they walk round them when the way round is short. Landmines cost nothing (they don't know they're there). Chests, turrets and other objects are walked round;
+  - **Brutes** ignore all this and come straight through, as before.
+- Mutants now **step up onto foundations** (and other low pieces up to 0.8 m) instead of wrecking them, so a gate in a wall on foundations works.
+- Following a path that is open ahead, a mutant that bumps into a wall corner slides round it for 1.6 s before it starts tearing at it, and never wrecks an open gate it is squeezing through.
+- The paths are redone when you build, open or shut a gate, a piece breaks or gets badly damaged, or the ground is dug, and the path to you when you move 2 m. The work is spread over frames (about 1 ms a frame, a fresh path in about a third of a second) and only done while mutants need it; the map itself is made when the game loads.
+- **Why not Godot's navigation mesh** (the roadmap said "navigation mesh"): the base is built on a grid anyway, and the important part is giving each wall a cost (its hit points) so mutants pick the weakest one, which a navigation mesh can't express. Baking a mesh over ground that is dug all the time would also be slow. A grid flow field is cheap, exact for walls on grid edges, and shared by the whole wave.
+- **Code:** `scripts/nav.gd` (cost map, `rebuild_map()` that only redoes the cells round what changed, `compute_now()`, sliced Dijkstra in `_advance()`, `direction()`, `way_clear()`, `trace()` / `pieces_on()` for tests). `building.revision` and `terrain.revision` say when to redo it. Mutant `_nav_want()`, `_step_up()`, `nav_field`. `tools/nav_bench.gd` times it; `tools/soak_test.gd` takes `gate=1` and says who broke what.
+- **Tests (20 new, 1 changed):** the grid covers the zone, the path goes round to an open gate (and is longer but cheaper than a wall), mutants by a wall are sent sideways, in through the gate, closing a gate makes paths stale, the damaged wall picked from north, east and south, another wall picked once repaired, never the stone wall, Brutes not following and Walkers following, wire costing, a trench walked round (and no way out of a deep one), and with real physics a walker going round a walled yard on foundations, in at the open gate and onto the foundations, without scratching a wall, and reaching you. The old "breaks through a wall" test now shuts you in a 2 x 2 m box (a single wall they now simply walk round). New screenshot view `51_nav` shows the paths as yellow dots.
+- Soak test (wave 6, a 12 x 12 m ring of walls): with the gate open only the two Brutes broke walls; with it shut, the wave tore down one wall and came in through that gap.
+- Noticed, not fixed: now and then a mutant out in the desert gets stuck against a rock for good (also before this version).
+
+**Try:** build a ring of walls with a doorway, leave the gate open and call a horde with the red button: watch them go round to the gate (a turret or a spike strip there is a good idea). Then shut the gate and call another: they all pile onto the same wall (gates close by themselves only at night, so by day the button is the easy way to watch).
+**Next:** v2.0, the physics pass: explosions pushing mutants and items, throwables (molotov, pipe bomb, rocks), knockback per weapon, mutants falling into pits and off roofs.
+
 ## v1.9.0 (2026-11-27): Building overhaul: free turning, ready-made buildings, the horde button
 The owner asked for building to become a big part of the game, tuned like the survival builders: turn pieces before placing them, ready-made cabins, and a stand with a button that brings the enemies to you. This run does those instead of the planned mutant navigation (now v1.10).
 - **Turning pieces:** **R** still turns a quarter clockwise; new keys **Z / X** turn the other way and on. Objects (chest, workbench, barricade, traps, fire pit, generator, floodlight, turret, switch) turn in **15° steps**, so they no longer have to sit square to the grid; the build line shows "facing 120°". Grid pieces (walls, stairs...) turn a quarter with Z / X. The see-through preview now **swings round smoothly** instead of snapping. Turned objects are saved (older saves load as before).

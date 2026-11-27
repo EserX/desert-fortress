@@ -16,6 +16,7 @@ signal piece_hit(key: String)
 
 var terrain  # Terrain
 var building  # Building
+var nav  # Nav (paths round the base)
 var player: Node3D
 var player_dead := func(): return false
 var world_seed := 1337
@@ -53,6 +54,7 @@ func spawn(kind: String, pos: Vector3, hp := -1.0) -> Mutant:
 	m.target_dead = player_dead
 	m.building = building
 	m.terrain = terrain
+	m.nav = nav
 	m.piece_hit.connect(func(k): piece_hit.emit(k))
 	m.sounds = _sounds
 	m.rotation.y = _rng.randf() * TAU

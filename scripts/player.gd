@@ -33,6 +33,8 @@ var camera: Camera3D
 var crouching := false
 ## Carrying too much: no sprinting.
 var overloaded := false
+## v2.1: how much a heavy load slows climbing (1 = not at all; camp.gd's load_factor).
+var load_mult := 1.0
 ## Returns true when a position is on a ladder (set by the world).
 var ladder_check := Callable()
 var on_ladder := false
@@ -90,7 +92,7 @@ func _physics_process(delta: float) -> void:
 		velocity.y -= _gravity * delta
 		_fall_speed = maxf(_fall_speed, -velocity.y)
 	elif Input.is_action_just_pressed("jump") and not crouching:
-		velocity.y = JUMP_VELOCITY
+		velocity.y = JUMP_VELOCITY / sqrt(maxf(load_mult, 1.0))
 
 	_update_crouch(delta)
 
@@ -100,7 +102,7 @@ func _physics_process(delta: float) -> void:
 	if on_ladder:
 		_fall_speed = 0.0
 		if input.y < -0.1:
-			velocity.y = LADDER_SPEED
+			velocity.y = LADDER_SPEED / maxf(load_mult, 1.0)
 		elif input.y > 0.1 and not is_on_floor():
 			velocity.y = -LADDER_SPEED
 		elif not is_on_floor():

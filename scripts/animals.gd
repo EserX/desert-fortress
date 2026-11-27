@@ -2,7 +2,7 @@ extends Node3D
 ## Wildlife (v1.16): water and green land draw animals in by day. The more
 ## green there is round the base, the more gazelles, jackals and birds come in
 ## from the desert to graze on it and drink at the main well. Hunted, they
-## give raw meat, which is cooked at a burning fire pit. At dusk they leave.
+## give raw meat, which is cooked at a burning fire pit (camp.gd). At dusk they leave.
 
 const Animal = preload("res://scripts/animal.gd")
 const Water = preload("res://scripts/water.gd")
@@ -19,8 +19,6 @@ const SPAWN_MIN := 80.0      # they walk in from this far out
 const SPAWN_MAX := 115.0
 const GONE_DIST := 150.0     # a leaving animal this far from the well is gone
 const FAR := 140.0           # far from the player nothing moves
-const COOK_EACH := 10.0      # seconds of fire one piece of meat takes
-const COOK_MAX := 5          # pieces cooked with one press
 
 signal attacked(damage: float, from: Vector3, kind: String)
 signal pickup(lines: Array)
@@ -219,33 +217,6 @@ func butcher(id: String) -> int:
 	pickup.emit(["+%d Raw meat" % n])
 	remove_child(a)
 	a.queue_free()
-	return n
-
-
-## The line a fire pit adds when you carry raw meat ("" if you don't).
-func cook_prompt(rec: Dictionary) -> String:
-	var raw: int = inventory.count_of("raw_meat") if inventory else 0
-	if raw <= 0:
-		return ""
-	if float(rec.get("burn", 0.0)) <= 0.0:
-		return "\nLight the fire to cook your raw meat"
-	return "\n[E] Cook %d raw meat" % mini(raw, COOK_MAX)
-
-
-## E on a burning fire pit with raw meat: cooks up to COOK_MAX pieces, each
-## burning COOK_EACH seconds of the fire. Returns how many were cooked.
-func cook(rec: Dictionary) -> int:
-	if inventory == null or float(rec.get("burn", 0.0)) <= 0.0:
-		return 0
-	var n := mini(inventory.count_of("raw_meat"), COOK_MAX)
-	if n <= 0:
-		return 0
-	inventory.remove("raw_meat", n)
-	var left: Dictionary = inventory.add_all({"cooked_meat": n})
-	if not left.is_empty():
-		spilled.emit(left, rec.node.global_position + Vector3(0, 0.5, 1.0))
-	rec.burn = maxf(float(rec.burn) - COOK_EACH * n, 0.0)
-	pickup.emit(["Cooked %d meat" % n])
 	return n
 
 

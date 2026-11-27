@@ -46,6 +46,7 @@ const Weather = preload("res://scripts/weather.gd")
 const Goals = preload("res://scripts/goals.gd")
 const EndingUI = preload("res://scripts/ending_ui.gd")
 const Throwables = preload("res://scripts/throwables.gd")
+const Camp = preload("res://scripts/camp.gd")
 
 ## Testing aid (temporary): a green box by the spawn point that holds a full
 ## stack of every item and tops your cash up to $2000 each time you open it.
@@ -112,6 +113,7 @@ var livable: Livable
 var oases: Oases
 var weather: Weather
 var throwables: Throwables
+var camp: Camp  # v2.1: warmth round you, cooking, food going bad, heavy loads
 var goals: Goals
 var ending_ui: EndingUI
 var waves: Waves
@@ -339,7 +341,9 @@ func _ready() -> void:
 	building.piece_collapsed.connect(func(_k, _t): waves.note_lost())
 
 	inventory = Inventory.new()
-	inventory.changed.connect(func(): player.overloaded = inventory.overloaded())
+	inventory.changed.connect(func():
+		player.overloaded = inventory.overloaded()
+		player.load_mult = Camp.load_factor(inventory.weight(), Inventory.MAX_WEIGHT))
 	inventory.add("hammer", 1)  # everyone starts with a hammer
 	inventory.add("pipe", 1)    # and a rusty pipe
 	water.player = player
@@ -501,6 +505,7 @@ func _ready() -> void:
 	day_night.day_started.connect(mutants.top_up)
 	_setup_goals()  # after water.on_morning: the rain falls on the new day
 	_setup_throwables()
+	_setup_camp()
 	# Autosave every morning (after the morning loot is in place).
 	day_night.day_started.connect(func(_d): Game.save_game("auto", _screenshot()))
 	Game.saved.connect(func(slot): hud.show_banner("Game saved (%s)" % Game.slot_label(slot)))
@@ -562,6 +567,8 @@ func _process(delta: float) -> void:
 			_shade_timer = 0.5
 			in_shade = _check_shade()
 			_discover_nearby()
+			if camp:
+				camp.sense()
 		survival.tick(delta, day_night.hour, player.sprinting, in_shade)
 		mutants.night = day_night.is_night()
 		water.tick(delta, not day_night.is_night())
@@ -865,7 +872,7 @@ func _axe_input(event: InputEvent) -> bool:
 		return false
 	if melee.swing_time >= 0.0 and melee.swing_time < 0.6:
 		return true
-	if not use_stamina(STAMINA_CHOP):
+	if not use_stamina(STAMINA_CHOP * camp.load_mult()):
 		return true
 	melee.play_swing(0.6)
 	chop_tree(id)
@@ -941,7 +948,7 @@ func _shovel_input(event: InputEvent) -> bool:
 	var cool := SHOVEL_COOLDOWN * (1.4 if tool == "pickaxe" else 1.0)
 	_shovel_ready_at = Time.get_ticks_msec() + int(cool * 1000.0)
 	var filling: bool = event.button_index == MOUSE_BUTTON_RIGHT
-	if not use_stamina(STAMINA_PICK if tool == "pickaxe" else (STAMINA_DIG * 0.5 if filling else STAMINA_DIG)):
+	if not use_stamina((STAMINA_PICK if tool == "pickaxe" else (STAMINA_DIG * 0.5 if filling else STAMINA_DIG)) * camp.load_mult()):
 		return true
 	melee.play_swing(cool)
 	if rock >= 0:
@@ -1206,7 +1213,7 @@ func _prompt_for(id: String) -> String:
 	if id.begins_with("weather:"):
 		return weather.prompt(id.trim_prefix("weather:"))
 	if id.begins_with("fire:"):
-		return building.prompt(id) + animals.cook_prompt(building.pieces.get(id.trim_prefix("fire:"), {}))
+		return building.prompt(id) + camp.cook_prompt(building.pieces.get(id.trim_prefix("fire:"), {}))
 	if id.begins_with("machine:"):
 		var mk := id.trim_prefix("machine:")
 		var mrec: Dictionary = building.pieces.get(mk, {})
@@ -1404,7 +1411,7 @@ func interact(id: String) -> void:
 			hud.show_banner("No room in your bag" if w.get("water", 0.0) >= 1.0 else "The well is still filling")
 		return
 	if id.begins_with("fire:"):
-		if animals.cook(building.pieces.get(id.trim_prefix("fire:"), {})) > 0:
+		if camp.cook(building.pieces.get(id.trim_prefix("fire:"), {})) > 0:
 			return
 		if not power.add_wood(id.trim_prefix("fire:"), inventory):
 			hud.show_banner("The fire pit is full" if inventory.count_of("wood") > 0 else "You need wood for the fire")
@@ -1783,6 +1790,7 @@ func _setup_life() -> void:
 		if survival.dead:
 			return
 		survival.damage(dmg * Game.diff("damage"), "A jackal got you.")
+		survival.wound(dmg * Game.diff("damage"))
 		var local: Vector3 = player.global_transform.basis.inverse() * (from - player.global_position)
 		hud.show_damage(atan2(local.x, -local.z)))
 	guns.fired.connect(animals.alert)
@@ -1864,6 +1872,23 @@ func _setup_throwables() -> void:
 	throwables.hit_landed.connect(hud.show_hitmarker)
 
 
+## v2.1: warmth from fires and shelter, cooking, food going bad, heavy loads.
+func _setup_camp() -> void:
+	camp = Camp.new()
+	camp.name = "Camp"
+	camp.building = building
+	camp.inventory = inventory
+	camp.survival = survival
+	camp.player = player
+	camp.world_seed = world_seed
+	add_child(camp)
+	camp.pickup.connect(hud.show_pickup)
+	camp.spilled.connect(loot.spawn_drop)
+	# After the "Day N" banner and the morning loot news.
+	camp.message.connect(func(t): get_tree().create_timer(9.0).timeout.connect(func(): hud.show_banner(t)))
+	day_night.day_started.connect(camp.on_morning)
+
+
 ## Green milestones, the weather (dew, rain) and the ending (v1.19).
 func _setup_goals() -> void:
 	weather = Weather.new()
@@ -1906,6 +1931,8 @@ func _on_player_hit(dmg: float, from: Vector3, kind := "walker") -> void:
 	var who: String = Mutants.Mutant.TYPES.get(kind, {}).get("name", "mutant").to_lower()
 	dmg *= Game.diff("damage")
 	survival.damage(dmg, ("Acid from a spitter got you." if kind == "spitter" and dmg > 10.0 else "A %s got you." % who))
+	if kind in BLEED_KINDS:
+		survival.wound(dmg)  # claws (not acid or a brute's fist)
 	waves.note_damage(dmg)
 	var to: Vector3 = from - player.global_position
 	var local: Vector3 = player.global_transform.basis.inverse() * to
@@ -1918,6 +1945,8 @@ func _on_player_hit(dmg: float, from: Vector3, kind := "walker") -> void:
 
 
 var _attack_warned_at := -100000
+## v2.1: mutants whose claws open bleeding wounds (a brute's fist and acid don't).
+const BLEED_KINDS := ["walker", "runner"]
 
 ## Items each test box holds (a chest's 40 slots); newer items spill into a second box.
 const TEST_SLOTS := 40

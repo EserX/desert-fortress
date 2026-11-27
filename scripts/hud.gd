@@ -300,8 +300,10 @@ func _build_hotbar(root: Control) -> void:
 func _build_needs(root: Control) -> void:
 	var box := VBoxContainer.new()
 	box.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	box.position = Vector2(20, -150)
-	box.size = Vector2(230, 90)
+	box.position = Vector2(20, -172)
+	box.size = Vector2(230, 112)
+	box.alignment = BoxContainer.ALIGNMENT_END  # the bars stay put at the bottom
+	box.grow_vertical = Control.GROW_DIRECTION_BEGIN  # more status lines grow upwards
 	box.add_theme_constant_override("separation", 4)
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(box)
@@ -309,7 +311,7 @@ func _build_needs(root: Control) -> void:
 	heat_label.add_theme_color_override("font_color", Color(1.0, 0.75, 0.4))
 	heat_label.visible = false
 	box.add_child(heat_label)
-	for spec in [["Health", Color(0.85, 0.22, 0.18)], ["Food", Color(0.9, 0.6, 0.25)], ["Water", Color(0.3, 0.6, 0.95)]]:
+	for spec in [["Health", Color(0.85, 0.22, 0.18)], ["Food", Color(0.9, 0.6, 0.25)], ["Water", Color(0.3, 0.6, 0.95)], ["Warmth", Color(0.95, 0.85, 0.55)]]:
 		var row := HBoxContainer.new()
 		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		box.add_child(row)
@@ -335,13 +337,20 @@ func _build_needs(root: Control) -> void:
 func _update_needs() -> void:
 	if survival == null:
 		return
-	var values := [survival.health, survival.food, survival.water]
-	for i in 3:
+	var values := [survival.health, survival.food, survival.water, survival.warmth]
+	for i in values.size():
 		_need_bars[i].value = values[i]
 		# Blink when low.
 		var low: bool = values[i] < 25.0
 		_need_bars[i].modulate.a = 0.4 + 0.6 * absf(sin(Time.get_ticks_msec() * 0.006)) if low else 1.0
-	heat_label.visible = survival.hot
+	# v2.1: the heat, the cold and bleeding share the line above the bars.
+	var status: String = survival.status_text()
+	heat_label.text = status
+	heat_label.visible = status != ""
+	heat_label.add_theme_color_override("font_color", Color(1.0, 0.45, 0.4) if survival.bleeding() else
+		(Color(0.6, 0.8, 1.0) if survival.is_cold() else Color(1.0, 0.75, 0.4)))
+	# Warmth: icy blue when cold.
+	(_need_bars[3].get_theme_stylebox("fill") as StyleBoxFlat).bg_color = Color(0.45, 0.7, 1.0) if survival.is_cold() else Color(0.95, 0.85, 0.55)
 
 
 func refresh_hotbar() -> void:

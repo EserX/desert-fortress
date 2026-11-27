@@ -74,6 +74,10 @@ const ITEMS := {
 	# v2.0 throwables (a stone can be thrown too).
 	"molotov": {"name": "Molotov", "weight": 0.8, "stack": 5},
 	"pipe_bomb": {"name": "Pipe bomb", "weight": 1.0, "stack": 5},
+	# v2.1 cooking and spoiling food.
+	"flatbread": {"name": "Flatbread", "weight": 0.2, "stack": 20},
+	"stew": {"name": "Stew", "weight": 0.6, "stack": 10},
+	"rotten_food": {"name": "Rotten food", "weight": 0.3, "stack": 30},
 }
 
 ## What each kind of container can hold: item -> [min, max]. A negative min

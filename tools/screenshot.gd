@@ -84,6 +84,7 @@ var shots := [
 	{"name": "74_molotov", "pos": Vector3(-30, 0, -40), "yaw": PI, "pitch": -0.12, "hour": 19.4, "throw": "molotov"},
 	{"name": "75_pipe_bomb", "pos": Vector3(-30, 0, -40), "yaw": PI, "pitch": 0.05, "hour": 16.0, "throw": "pipe_bomb"},
 	{"name": "76_throw_stone", "pos": Vector3(-30, 0, -40), "yaw": PI, "pitch": 0.12, "hour": 10.0, "throw": "stone"},
+	{"name": "77_cold_night", "pos": Vector3(-26, 0, -40), "yaw": PI * 0.5, "pitch": -0.55, "hour": 23.5, "camp": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -220,6 +221,8 @@ func _process(_d: float) -> bool:
 			_throw_sample(p, s.throw)
 		elif not main.throwables.flying.is_empty() or not main.throwables.fires.is_empty():
 			main.throwables.clear()
+		if s.get("camp", false):
+			_camp_sample(p)
 		if s.has("goals"):
 			_goals_sample(s.goals)
 		elif main.ending_ui.is_open():
@@ -1124,3 +1127,29 @@ func _throw_sample(p: Node3D, kind: String) -> void:
 			w.rotation.y = p.rotation.y + PI
 			w.set_physics_process(false)
 			th.charge = 0.6
+
+
+## v2.1: a cold night by a burning fire pit, bleeding, with food to cook.
+func _camp_sample(p: Node3D) -> void:
+	main.mutants.clear()
+	main.building.load_data([])
+	main.building.sites_load_data([])
+	main.terrain.load_data({})
+	main.inventory.load_data({})
+	main.inventory.add_all({"raw_meat": 3, "millet": 4, "water": 2, "bandage": 2})
+	main.inventory.selected = 3
+	var fwd := -p.global_transform.basis.z
+	fwd.y = 0.0
+	var at: Vector3 = p.position + fwd.normalized() * 1.7
+	var b = main.building
+	var slot: Dictionary = b.slot_for("fire_pit", at, 0)
+	var k: String = b.place("fire_pit", slot, b.evaluate("fire_pit", slot).y)
+	b.pieces[k].burn = 200.0
+	b.pieces[k].flame.visible = true
+	var d: Vector3 = b.pieces[k].node.global_position - p.position
+	p.rotation.y = atan2(-d.x, -d.z)  # face the fire, so the cooking prompt shows
+	var sv = main.survival
+	sv.warmth = 22.0
+	sv.stop_bleeding()
+	sv.wound(25.0)
+	sv.health = 64.0

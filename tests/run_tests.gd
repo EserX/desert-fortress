@@ -3043,7 +3043,11 @@ func _process(_delta: float) -> bool:
 			_start_throws()
 		4270:
 			_check_throws()
+			_test_survival_depth()
+			_start_shelter()
 		4280:
+			_check_shelter()
+		4290:
 			for e in catcher.errors:
 				print("  ERROR ", e)
 			check(catcher.errors.is_empty(), "Godot reported no errors while the tests ran (%d)" % catcher.errors.size())
@@ -3571,7 +3575,7 @@ func _test_life() -> void:
 	check(main._prompt_for("fire:" + pk).contains("[E] Cook 3 raw meat"), "then: " + main._prompt_for("fire:" + pk).replace("\n", " / "))
 	main.interact("fire:" + pk)
 	check(inv.count_of("raw_meat") == 0 and inv.count_of("cooked_meat") == 3, "E cooks the meat")
-	check(is_equal_approx(rec.burn, burn - 3 * A.COOK_EACH), "cooking burns the fire down")
+	check(is_equal_approx(rec.burn, burn - 3 * load("res://scripts/camp.gd").COOK_EACH), "cooking burns the fire down")
 	main.survival.food = 20.0
 	main.survival.consume("cooked_meat")
 	check(main.survival.food > 55.0, "cooked meat is a good meal (food %d)" % int(main.survival.food))
@@ -3805,6 +3809,7 @@ func _test_livable() -> void:
 	player.position = Vector3(0, main.terrain.surface_height(0, 8), 8)
 	lv._apply_comforts()
 	check(sv.regen_mult == L.HEAL_MULT and not sv.heat_shelter, "settled: you heal twice as fast at the base, but still feel the heat")
+	sv.stop_bleeding()  # v2.1: claws and bites earlier in the run left a wound
 	sv.health = 50.0
 	sv.food = 100.0
 	sv.water = 100.0
@@ -4456,6 +4461,7 @@ func _start_throws() -> void:
 	main.player.position = Vector3(-30, t.surface_height(-30, -55), -55)
 	main.player.velocity = Vector3.ZERO
 	main.survival.health = 100.0
+	main.survival.stop_bleeding()
 	var c := Vector3(-30, 0, -30)
 	var g := func(v: Vector3) -> Vector3: return Vector3(v.x, t.surface_height(v.x, v.z), v.z)
 	throw.stone_w = ms.spawn("walker", c + Vector3(12, 0, 0))
@@ -4493,3 +4499,218 @@ func _check_throws() -> void:
 	main.mutants.clear()
 	for id in main.loot.drops.keys():
 		main.loot.set_drop_items(id, {})
+
+
+## v2.1: warmth and cold nights, bleeding wounds, cooking, food going bad, heavy loads.
+func _test_survival_depth() -> void:
+	var Survival = load("res://scripts/survival.gd")
+	var Camp = load("res://scripts/camp.gd")
+	# Warmth.
+	var a = Survival.new()
+	var b = Survival.new()
+	a.tick(60.0, 23.0, false, false)
+	b.shelter = 1.0
+	b.tick(60.0, 23.0, false, false)
+	check(a.warmth < 70.0 and is_equal_approx(b.warmth, 100.0), "a cold night chills you in the open (%.0f), not indoors (%.0f)" % [a.warmth, b.warmth])
+	check(Survival.is_cold_hour(2.0) and Survival.is_cold_hour(21.5) and not Survival.is_cold_hour(13.0) and not Survival.is_cold_hour(20.5), "the cold hours are 21:00 to 05:00")
+	var c = Survival.new()
+	c.shelter = 0.4
+	c.tick(60.0, 23.0, false, false)
+	check(c.warmth > a.warmth and c.warmth < 100.0, "a roof alone keeps some of the cold off (%.0f)" % c.warmth)
+	a.near_fire = true
+	var before: float = a.warmth
+	a.tick(5.0, 23.0, false, false)
+	check(a.warmth > before + 25.0, "a fire warms you up fast (%.0f to %.0f)" % [before, a.warmth])
+	a.near_fire = false
+	a.warmth = 50.0
+	a.tick(10.0, 10.0, false, true)
+	check(a.warmth > 60.0, "the day warms you back up (%.0f)" % a.warmth)
+	# Cold: hungrier, no healing; no warmth at all hurts.
+	var warm = Survival.new()
+	var cold = Survival.new()
+	warm.health = 50.0
+	cold.health = 50.0
+	cold.warmth = 20.0
+	cold.tick(4.0, 13.0, false, true)
+	warm.tick(4.0, 13.0, false, true)
+	check(cold.is_cold() and not warm.is_cold(), "below %d warmth you are cold" % int(Survival.COLD_AT))
+	check(100.0 - cold.food > (100.0 - warm.food) * 1.4, "being cold makes you hungrier")
+	check(is_equal_approx(cold.health, 50.0) and warm.health > 50.0, "and you don't heal while cold (%.1f vs %.1f)" % [cold.health, warm.health])
+	cold.warmth = 0.0
+	cold.tick(4.0, 2.0, false, false)
+	check(cold.health < 49.0 and cold.cause == "The cold got you.", "freezing hurts (%.1f)" % cold.health)
+	check(cold.status_text().contains("Freezing"), "and the HUD says so: " + cold.status_text())
+	c.warmth = 20.0
+	check(c.status_text().contains("Cold"), "cold: " + c.status_text())
+	# Bleeding.
+	var w = Survival.new()
+	var warned := []
+	w.warning.connect(func(t): warned.append(t))
+	check(not w.wound(12.0) and not w.bleeding(), "one claw doesn't open a wound yet")
+	check(w.wound(12.0) and w.bleeding() and warned.any(func(t): return t.contains("bleeding")), "a second one does, with a warning")
+	w.health = 80.0
+	w.tick(10.0, 10.0, false, true)
+	check(w.health < 80.0 - Survival.BLEED * 9.0, "a wound bleeds (%.1f)" % w.health)
+	check(w.status_text().contains("Bleeding"), "the HUD says: " + w.status_text())
+	for i in 10:
+		w.wound(20.0)
+	check(w.wounds.size() == Survival.WOUND_MAX, "at most %d wounds" % Survival.WOUND_MAX)
+	w.consume("bandage")
+	check(not w.bleeding(), "a bandage stops the bleeding")
+	w.wound(25.0)
+	w.health = 100.0
+	w.tick(Survival.WOUND_TIME + 1.0, 10.0, false, true)
+	check(not w.bleeding() and w.health > 50.0, "a wound closes on its own in time (%.0f health)" % w.health)
+	w.wound(25.0)
+	w.damage(500.0)
+	w.respawn()
+	check(not w.bleeding() and w.warmth >= 60.0, "respawning clears wounds and warms you")
+	# Rotten food: a desperate meal.
+	w.health = 5.0
+	w.food = 10.0
+	w.consume("rotten_food")
+	check(w.food > 15.0 and w.health >= 1.0 and w.health < 5.0, "rotten food fills you a little and makes you sick")
+	check(Survival.can_consume("flatbread") and Survival.can_consume("stew"), "flatbread and stew can be eaten")
+	a.free(); b.free(); c.free(); warm.free(); cold.free(); w.free()
+	# Claws open wounds, a brute's fist and acid don't.
+	var sv = main.survival
+	sv.health = 100.0
+	sv.stop_bleeding()
+	var near: Vector3 = main.player.global_position + Vector3(1, 0, 0)
+	main._on_player_hit(30.0, near, "brute")
+	main._on_player_hit(14.0, near, "spitter")
+	check(not sv.bleeding(), "a brute's fist and acid don't make you bleed")
+	sv.health = 100.0
+	main._on_player_hit(12.0, near, "walker")
+	main._on_player_hit(12.0, near, "walker")
+	check(sv.bleeding(), "two walker claws do")
+	sv.stop_bleeding()
+	sv.health = 100.0
+	# Saving.
+	sv.warmth = 33.0
+	sv.wound(25.0)
+	var data: Dictionary = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	sv.warmth = 100.0
+	sv.stop_bleeding()
+	main.apply_save_data(data)
+	check(is_equal_approx(sv.warmth, 33.0) and sv.wounds.size() == 1, "warmth and wounds are saved")
+	data.survival.erase("warmth")
+	data.survival.erase("wounds")
+	main.apply_save_data(data)
+	check(is_equal_approx(sv.warmth, 100.0) and not sv.bleeding(), "older saves load warm and unhurt")
+	data.survival["warmth"] = "toasty"
+	data.survival["wounds"] = [5.0, "x", -3, 9999.0, 1.0, 2.0]
+	main.apply_save_data(data)
+	check(is_equal_approx(sv.warmth, 100.0) and sv.wounds.size() == Survival.WOUND_MAX and sv.wounds[1] <= Survival.WOUND_TIME, "broken values fall back (%s)" % str(sv.wounds))
+	sv.stop_bleeding()
+	sv.health = 100.0
+	sv.warmth = 100.0
+	# Cooking at a fire pit.
+	var cp = main.camp
+	var bd = main.building
+	var inv = main.inventory
+	bd.load_data([])
+	inv.load_data({})
+	var fs := {"kind": "obj", "cx": -3, "cz": 6, "dir": 0, "level": 0}
+	var pk: String = bd.place("fire_pit", fs, bd.evaluate("fire_pit", fs).y)
+	var rec: Dictionary = bd.pieces[pk]
+	inv.add_all({"raw_meat": 3, "millet": 5, "water": 2, "melon": 1})
+	check(main._prompt_for("fire:" + pk).contains("Light the fire to cook"), "a cold fire can't cook")
+	rec.burn = 200.0
+	var pr: String = main._prompt_for("fire:" + pk)
+	check(pr.contains("[E] Cook 3 raw meat, 4 flatbread"), "the fire pit offers what you can cook: " + pr.replace("\n", " / "))
+	main.interact("fire:" + pk)
+	check(inv.count_of("raw_meat") == 0 and inv.count_of("cooked_meat") == 3 and inv.count_of("flatbread") == 4, "E cooks the meat and bakes flatbread")
+	check(inv.count_of("millet") == 1 and inv.count_of("water") == 0, "using 4 millet and 2 water")
+	check(is_equal_approx(rec.burn, 200.0 - 5 * Camp.COOK_EACH), "each batch burns the fire down (%.0f)" % rec.burn)
+	pr = main._prompt_for("fire:" + pk)
+	check(pr.contains("[E] Cook 2 stew"), "cooked meat and a melon make stew: " + pr.replace("\n", " / "))
+	main.interact("fire:" + pk)
+	check(inv.count_of("stew") == 2 and inv.count_of("cooked_meat") == 2 and inv.count_of("melon") == 0, "two bowls of stew")
+	check(cp.cook_prompt(rec) == "", "nothing left to cook")
+	inv.load_data({})
+	inv.add("raw_meat", 7)
+	check(cp.cook_plan() == [[0, Camp.COOK_MAX]], "at most %d at a time" % Camp.COOK_MAX)
+	# Warm by the fire.
+	var fpos: Vector3 = rec.node.global_position
+	check(cp.fire_near(fpos + Vector3(2, 0, 0)), "a burning fire warms you 2 m away")
+	check(not cp.fire_near(fpos + Vector3(8, 0, 0)), "but not 8 m away")
+	rec.burn = 0.0
+	check(not cp.fire_near(fpos + Vector3(2, 0, 0)), "nor once it is out")
+	# Food going bad.
+	var Inv = load("res://scripts/inventory.gd")
+	var i1 = Inv.new(60)
+	var i2 = Inv.new(60)
+	for x in [i1, i2]:
+		x.add_all({"raw_meat": 40, "canned_food": 10, "dates": 10, "flatbread": 10})
+	var n1: int = cp.spoil(i1, 1.0, "test", 4)
+	var n2: int = cp.spoil(i2, 1.0, "test", 4)
+	check(n1 > 8 and n1 < 32 and i1.count_of("raw_meat") == 40 - n1, "raw meat rots overnight (%d of 40)" % n1)
+	check(i1.count_of("rotten_food") == n1, "into rotten food")
+	check(i1.count_of("canned_food") == 10 and i1.count_of("dates") == 10 and i1.count_of("flatbread") == 10, "canned food, dates and flatbread keep")
+	check(n1 == n2, "the same world and day rot the same food (%d, %d)" % [n1, n2])
+	var pockets := 0
+	var chests := 0
+	for d in 20:
+		var p = Inv.new(60)
+		p.add("raw_meat", 40)
+		pockets += cp.spoil(p, 1.0, "p", d)
+		var q = Inv.new(60)
+		q.add("raw_meat", 40)
+		chests += cp.spoil(q, Camp.CHEST_KEEP, "q", d)
+	check(chests < pockets * 0.7, "food keeps longer in a chest (%d vs %d rotted)" % [chests, pockets])
+	inv.load_data({})
+	inv.add("raw_meat", 10)
+	var cs := {"kind": "obj", "cx": 2, "cz": 7, "dir": 0, "level": 0}
+	var ck: String = bd.place("chest", cs, bd.evaluate("chest", cs).y)
+	bd.storage_of(ck).add("raw_meat", 10)
+	var rotted: int = cp.on_morning(main.day_night.day + 1)
+	check(rotted > 0 and inv.count_of("raw_meat") + bd.storage_of(ck).count_of("raw_meat") == 20 - rotted, "each morning food rots in your pockets and chests (%d)" % rotted)
+	# Heavy loads.
+	check(Camp.load_factor(10.0, 50.0) == 1.0 and Camp.load_factor(25.0, 50.0) == 1.0, "a light load is no trouble")
+	check(is_equal_approx(Camp.load_factor(50.0, 50.0), Camp.LOAD_FULL) and Camp.load_factor(60.0, 50.0) == Camp.LOAD_OVER, "a full bag makes work and climbing harder, too heavy even more")
+	inv.load_data({})
+	check(is_equal_approx(main.player.load_mult, 1.0), "empty pockets: climbing at full speed")
+	inv.add("log", 10)
+	inv.add("stone", 20)
+	check(main.player.load_mult > 1.2 and cp.load_mult() == main.player.load_mult, "a heavy load slows climbing (x%.2f, %.0f kg)" % [main.player.load_mult, inv.weight()])
+	inv.load_data({})
+	bd.load_data([])
+
+
+var shelter := {}
+
+## Builds a cabin to stand in for the shelter check (its bodies need a physics frame).
+func _start_shelter() -> void:
+	var b = main.building
+	var Prefabs = load("res://scripts/prefabs.gd")
+	b.load_data([])
+	var at := Vector2i(-8, -8)
+	for e in Prefabs.entries("cabin"):
+		var slot: Dictionary = {"kind": e.kind, "cx": e.cx + at.x, "cz": e.cz + at.y, "dir": e.dir, "level": e.level}
+		var ev: Dictionary = b.evaluate(e.type, slot)
+		if ev.ok:
+			b.place(e.type, slot, ev.y)
+	var mid := Vector3.ZERO
+	var roofs: Array = b.keys_of(["roof"])
+	for k in roofs:
+		mid += b.pieces[k].node.global_position
+	mid /= maxf(roofs.size(), 1)
+	shelter.mid = mid
+	shelter.roofs = roofs.size()
+
+
+func _check_shelter() -> void:
+	var cp = main.camp
+	var player = main.player
+	var mid: Vector3 = shelter.mid
+	var space: PhysicsDirectSpaceState3D = main.get_world_3d().direct_space_state
+	var down: Dictionary = space.intersect_ray(PhysicsRayQueryParameters3D.create(Vector3(mid.x, mid.y - 0.5, mid.z), Vector3(mid.x, mid.y - 8.0, mid.z), 1))
+	player.position = down.get("position", Vector3(mid.x, main.terrain.surface_height(mid.x, mid.z), mid.z)) + Vector3(0, 0.05, 0)
+	var inside: float = cp.shelter_at(player)
+	check(shelter.roofs > 0 and inside > 0.8, "inside a cabin you are sheltered (%.2f)" % inside)
+	player.position = Vector3(40, main.terrain.surface_height(40, 90), 90)
+	var open: float = cp.shelter_at(player)
+	check(open < 0.2, "on open sand you are not (%.2f)" % open)
+	main.building.load_data([])
+	player.position = Vector3(0, main.terrain.surface_height(0, 8), 8)

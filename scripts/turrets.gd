@@ -6,6 +6,8 @@ extends Node3D
 const RANGE := 22.0
 const RATE := 0.22          # seconds between shots
 const DAMAGE := 16.0
+const KNOCK := 0.8          # a light shove per round (m/s), no stagger: it fires fast
+const STAGGER := 0.0
 const SPREAD := 0.025       # radians
 const TURN := 5.0           # radians per second
 const POWER_BOOST := 1.4    # on power (by cable) it turns and fires this much faster
@@ -103,7 +105,7 @@ func shoot(rec: Dictionary, st: Dictionary) -> Dictionary:
 	while n and not n.has_method("take_hit"):
 		n = n.get_parent()
 	if n:
-		n.take_hit(DAMAGE, hit.position, dir)
+		n.take_hit(DAMAGE, hit.position, dir, KNOCK, STAGGER)
 	return hit
 
 

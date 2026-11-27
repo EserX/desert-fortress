@@ -17,6 +17,13 @@ const MINE_RADIUS := 5.0
 const MINE_DAMAGE := 220.0     # at the centre, less further out
 const MINE_PLAYER_DAMAGE := 70.0
 const MINE_PIECE_DAMAGE := 120.0
+## The blast (v2.0) throws mutants away and up (m/s at the centre, less further
+## out), staggers them, knocks you off your feet and scatters loose debris.
+const MINE_PUSH := 11.0
+const MINE_LIFT := 6.5
+const MINE_STAGGER := 1.2
+const MINE_PLAYER_PUSH := 9.0
+const MINE_DEBRIS_RADIUS := 7.0
 const SHOCK_DAMAGE := 20.0     # electric fence, per jolt
 const SHOCK_EVERY := 0.5
 const FIRE_DPS := 12.0
@@ -142,17 +149,48 @@ func detonate(key: String) -> void:
 		var d: float = m.global_position.distance_to(pos)
 		if d < MINE_RADIUS:
 			var away: Vector3 = (m.global_position - pos).normalized()
-			m.take_hit(MINE_DAMAGE * (1.0 - d / MINE_RADIUS), m.global_position + Vector3(0, 1.2, 0), away)
+			var f := 1.0 - d / MINE_RADIUS
+			m.blast(pos, MINE_PUSH * f, MINE_LIFT * f, MINE_STAGGER * f)
+			m.take_hit(MINE_DAMAGE * f, m.global_position + Vector3(0, 1.2, 0), away, 0.0, 0.0)
 	if player:
 		var pd := player.global_position.distance_to(pos)
 		if pd < MINE_RADIUS:
-			player_hurt.emit(MINE_PLAYER_DAMAGE * (1.0 - pd / MINE_RADIUS), pos, "Caught in your own landmine.")
+			var f := 1.0 - pd / MINE_RADIUS
+			if player.has_method("push"):
+				var away := player.global_position - pos
+				away.y = 0.0
+				player.push(away.normalized() * MINE_PLAYER_PUSH * f + Vector3(0, 3.5 * f, 0))
+			player_hurt.emit(MINE_PLAYER_DAMAGE * f, pos, "Caught in your own landmine.")
+	scatter_debris(pos, MINE_DEBRIS_RADIUS, 9.0)
 	for k in building.pieces.keys():
 		if building.pieces.has(k) and building.pieces[k].node.global_position.distance_to(pos) < 3.0 \
 				and not building.PIECES[building.pieces[k].type].get("trap", false):
 			building.damage(k, MINE_PIECE_DAMAGE)
 	_explosion(pos)
 	exploded.emit(pos)
+
+
+## A blast at pos throws the loose debris chunks (group "debris") lying
+## within radius, up to speed m/s at the centre. Returns how many it moved.
+func scatter_debris(pos: Vector3, radius: float, speed: float) -> int:
+	if not is_inside_tree():
+		return 0
+	var moved := 0
+	for c in get_tree().get_nodes_in_group("debris"):
+		var rb := c as RigidBody3D
+		if rb == null or not rb.is_inside_tree():
+			continue
+		var to := rb.global_position - pos
+		var d := to.length()
+		if d >= radius:
+			continue
+		var f := 1.0 - d / radius
+		var away := Vector3(to.x, 0, to.z).normalized() if Vector2(to.x, to.z).length() > 0.05 else Vector3.ZERO
+		rb.sleeping = false
+		rb.apply_central_impulse((away * speed * f + Vector3(0, speed * 0.6 * f, 0)) * rb.mass)
+		rb.angular_velocity += Vector3(randf_range(-8, 8), randf_range(-8, 8), randf_range(-8, 8)) * f
+		moved += 1
+	return moved
 
 
 ## Blue sparks and a crackle where a mutant touches a live fence.

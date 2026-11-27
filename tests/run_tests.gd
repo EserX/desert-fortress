@@ -730,7 +730,7 @@ func _test_types() -> void:
 	var w = ms.spawn("walker", Vector3(64, 0, 60))
 	b.take_hit(25.0, b.global_position, Vector3.FORWARD)
 	w.take_hit(25.0, w.global_position, Vector3.FORWARD)
-	check(b.velocity.length() < w.velocity.length() * 0.5, "brutes barely flinch when hit")
+	check(b.knock.length() < w.knock.length() * 0.5 and b.stagger_t < w.stagger_t * 0.5, "brutes barely flinch when hit")
 	check(b.get_child_count() > 2 and b._shape.shape.radius > w._shape.shape.radius, "brutes are bigger")
 	ms.spawn("spitter", Vector3(70, 0, 60))
 	ms.spawn("runner", Vector3(74, 0, 60))
@@ -2601,12 +2601,147 @@ func _test_wiring() -> void:
 	main.day_night.restore(main.day_night.day, 12.0)
 
 
+## v2.0 physics pass: knockback, stagger, blasts, falls, debris, shoves.
+var phys := {}
+
+
+## Weapon tuning and the instant effects of hits and shoves.
+func _test_physics() -> void:
+	var ms = main.mutants
+	var W: Dictionary = main.melee.WEAPONS
+	var G: Dictionary = main.guns.GUNS
+	ms.clear()
+	check(W.pipe.knock > W.axe.knock and W.axe.knock > W.machete.knock and W.pipe.stagger > W.machete.stagger, "the pipe shoves and staggers most, the machete least")
+	check(G.shotgun.knock * G.shotgun.pellets > G.rifle.knock and G.rifle.knock > G.pistol.knock, "a full shotgun blast shoves more than a rifle round, a pistol least")
+	var a = ms.spawn("walker", Vector3(70, 0, 70))
+	var c = ms.spawn("walker", Vector3(74, 0, 70))
+	a.take_hit(W.pipe.damage, a.global_position, Vector3.RIGHT, W.pipe.knock, W.pipe.stagger)
+	c.take_hit(W.machete.damage, c.global_position, Vector3.RIGHT, W.machete.knock, W.machete.stagger)
+	check(a.knock.x > c.knock.x * 2.0 and a.stagger_t > c.stagger_t, "a pipe hit knocks a walker back further and longer than a machete (%.1f / %.1f m/s)" % [a.knock.x, c.knock.x])
+	c.state = c.State.ATTACK
+	c._attack_t = 0.2
+	c.take_hit(1.0, c.global_position, Vector3.RIGHT, 2.0, 0.4)
+	check(c.state == c.State.CHASE and c._attack_t < 0.0, "a stagger cuts its swing short")
+	var t: float = c.stagger_t
+	c.take_hit(1.0, c.global_position, Vector3.RIGHT, 0.8, 0.0)
+	check(is_equal_approx(c.stagger_t, t), "turret-style hits with no stagger don't stunlock it")
+	var r = ms.spawn("runner", Vector3(78, 0, 70))
+	r.take_hit(1.0, r.global_position, Vector3.RIGHT, 9.0, 9.0)
+	check(r.stagger_t <= r.STAGGER_MAX + 0.001, "a stagger never lasts longer than %.1f s" % r.STAGGER_MAX)
+	var br = ms.spawn("brute", Vector3(82, 0, 70))
+	br.blast(br.global_position - Vector3(2, 0, 0), 11.0, 6.5, 1.2)
+	a.blast(a.global_position - Vector3(2, 0, 0), 11.0, 6.5, 1.2)
+	check(a.velocity.y > 5.0 and br.velocity.y < 2.0 and br.knock.x < a.knock.x * 0.4, "a blast throws a walker up and away, a brute barely moves")
+	ms.clear()
+	# A Brute's fist shoves you, a walker's claw a little, acid not at all.
+	var p = main.player
+	p.knock = Vector3.ZERO
+	main.survival.health = 100.0
+	main._on_player_hit(5.0, p.global_position + Vector3(-1, 0, 0), "spitter")
+	check(p.knock == Vector3.ZERO, "acid doesn't shove you")
+	main._on_player_hit(5.0, p.global_position + Vector3(-1, 0, 0), "walker")
+	var wk: float = p.knock.x
+	p.knock = Vector3.ZERO
+	main._on_player_hit(5.0, p.global_position + Vector3(-1, 0, 0), "brute")
+	check(wk > 0.5 and p.knock.x > wk * 3.0, "a brute's fist shoves you much harder than a walker's claw (%.1f / %.1f m/s)" % [p.knock.x, wk])
+	p.knock = Vector3.ZERO
+	p.velocity = Vector3.ZERO
+	main.survival.health = 100.0
+
+
+## Sets up the moving tests: walkers to hit, one dropped off a roof-high
+## ledge, one from a step, a mine with walkers and debris round it, and you.
+func _start_physics() -> void:
+	var b = main.building
+	var ms = main.mutants
+	ms.clear()
+	b.load_data([])
+	main.terrain.load_data({})
+	main.day_night.restore(main.day_night.day, 11.0)
+	var slot := {"kind": "obj", "cx": -6, "cz": -10, "dir": 0, "level": 0}
+	phys.mine_key = b.place("landmine", slot, b.evaluate("landmine", slot).y)
+	var mine: Vector3 = b.pieces[phys.mine_key].node.global_position
+	phys.mine = mine
+	var pp := mine + Vector3(45, 0, 45)
+	main.player.position = Vector3(pp.x, main.terrain.surface_height(pp.x, pp.z), pp.z)
+	main.player.velocity = Vector3.ZERO
+	main.player.knock = Vector3.ZERO
+	phys.pipe = ms.spawn("walker", mine + Vector3(0, 0, 14))
+	phys.machete = ms.spawn("walker", mine + Vector3(4, 0, 14))
+	phys.near = ms.spawn("walker", mine + Vector3(3, 0, 0))     # 3 m from the mine
+	phys.on = ms.spawn("walker", mine)                          # on it
+	for k in ["high", "low"]:
+		var at: Vector3 = mine + (Vector3(-10, 0, 14) if k == "high" else Vector3(-14, 0, 14))
+		var w = ms.spawn("walker", at)
+		w.global_position.y += 6.5 if k == "high" else 1.5
+		phys[k] = w
+	# A loose chunk of debris lying 2 m from the mine.
+	var chunk := RigidBody3D.new()
+	chunk.collision_layer = b.DEBRIS_LAYER
+	chunk.collision_mask = 1
+	chunk.mass = 4.0
+	var col := CollisionShape3D.new()
+	col.shape = BoxShape3D.new()
+	col.shape.size = Vector3(0.4, 0.2, 0.3)
+	chunk.add_child(col)
+	main.add_child(chunk)
+	chunk.add_to_group("debris")
+	chunk.global_position = mine + Vector3(-2, 0.4, 0)
+	phys.chunk = chunk
+	main.survival.health = 100.0
+
+
+func _kick_physics() -> void:
+	var W: Dictionary = main.melee.WEAPONS
+	for k in ["pipe", "machete"]:
+		var w = phys[k]
+		phys[k + "_from"] = w.global_position
+		w.take_hit(W[k].damage, w.global_position + Vector3(0, 1, 0), Vector3.LEFT, W[k].knock, W[k].stagger)
+	phys.near_from = phys.near.global_position
+	phys.on_from = phys.on.global_position
+	phys.chunk_from = phys.chunk.global_position
+	phys.near_top = phys.near.global_position.y
+	main.traps.detonate(phys.mine_key)
+	var p = main.player
+	phys.player_from = p.global_position
+	main._on_player_hit(10.0, p.global_position + Vector3(-1, 0, 0), "brute")
+
+
+func _check_knockback() -> void:
+	var pipe: float = phys.pipe_from.x - phys.pipe.global_position.x
+	var machete: float = phys.machete_from.x - phys.machete.global_position.x
+	check(pipe > 0.5 and pipe > machete * 2.0, "a pipe hit knocks a walker back %.2f m, a machete %.2f m" % [pipe, machete])
+	var near: Vector3 = phys.near.global_position - phys.near_from
+	check(near.x > 1.0 and phys.near_top > phys.near_from.y + 0.1, "the mine throws a walker 3 m away up and back (%.1f m)" % near.x)
+
+
+func _check_physics() -> void:
+	var hi = phys.high
+	var lo = phys.low
+	check(hi.last_fall_damage > 50.0 and hi.health < 100.0 and not hi.is_dead(), "a walker falling 6.5 m off a roof gets hurt (%.0f damage)" % hi.last_fall_damage)
+	check(is_equal_approx(lo.health, 100.0), "a 1.5 m drop doesn't hurt")
+	var thrown: float = phys.on.global_position.distance_to(phys.on_from)
+	check(phys.on.is_dead() and thrown > 0.5, "the walker on the mine is blown apart and its body thrown (%.1f m)" % thrown)
+	var cm: float = phys.chunk.global_position.distance_to(phys.chunk_from)
+	check(cm > 1.0, "the blast scatters loose debris (%.1f m)" % cm)
+	var pm: float = main.player.global_position.x - phys.player_from.x
+	check(pm > 1.0, "a brute's fist knocks you back (%.1f m)" % pm)
+	check(main.player.knock.length() < 0.5, "and the shove fades out")
+	phys.chunk.queue_free()
+	main.mutants.clear()
+	main.building.load_data([])
+	main.survival.health = 100.0
+	main.player.position = main.player.spawn_point
+
+
 func _process(_delta: float) -> bool:
 	frame += 1
 	var player = main.player
 	var terrain = main.terrain
 	if frame > 2010 and frame < 2250 and not main.mutants.spits().is_empty():
 		spit_seen = true
+	if frame > 3920 and frame < 3990 and phys.has("near"):
+		phys.near_top = maxf(phys.near_top, phys.near.global_position.y)
 	if frame > 720 and frame < 811:
 		ramp_top = maxf(ramp_top, player.position.y - ramp_base)
 	match frame:
@@ -2830,7 +2965,15 @@ func _process(_delta: float) -> bool:
 			_start_nav_walk()
 		3900:
 			_check_nav_walk()
-		3910:
+			_test_physics()
+			_start_physics()
+		3920:
+			_kick_physics()
+		3950:
+			_check_knockback()
+		4010:
+			_check_physics()
+		4020:
 			if failures.is_empty():
 				print("== ALL TESTS PASSED ==")
 				quit(0)

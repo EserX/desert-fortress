@@ -55,7 +55,7 @@ func _box(parent: Node3D, size: Vector3, pos: Vector3, mat: Material) -> void:
 
 
 ## A melee hit: wobble away from the swing and show the damage.
-func take_hit(damage: float, point: Vector3, dir: Vector3) -> void:
+func take_hit(damage: float, point: Vector3, dir: Vector3, _force := 0.0, _stagger := 0.0) -> void:
 	hits += 1
 	total_damage += damage
 	var local := global_transform.basis.inverse() * dir

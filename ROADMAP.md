@@ -71,7 +71,8 @@ Resource gathering and processing: trees and an axe, rocks to pick up, machines 
 
 ### M9: Game logic, AI and physics
 - [x] v1.10: **Mutant navigation:** a navigation mesh, rebuilt when the base or the ground changes, so mutants path round walls to an open gate or the weakest wall instead of walking straight in. Brutes go straight through, pits and wire are taken into account, and groups pick the same weak point
-- [ ] v2.0: **Physics pass:** explosions push mutants and loose items, dropped items become physics props, throwables (molotov, pipe bomb, rocks) with arcs and bounces, knockback and stagger tuned per weapon, mutants falling into pits and off roofs
+- [x] v1.12: **Physics pass, part 1:** knockback and stagger tuned per weapon, mine blasts throw mutants (and their bodies) and scatter debris, a Brute's fist shoves you, mutants knocked into pits and off roofs, and long falls hurt them
+- [ ] v2.0: **Physics pass, part 2:** dropped items become physics props, throwables (molotov, pipe bomb, rocks) with arcs and bounces that use the v1.12 blasts
 - [ ] v2.1: **Survival depth:** cold nights (fire pits and walls keep you warm), bleeding wounds fixed with bandages, cooking at the fire pit, food that spoils, and carried weight slowing digging and climbing
 - [ ] v2.2: **Crafting chain:** a furnace (scrap to metal plates, sand to glass, clay to bricks), building parts made at the workbench, better tools (a steel shovel digs faster, a sledgehammer demolishes)
 - [ ] v2.3: **Events:** sandstorms (short view range, mutants out by day, dug holes slowly fill in), a boss mutant every 10 nights, and day raids on outposts away from the base

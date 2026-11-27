@@ -16,11 +16,20 @@ var supplies := {}
 var _supply_mesh: Mesh
 var _supply_mat: Material
 var _supply_lid_mat: Material
-## id -> {"items": Dictionary, "node": Node3D}
+## id -> {"items": Dictionary, "node": RigidBody3D}. Since v2.0 a bag is a
+## physics prop: it falls, tumbles and settles, and blasts throw it. The body's
+## origin is the bottom of the bag, so a bag at rest has its ground point as
+## position (that is what is saved, as before).
 var drops := {}
 var _next_drop := 0
 var _bag_mesh: Mesh
 var _bag_mat: Material
+var _stone_mesh: Mesh
+var _stone_mat: Material
+var terrain  # Terrain, for the safety net under bags (set by main)
+## Physics layer 7: loose props. Nobody trips over them; they only hit the world.
+const PROP_LAYER := 64
+const BAG_SIZE := Vector3(0.5, 0.34, 0.45)
 
 
 func register(id: String, kind: String, lid: Node3D = null) -> void:
@@ -34,6 +43,8 @@ func is_opened(id: String) -> bool:
 ## Text for the on-screen prompt, e.g. "[E] Search trunk".
 func prompt(id: String) -> String:
 	if drops.has(id):
+		if drops[id].items.keys() == ["stone"]:
+			return "[E] Pick up %s" % _describe(drops[id].items).to_lower()
 		return "[E] Pick up bag (%s)" % _describe(drops[id].items)
 	if not containers.has(id):
 		return ""
@@ -145,7 +156,9 @@ func _make_area(id: String, size: Vector3, pos: Vector3) -> Area3D:
 
 # --- Dropped bags --------------------------------------------------------------
 
-## Puts a bag holding items on the ground at pos. Returns its id.
+## Puts a bag holding items on the ground at pos (on top of whatever is
+## there: a floor, a foundation). Returns its id. A bag of only stones looks
+## like a stone (thrown stones end up as these).
 func spawn_drop(items: Dictionary, pos: Vector3, id := "") -> String:
 	if id == "":
 		id = "drop_%d" % _next_drop
@@ -156,18 +169,90 @@ func spawn_drop(items: Dictionary, pos: Vector3, id := "") -> String:
 		s.rings = 3
 		_bag_mesh = LowPoly.flat(s)
 		_bag_mat = LowPoly.material(Color(0.55, 0.47, 0.32))
-	var body := Node3D.new()
-	body.position = pos
+		var st := SphereMesh.new()
+		st.radial_segments = 5
+		st.rings = 2
+		_stone_mesh = LowPoly.flat(st)
+		_stone_mat = LowPoly.material(Color(0.52, 0.48, 0.44))
+	var stone := items.size() == 1 and items.has("stone")
+	var body := RigidBody3D.new()
+	body.collision_layer = PROP_LAYER
+	body.collision_mask = 1
+	body.mass = 2.0
+	body.continuous_cd = true
+	body.can_sleep = true
+	var pm := PhysicsMaterial.new()
+	pm.friction = 0.9
+	pm.bounce = 0.1
+	body.physics_material_override = pm
+	body.position = _rest_point(pos) + Vector3(0, 0.02, 0)
 	var mi := MeshInstance3D.new()
-	mi.mesh = _bag_mesh
-	mi.material_override = _bag_mat
-	mi.scale = Vector3(0.5, 0.4, 0.45)
-	mi.position.y = 0.16
+	mi.mesh = _stone_mesh if stone else _bag_mesh
+	mi.material_override = _stone_mat if stone else _bag_mat
+	mi.scale = Vector3(0.28, 0.2, 0.24) if stone else Vector3(0.5, 0.4, 0.45)
+	mi.position.y = 0.1 if stone else 0.16
 	body.add_child(mi)
+	var col := CollisionShape3D.new()
+	col.shape = BoxShape3D.new()
+	col.shape.size = Vector3(0.26, 0.18, 0.22) if stone else BAG_SIZE
+	col.position.y = col.shape.size.y * 0.5
+	body.add_child(col)
 	body.add_child(_make_area(id, Vector3(0.8, 0.7, 0.8), Vector3(0, 0.3, 0)))
 	add_child(body)
+	body.add_to_group("loose_props")
 	drops[id] = {"items": items.duplicate(), "node": body}
 	return id
+
+
+## Throws a new bag from `from` with velocity v (dropping with G). Returns its id.
+func toss_drop(items: Dictionary, from: Vector3, v: Vector3) -> String:
+	var id := spawn_drop(items, from)
+	var body: RigidBody3D = drops[id].node
+	body.position = from
+	body.linear_velocity = v
+	body.angular_velocity = Vector3(randf_range(-3, 3), randf_range(-3, 3), randf_range(-3, 3))
+	return id
+
+
+## The first solid thing at or under pos (a floor, a foundation, the sand),
+## looking from a little above it, so a bag never starts inside a piece.
+func _rest_point(pos: Vector3) -> Vector3:
+	if not is_inside_tree():
+		return pos
+	var w := get_viewport().find_world_3d()
+	var space := w.direct_space_state if w else null
+	if space == null:
+		return pos
+	var q := PhysicsRayQueryParameters3D.create(pos + Vector3(0, 1.2, 0), pos - Vector3(0, 0.6, 0), 1)
+	var hit := space.intersect_ray(q)
+	return hit.position if hit else pos
+
+
+var _net_t := 0.0
+
+## Safety net, twice a second over every bag (a few dozen at most): one that
+## somehow got under the sand or fell off the world goes back on top of it.
+func _physics_process(delta: float) -> void:
+	_net_t -= delta
+	if _net_t > 0.0 or terrain == null:
+		return
+	_net_t = 0.5
+	for id in drops:
+		var b: RigidBody3D = drops[id].node
+		var g: float = terrain.surface_height(b.position.x, b.position.z)
+		if b.position.y < g - 0.6:
+			b.position.y = g + 0.02
+			b.linear_velocity = Vector3.ZERO
+
+
+## Wakes the bags within area (a rectangle on the ground) after it changed:
+## lifts any that ended up under raised sand, lets the rest fall into holes.
+func ground_changed(area: Rect2) -> void:
+	for id in drops:  # every bag (a few dozen at most), once per dig
+		var n: RigidBody3D = drops[id].node
+		if area.has_point(Vector2(n.position.x, n.position.z)) and terrain:
+			n.position.y = terrain.surface_height(n.position.x, n.position.z)
+			n.sleeping = false
 
 
 ## Sets what is left in a bag; an empty bag disappears.

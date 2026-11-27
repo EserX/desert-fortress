@@ -45,6 +45,7 @@ const Oases = preload("res://scripts/oases.gd")
 const Weather = preload("res://scripts/weather.gd")
 const Goals = preload("res://scripts/goals.gd")
 const EndingUI = preload("res://scripts/ending_ui.gd")
+const Throwables = preload("res://scripts/throwables.gd")
 
 ## Testing aid (temporary): a green box by the spawn point that holds a full
 ## stack of every item and tops your cash up to $2000 each time you open it.
@@ -110,6 +111,7 @@ var raids: Raids
 var livable: Livable
 var oases: Oases
 var weather: Weather
+var throwables: Throwables
 var goals: Goals
 var ending_ui: EndingUI
 var waves: Waves
@@ -240,6 +242,7 @@ func _ready() -> void:
 	loot = Loot.new()
 	loot.name = "Loot"
 	loot.world_seed = world_seed
+	loot.terrain = terrain
 	for c in props.containers:
 		loot.register(c.id, c.kind, c.lid)
 	add_child(loot)
@@ -476,12 +479,7 @@ func _ready() -> void:
 	shop.upgraded.connect(func(_id): apply_upgrades())
 	mutants.player_hit.connect(_on_player_hit)
 	mutants.piece_hit.connect(_on_piece_attacked)
-	traps.player_hurt.connect(func(dmg, from, cause):
-		if survival.dead:
-			return
-		survival.damage(dmg, cause)
-		var local: Vector3 = player.global_transform.basis.inverse() * (from - player.global_position)
-		hud.show_damage(atan2(local.x, -local.z)))
+	traps.player_hurt.connect(_on_blast_hurt)
 	building.piece_destroyed.connect(func(_k, t): hud.show_pickup(["%s was destroyed!" % Building.PIECES[t].name]))
 	building.piece_collapsed.connect(func(_k, t): hud.show_pickup(["%s collapsed" % Building.PIECES[t].name]))
 	melee.hit_landed.connect(hud.show_hitmarker)
@@ -502,6 +500,7 @@ func _ready() -> void:
 	day_night.day_started.connect(water.on_morning)
 	day_night.day_started.connect(mutants.top_up)
 	_setup_goals()  # after water.on_morning: the rain falls on the new day
+	_setup_throwables()
 	# Autosave every morning (after the morning loot is in place).
 	day_night.day_started.connect(func(_d): Game.save_game("auto", _screenshot()))
 	Game.saved.connect(func(slot): hud.show_banner("Game saved (%s)" % Game.slot_label(slot)))
@@ -535,6 +534,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_pressed("rotate") and lock_door(player.interact_target()):
 		get_viewport().set_input_as_handled()
 	elif guns.item != "" and _gun_input(event):
+		get_viewport().set_input_as_handled()
+	elif holding_throwable() and throwables.handle_input(event, inventory.selected_stack().item):
 		get_viewport().set_input_as_handled()
 	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT \
 			and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and Melee.is_weapon(melee.item):
@@ -583,6 +584,8 @@ func _process(delta: float) -> void:
 				text = water.held_prompt(inventory.selected_stack().item)
 			elif text == "" and Farming.crop_of_seed(inventory.selected_stack().get("item", "")) != "":
 				text = farming.seed_prompt(inventory.selected_stack().item)
+			elif text == "" and holding_throwable():
+				text = throwables.held_prompt(inventory.selected_stack().item)
 			if text == "" and player.interact_target() == "":
 				text = farming.look_prompt()  # a plant under the crosshair
 		hud.set_prompt(text)
@@ -609,7 +612,10 @@ func _process(delta: float) -> void:
 			hints.show_hint("detector")
 		elif Guns.is_gun(hand):
 			hints.show_hint("gun")
+		elif Throwables.is_throwable(hand):
+			hints.show_hint("throw")
 		melee.set_item(hand)
+		throwables.set_held(hand if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and not inventory_ui.is_open() else "")
 		_detector_beep(delta, hand == "metal_detector")
 		guns.set_item(hand)
 		if inventory_ui.is_open() or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
@@ -678,6 +684,11 @@ func dig_tool() -> String:
 	if s.is_empty() or build_mode.active or survival.dead or not s.item in ["shovel", "pickaxe"]:
 		return ""
 	return s.item
+
+
+func holding_throwable() -> bool:
+	var s := inventory.selected_stack()
+	return not s.is_empty() and Throwables.is_throwable(s.item) and not build_mode.active and not survival.dead
 
 
 func holding(item: String) -> bool:
@@ -1028,10 +1039,7 @@ func _on_ground_changed(area: Rect2) -> void:
 			var g := terrain.surface_height(b.position.x, b.position.z)
 			if b.position.y < g:
 				b.position.y = g
-	for id in loot.drops:
-		var n: Node3D = loot.drops[id].node
-		if near.has_point(Vector2(n.position.x, n.position.z)):
-			n.position.y = terrain.surface_height(n.position.x, n.position.z)
+	loot.ground_changed(near)
 	var r := building.zone_radius
 	var d := area.get_center().length()
 	if d > r - 4.0 and d < r + 4.0:
@@ -1656,8 +1664,16 @@ func _on_crafted(id: String, left: Dictionary) -> void:
 ## Drops a whole stack in a bag at your feet.
 func drop_slot(i: int) -> void:
 	var s := inventory.take_slot(i)
-	if not s.is_empty():
-		loot.spawn_drop({s.item: s.count}, _drop_spot())
+	if s.is_empty():
+		return
+	# Tossed from the hand a step ahead: it falls, rolls and settles (v2.0).
+	var b := player.camera.global_transform.basis
+	var from := player.camera.global_position - b.z * 0.6 - Vector3(0, 0.35, 0)
+	if player.look_hit(0.9).is_empty():
+		var fwd := Vector3(-b.z.x, 0, -b.z.z).normalized()
+		loot.toss_drop({s.item: s.count}, from, fwd * 2.2 + Vector3(0, 1.2, 0) + player.velocity * 0.5)
+	else:
+		loot.spawn_drop({s.item: s.count}, _drop_spot())  # facing a wall: at your feet
 
 
 ## Eat or drink the selected hotbar item.
@@ -1819,6 +1835,33 @@ func _setup_oases() -> void:
 	oases.spilled.connect(loot.spawn_drop)
 	water.morning_tally.connect(oases.on_tally)
 	raids.wild_green = oases.wild_green
+
+
+## Hurt by a blast or a fire (mines, pipe bombs, molotovs): damage and a red mark
+## on the side it came from.
+func _on_blast_hurt(dmg: float, from: Vector3, cause: String) -> void:
+	if survival.dead:
+		return
+	survival.damage(dmg, cause)
+	var local: Vector3 = player.global_transform.basis.inverse() * (from - player.global_position)
+	hud.show_damage(atan2(local.x, -local.z))
+
+
+## v2.0: stones, molotovs and pipe bombs thrown from the hand (throwables.gd).
+func _setup_throwables() -> void:
+	throwables = Throwables.new()
+	throwables.name = "Throwables"
+	throwables.inventory = inventory
+	throwables.player = player
+	throwables.melee = melee
+	throwables.mutants = mutants
+	throwables.traps = traps
+	throwables.oases = oases
+	throwables.loot = loot
+	throwables.terrain = terrain
+	add_child(throwables)
+	throwables.player_hurt.connect(_on_blast_hurt)
+	throwables.hit_landed.connect(hud.show_hitmarker)
 
 
 ## Green milestones, the weather (dew, rain) and the ending (v1.19).
@@ -1996,7 +2039,7 @@ func collect_save_data() -> Dictionary:
 			"day": day_night.day,
 			"hour": day_night.hour,
 		},
-		"loot": loot.save_data(),
+		"loot": _loot_save(),
 		"inventory": inventory.save_data(),
 		"survival": survival.save_data(),
 		"map": {"discovered": discovered.keys()},
@@ -2026,7 +2069,14 @@ func collect_save_data() -> Dictionary:
 	}
 
 
+## Thrown stones still in the air land first, so saving never loses one.
+func _loot_save() -> Dictionary:
+	throwables.land_stones()
+	return loot.save_data()
+
+
 func apply_save_data(data: Dictionary) -> void:
+	throwables.clear()  # fires go out, bombs in the air are gone
 	# Dug ground first, so everything else is restored on top of it. Older saves: flat.
 	terrain.load_data(data.get("terrain", {}))
 	base_zone.rebuild()

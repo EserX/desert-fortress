@@ -81,6 +81,9 @@ var shots := [
 	{"name": "71_goals_map", "pos": Vector3(20, 0, 40), "yaw": 0.9, "pitch": 0.0, "hour": 10.0, "map": true, "goals": "map"},
 	{"name": "72_goals_drone", "pos": Vector3(4, 0, 9), "yaw": 0.6, "pitch": 0.0, "hour": 15.0, "drone_shop": true, "goals": "drone"},
 	{"name": "73_ending", "pos": Vector3(20, 0, 38), "yaw": 0.1, "pitch": -0.15, "hour": 8.0, "goals": "ending"},
+	{"name": "74_molotov", "pos": Vector3(-30, 0, -40), "yaw": PI, "pitch": -0.12, "hour": 19.4, "throw": "molotov"},
+	{"name": "75_pipe_bomb", "pos": Vector3(-30, 0, -40), "yaw": PI, "pitch": 0.05, "hour": 16.0, "throw": "pipe_bomb"},
+	{"name": "76_throw_stone", "pos": Vector3(-30, 0, -40), "yaw": PI, "pitch": 0.12, "hour": 10.0, "throw": "stone"},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -213,6 +216,10 @@ func _process(_d: float) -> bool:
 			_raid_sample()
 		if s.has("oasis"):
 			_oasis_sample(p, s.oasis)
+		if s.has("throw"):
+			_throw_sample(p, s.throw)
+		elif not main.throwables.flying.is_empty() or not main.throwables.fires.is_empty():
+			main.throwables.clear()
 		if s.has("goals"):
 			_goals_sample(s.goals)
 		elif main.ending_ui.is_open():
@@ -1066,3 +1073,54 @@ func _oasis_sample(p: Node3D, kind: String) -> void:
 	p.position = from
 	var d := target - from
 	p.rotation.y = atan2(-d.x, -d.z)
+
+
+## v2.0 throwables: a molotov's fire among walkers at dusk, a pipe bomb going
+## off, or stones in flight with a stone pile and a tossed bag.
+func _throw_sample(p: Node3D, kind: String) -> void:
+	var th = main.throwables
+	th.clear()
+	main.mutants.clear()
+	main.building.load_data([])
+	main.building.sites_load_data([])
+	main.terrain.load_data({})
+	for id in main.loot.drops.keys():
+		main.loot.set_drop_items(id, {})
+	main.inventory.load_data({})
+	main.inventory.add(kind, 3)
+	main.inventory.selected = 0
+	var t = main.terrain
+	var fwd := -p.global_transform.basis.z
+	fwd.y = 0.0
+	fwd = fwd.normalized()
+	var side := fwd.cross(Vector3.UP)
+	var at: Vector3 = p.position + fwd * 8.0
+	at.y = t.surface_height(at.x, at.z)
+	match kind:
+		"molotov":
+			th.ignite(at)
+			for o in [Vector2(0.6, 0.2), Vector2(-1.4, 1.0), Vector2(2.5, -1.5), Vector2(-3.0, -2.0)]:
+				var w = main.mutants.spawn("walker", at + side * o.x + fwd * o.y)
+				w.rotation.y = p.rotation.y
+				w.set_physics_process(false)
+			th.charge = 0.5  # the next one drawn back
+		"pipe_bomb":
+			for o in [Vector2(0.8, 0.5), Vector2(-1.5, 1.2), Vector2(2.0, -0.8)]:
+				var w = main.mutants.spawn("walker", at + side * o.x + fwd * o.y)
+				w.rotation.y = p.rotation.y
+				w.set_physics_process(false)
+			th.throw("pipe_bomb", p.camera.global_position + fwd * 2.5, fwd * 5.0 + Vector3(0, 2.5, 0))
+			th.charge = 0.3
+			main.loot.spawn_drop({"wood": 3}, at + side * 1.2)
+			main.loot.spawn_drop({"stone": 2}, at - side * 1.0)
+		"stone":
+			var from: Vector3 = p.camera.global_position - p.camera.global_transform.basis.z * 0.5
+			for i in 3:
+				var v := (fwd * 7.0 + Vector3(0, 3.0 - i * 0.8, 0) + side * (i - 1) * 1.0)
+				var b = th.throw("stone", from + v * (0.25 + 0.15 * i), v)
+			main.loot.spawn_drop({"stone": 4}, at - side * 1.5)
+			main.loot.toss_drop({"cloth": 2, "wood": 3}, p.position + fwd * 3.0 + side * 1.5 + Vector3(0, 1.2, 0), fwd * 2.0 + Vector3(0, 1.0, 0))
+			var w = main.mutants.spawn("walker", at + fwd * 6.0)
+			w.rotation.y = p.rotation.y + PI
+			w.set_physics_process(false)
+			th.charge = 0.6

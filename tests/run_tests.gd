@@ -3039,6 +3039,11 @@ func _process(_delta: float) -> bool:
 			_test_oases()
 			_test_goals()
 		4080:
+			_test_throwables()
+			_start_throws()
+		4270:
+			_check_throws()
+		4280:
 			for e in catcher.errors:
 				print("  ERROR ", e)
 			check(catcher.errors.is_empty(), "Godot reported no errors while the tests ran (%d)" % catcher.errors.size())
@@ -4341,3 +4346,150 @@ func _test_goals() -> void:
 	g.load_data({})
 	we.load_data({})
 	b.load_data([])
+
+
+## v2.0: throwables (stones, molotovs, pipe bombs) and bags as physics props.
+var throw := {}
+
+func _test_throwables() -> void:
+	var th = main.throwables
+	var inv = main.inventory
+	var Items = load("res://scripts/items.gd")
+	var Throwables = load("res://scripts/throwables.gd")
+	main.mutants.clear()
+	main.building.load_data([])
+	main.terrain.load_data({})
+	check(Throwables.is_throwable("stone") and Throwables.is_throwable("molotov") and Throwables.is_throwable("pipe_bomb") and not Throwables.is_throwable("wood"), "stones, molotovs and pipe bombs can be thrown, wood can't")
+	check(Items.RECIPES.has("molotov") and Items.RECIPES.has("pipe_bomb") and Items.recipe_tier("pipe_bomb") == 2, "molotovs are made at the workbench, pipe bombs at tier 2")
+	check(main.melee.TOOLS.has("molotov") and main.melee._models.has("pipe_bomb"), "the hands hold a throwable")
+	# Drawing back: a click lobs it, holding throws hard.
+	th.charge = -1.0
+	check(is_equal_approx(th.power(), th.MIN_POWER), "a quick click throws at %.0f%% power" % (th.power() * 100.0))
+	th.charge = th.CHARGE_TIME * 2.0
+	check(is_equal_approx(th.power(), 1.0), "held long enough, full power")
+	inv.load_data({})
+	inv.add_all({"stone": 3})
+	inv.selected = 0
+	check(main.holding_throwable() and th.held_prompt("stone").contains("Throw:"), "the prompt shows the draw: " + th.held_prompt("stone").replace("\n", " / "))
+	th.charge = -1.0
+	check(th.held_prompt("stone").contains("[LMB] Throw"), "and how to throw: " + th.held_prompt("stone").replace("\n", " / "))
+	var body = th.throw_held("stone", 1.0)
+	check(body is RigidBody3D and inv.count_of("stone") == 2 and th.flying.size() == 1, "throwing takes one from your hands and sends it flying")
+	check(body.linear_velocity.length() > 15.0 and body.linear_velocity.normalized().dot(-main.player.camera.global_transform.basis.z) > 0.9, "where you look, fast (%.1f m/s)" % body.linear_velocity.length())
+	check(body.is_in_group("loose_props"), "a blast can throw it about")
+	inv.load_data({})
+	check(th.throw_held("stone", 1.0) == null and th.flying.size() == 1, "nothing to throw with empty hands")
+	# A landed stone lies on the ground to pick up again, and piles up.
+	var bags_before: int = main.loot.drops.size()
+	var spot := Vector3(-40, main.terrain.surface_height(-40, 30), 30)
+	th.flying[0].node.global_position = spot + Vector3(0, 0.09, 0)
+	th.land_stone(th.flying[0])
+	check(th.flying.is_empty() and main.loot.drops.size() == bags_before + 1, "a stone that stops becomes a stone on the ground")
+	var sid: String = main.loot.drops.keys().back()
+	check(main.loot.drops[sid].items == {"stone": 1} and main.loot.prompt(sid) == "[E] Pick up 1 stone", "picked up like a bag: " + main.loot.prompt(sid))
+	th.throw("stone", spot + Vector3(0.4, 1.0, 0), Vector3.ZERO)
+	th.land_stones()
+	check(main.loot.drops.size() == bags_before + 1 and main.loot.drops[sid].items.get("stone", 0) == 2, "a second stone lands on the pile (%s)" % str(main.loot.drops[sid].items))
+	main.interact(sid)
+	check(inv.count_of("stone") == 2 and not main.loot.drops.has(sid), "E picks the stones up again")
+	# Saving with a stone in the air: it lands, nothing is lost.
+	th.throw("stone", spot + Vector3(0, 3.0, 0), Vector3(0, 5, 0))
+	var data: Dictionary = main.collect_save_data()
+	check(th.flying.is_empty() and data.loot.drops.any(func(b): return b.items.has("stone")), "saving lands stones still in the air")
+	th.ignite(spot)
+	th.throw("pipe_bomb", spot + Vector3(0, 3.0, 0), Vector3.ZERO)
+	main.apply_save_data(JSON.parse_string(JSON.stringify(data)))
+	check(th.fires.is_empty() and th.flying.is_empty(), "loading puts fires out and drops what's in the air")
+	for id in main.loot.drops.keys():
+		main.loot.set_drop_items(id, {})
+	# Fire burns you (now and then, not every frame).
+	var p = main.player
+	main.survival.health = 100.0
+	th.ignite(p.global_position)
+	th._player_burn = 0.0
+	th._burn(0.1)
+	th._burn(0.1)
+	var burnt: float = 100.0 - main.survival.health
+	check(burnt > 0.0 and burnt <= th.FIRE_PLAYER_DAMAGE + 0.01, "standing in your own fire burns (%.0f)" % burnt)
+	th.clear()
+	main.survival.health = 100.0
+	# Fire sets a nest alight with no fuel can, and a fuel can is still needed by hand.
+	var oa = main.oases
+	var saved: Dictionary = oa.save_data()
+	var k := -1
+	for i in oa.count():
+		if oa.list[i].nest == "alive":
+			k = i
+	if k >= 0:
+		inv.load_data({})
+		check(not oa.burn_nest(k), "without a fuel can E still can't burn a nest")
+		th.ignite(oa.list[k].nest_pos + Vector3(2.0, 0, 0))
+		check(oa.list[k].nest == "burning", "a molotov's fire 2 m from a nest sets it alight")
+		th.clear()
+		oa.load_data(JSON.parse_string(JSON.stringify(saved)))
+	else:
+		check(false, "the world has a nest to burn")
+	# Bags are physics props now: they rest on what's under them and blasts throw them.
+	var b = main.building
+	var slot := {"kind": "cell", "cx": 5, "cz": 5, "dir": 0, "level": 0}
+	var fk: String = b.place("foundation", slot, b.evaluate("foundation", slot).y)
+	var fpos: Vector3 = b.pieces[fk].node.global_position
+	var bag: String = main.loot.spawn_drop({"wood": 2}, Vector3(fpos.x, main.terrain.surface_height(fpos.x, fpos.z), fpos.z))
+	var bn = main.loot.drops[bag].node
+	check(bn is RigidBody3D and bn.is_in_group("loose_props"), "a dropped bag is a physics prop")
+	var top: Dictionary = main.get_world_3d().direct_space_state.intersect_ray(PhysicsRayQueryParameters3D.create(fpos + Vector3(0, 3, 0), fpos - Vector3(0, 2, 0), 1))
+	check(not top.is_empty() and bn.global_position.y > top.position.y - 0.05, "a bag spilled on a foundation sits on top of it, not inside (%.2f / %.2f)" % [bn.global_position.y, top.get("position", Vector3.ZERO).y])
+	main.loot.set_drop_items(bag, {})
+	b.load_data([])
+	var tossed: String = main.loot.toss_drop({"cloth": 1}, Vector3(-40, 5, 40), Vector3(2, 1, 0))
+	check(main.loot.drops[tossed].node.linear_velocity.x > 1.0, "a bag dropped with G is tossed forward")
+	main.loot.set_drop_items(tossed, {})
+
+
+## Starts the moving throws: a stone at a walker, a molotov among two more,
+## a pipe bomb next to one, with a bag lying beside it.
+func _start_throws() -> void:
+	var th = main.throwables
+	var ms = main.mutants
+	ms.clear()
+	var t = main.terrain
+	main.player.position = Vector3(-30, t.surface_height(-30, -55), -55)
+	main.player.velocity = Vector3.ZERO
+	main.survival.health = 100.0
+	var c := Vector3(-30, 0, -30)
+	var g := func(v: Vector3) -> Vector3: return Vector3(v.x, t.surface_height(v.x, v.z), v.z)
+	throw.stone_w = ms.spawn("walker", c + Vector3(12, 0, 0))
+	throw.stone_w.set_physics_process(false)
+	var sw: Vector3 = throw.stone_w.global_position
+	th.throw("stone", sw + Vector3(0, 1.3, -4.0), Vector3(0, 0, 18))
+	throw.fire_in = ms.spawn("walker", c + Vector3(0.8, 0, 0))
+	throw.fire_out = ms.spawn("walker", c + Vector3(6, 0, 0))
+	for w in [throw.fire_in, throw.fire_out]:
+		w.set_physics_process(false)
+	th.throw("molotov", g.call(c) + Vector3(0, 2.0, 0), Vector3(0, -6, 0))
+	var bc := c + Vector3(-12, 0, 0)
+	throw.bomb_w = ms.spawn("walker", bc + Vector3(2.5, 0, 0))
+	throw.bomb_w.set_physics_process(false)
+	throw.bomb = th.throw("pipe_bomb", g.call(bc) + Vector3(0, 1.5, 0), Vector3(0, -3, 0))
+	throw.bomb_top = 0.0
+	throw.bag = main.loot.spawn_drop({"wood": 1}, g.call(bc + Vector3(0, 0, 2.0)))
+	throw.bag_from = main.loot.drops[throw.bag].node.global_position
+
+
+func _check_throws() -> void:
+	var th = main.throwables
+	var sw = throw.stone_w
+	check(sw.health < 100.0, "a thrown stone hits a walker (%.0f health left)" % sw.health)
+	check(not th.flying.any(func(r): return r.item == "stone") and main.loot.drops.values().any(func(d): return d.items.has("stone")), "and then lies on the sand as a stone")
+	check(throw.fire_in.health < 40.0, "a molotov's fire burns a walker standing in it (%.0f left)" % throw.fire_in.health)
+	check(is_equal_approx(throw.fire_out.health, 100.0), "but not one 6 m away")
+	check(th.fires.size() == 1, "the fire is still burning after 3 s")
+	check(not is_instance_valid(throw.bomb) or throw.bomb.is_queued_for_deletion(), "the pipe bomb went off after its fuse")
+	check(throw.bomb_w.health < 30.0 or throw.bomb_w.is_dead(), "and its blast hurt the walker 2.5 m away (%.0f left)" % throw.bomb_w.health)
+	var moved: float = main.loot.drops[throw.bag].node.global_position.distance_to(throw.bag_from) if main.loot.drops.has(throw.bag) else 0.0
+	check(moved > 0.5, "the blast threw the bag lying beside it (%.1f m)" % moved)
+	check(is_equal_approx(main.survival.health, 100.0), "you were far enough away (health %.0f)" % main.survival.health)
+	th.clear()
+	main.mutants.clear()
+	for id in main.loot.drops.keys():
+		main.loot.set_drop_items(id, {})

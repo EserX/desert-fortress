@@ -447,10 +447,13 @@ func search_stash(i: int) -> Dictionary:
 	return items
 
 
-## Sets the nest alight with a fuel can. It burns for BURN_TIME seconds.
-func burn_nest(i: int) -> bool:
+## Sets the nest alight with a fuel can (or, free, with a molotov's fire or a
+## pipe bomb, v2.0). It burns for BURN_TIME seconds.
+func burn_nest(i: int, free := false) -> bool:
 	var o: Dictionary = list[i]
-	if o.nest != "alive" or inventory == null or inventory.remove("fuel", 1) < 1:
+	if o.nest != "alive":
+		return false
+	if not free and (inventory == null or inventory.remove("fuel", 1) < 1):
 		return false
 	o.nest = "burning"
 	o.burn = 0.0

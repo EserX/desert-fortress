@@ -145,38 +145,57 @@ func detonate(key: String) -> void:
 		return
 	var pos: Vector3 = building.pieces[key].node.global_position
 	building.remove(key)
-	for m in mutants.alive():
+	blast_at(pos, MINE_BLAST, "Caught in your own landmine.")
+
+
+## What a landmine's blast does (a pipe bomb has its own, in throwables.gd).
+const MINE_BLAST := {
+	"radius": MINE_RADIUS, "damage": MINE_DAMAGE, "push": MINE_PUSH, "lift": MINE_LIFT,
+	"stagger": MINE_STAGGER, "player_damage": MINE_PLAYER_DAMAGE, "player_push": MINE_PLAYER_PUSH,
+	"piece_damage": MINE_PIECE_DAMAGE, "piece_radius": 3.0, "debris_radius": MINE_DEBRIS_RADIUS,
+}
+
+
+## An explosion at pos (v2.0, shared by mines and pipe bombs): throws and hurts
+## mutants (less further out), knocks you off your feet, scatters loose props
+## and damages nearby pieces (not traps), with a fireball and a boom.
+func blast_at(pos: Vector3, spec: Dictionary, cause: String) -> void:
+	var radius: float = spec.radius
+	for m in mutants.alive():  # every living mutant (a wave is a few dozen at most)
 		var d: float = m.global_position.distance_to(pos)
-		if d < MINE_RADIUS:
+		if d < radius:
 			var away: Vector3 = (m.global_position - pos).normalized()
-			var f := 1.0 - d / MINE_RADIUS
-			m.blast(pos, MINE_PUSH * f, MINE_LIFT * f, MINE_STAGGER * f)
-			m.take_hit(MINE_DAMAGE * f, m.global_position + Vector3(0, 1.2, 0), away, 0.0, 0.0)
+			var f := 1.0 - d / radius
+			m.blast(pos, spec.push * f, spec.lift * f, spec.stagger * f)
+			m.take_hit(spec.damage * f, m.global_position + Vector3(0, 1.2, 0), away, 0.0, 0.0)
 	if player:
 		var pd := player.global_position.distance_to(pos)
-		if pd < MINE_RADIUS:
-			var f := 1.0 - pd / MINE_RADIUS
+		if pd < radius:
+			var f := 1.0 - pd / radius
 			if player.has_method("push"):
 				var away := player.global_position - pos
 				away.y = 0.0
-				player.push(away.normalized() * MINE_PLAYER_PUSH * f + Vector3(0, 3.5 * f, 0))
-			player_hurt.emit(MINE_PLAYER_DAMAGE * f, pos, "Caught in your own landmine.")
-	scatter_debris(pos, MINE_DEBRIS_RADIUS, 9.0)
-	for k in building.pieces.keys():
-		if building.pieces.has(k) and building.pieces[k].node.global_position.distance_to(pos) < 3.0 \
+				player.push(away.normalized() * spec.player_push * f + Vector3(0, 3.5 * f, 0))
+			player_hurt.emit(spec.player_damage * f, pos, cause)
+	scatter_debris(pos, spec.debris_radius, 9.0)
+	for k in building.pieces.keys():  # every piece (a few hundred), once per blast
+		if building.pieces.has(k) and building.pieces[k].node.global_position.distance_to(pos) < spec.piece_radius \
 				and not building.PIECES[building.pieces[k].type].get("trap", false):
-			building.damage(k, MINE_PIECE_DAMAGE)
+			building.damage(k, spec.piece_damage)
 	_explosion(pos)
 	exploded.emit(pos)
 
 
-## A blast at pos throws the loose debris chunks (group "debris") lying
-## within radius, up to speed m/s at the centre. Returns how many it moved.
+## A blast at pos throws the loose debris chunks (group "debris") and loose
+## props (group "loose_props": dropped bags, thrown stones and bombs, v2.0)
+## lying within radius, up to speed m/s at the centre. Returns how many it moved.
 func scatter_debris(pos: Vector3, radius: float, speed: float) -> int:
 	if not is_inside_tree():
 		return 0
 	var moved := 0
-	for c in get_tree().get_nodes_in_group("debris"):
+	var bodies: Array = get_tree().get_nodes_in_group("debris")
+	bodies.append_array(get_tree().get_nodes_in_group("loose_props"))
+	for c in bodies:  # at most MAX_DEBRIS chunks plus the bags lying about
 		var rb := c as RigidBody3D
 		if rb == null or not rb.is_inside_tree():
 			continue

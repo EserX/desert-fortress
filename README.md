@@ -2,7 +2,7 @@
 
 A 3D low-poly survival and fortress-defence game for Linux, made with Godot 4.5. Scavenge the desert by day, build and arm a fortress around the flag, and survive a bigger mutant wave every night. Each night pays cash you spend at the shop terminal on supplies, weapons, drone deliveries and base upgrades. Now also: turning the desert green from a main well at the centre, farming it and selling the harvest at the market, and hunting the animals the green land draws in (by night the water draws the mutants); claiming hidden oases as outposts, and green milestones that end with the rain coming back (then free play). A peaceful mode leaves out the mutants altogether.
 
-**Current version: v1.19.0.** See [ROADMAP.md](ROADMAP.md) for the plan and [DEVLOG.md](DEVLOG.md) for what changed in each update.
+**Current version: v2.0.0.** See [ROADMAP.md](ROADMAP.md) for the plan and [DEVLOG.md](DEVLOG.md) for what changed in each update.
 
 ## Play (Linux Mint)
 
@@ -83,7 +83,7 @@ Eat millet, melons, dates and dragon fruit with **F**. Sell the harvest at the m
 
 Green land spreads by itself: a fully green square keeps the sand next to it turning to soil (in about 3 mornings), ready for your water. Grown **date palms** drop saplings on watered soil within 4 m now and then, so a palm grove grows if you keep it watered.
 
-**Oases and outposts.** Three to five **oases** lie hidden out in the desert, 85 to 195 m from the base (the map marks each one once you've been within 35 m). Each has a **spring** (**E** to drink your fill and fill the watering can), **reeds** to cut (**E**, 8 a day; 3 reeds make 2 fibre at the workbench), a **clay bank** to dig (**E**, 6 a day) and an **old stash** of rare seeds (saffron, dragon fruit, date palm). Mutant **guards** come out when you get within about 55 m. Some oases have a **mutant nest**: while it stands the land round it stays dead, the palms are bare stumps and it keeps breeding guards. Bring a **fuel can** and press **E** on the nest to burn it out; then the spring brings the oasis back to life over a few mornings. With the nest gone and the guards dead, press **E** on the marker post to **claim** the oasis as an **outpost** (6 wood, 2 cloth): it gets its own build zone of 16 m round the post (build there just like at the base), and its spring waters the land further out every morning. The green round wild oases doesn't draw the night waves, but a claimed outpost's does, and an outpost's buildings don't count for the base's livable score.
+**Oases and outposts.** Three to five **oases** lie hidden out in the desert, 85 to 195 m from the base (the map marks each one once you've been within 35 m). Each has a **spring** (**E** to drink your fill and fill the watering can), **reeds** to cut (**E**, 8 a day; 3 reeds make 2 fibre at the workbench), a **clay bank** to dig (**E**, 6 a day) and an **old stash** of rare seeds (saffron, dragon fruit, date palm). Mutant **guards** come out when you get within about 55 m. Some oases have a **mutant nest**: while it stands the land round it stays dead, the palms are bare stumps and it keeps breeding guards. Bring a **fuel can** and press **E** on the nest to burn it out (or throw a molotov or a pipe bomb at it); then the spring brings the oasis back to life over a few mornings. With the nest gone and the guards dead, press **E** on the marker post to **claim** the oasis as an **outpost** (6 wood, 2 cloth): it gets its own build zone of 16 m round the post (build there just like at the base), and its spring waters the land further out every morning. The green round wild oases doesn't draw the night waves, but a claimed outpost's does, and an outpost's buildings don't count for the base's livable score.
 
 **Goals and the ending.** The green % of the whole desert (on the HUD as "Green 0.3% / 1%", with the next goal) has four milestones, shown in the GOALS panel on the map (M). Each one is announced and unlocks new drone orders at the shop terminal (locked orders say which goal they need):
 - **1%, First green:** olive saplings (a fruit tree: shade, olives, pushes the green out, needs only 2 L a day) and prickly pear pads (hardy food, 2 L a day).
@@ -106,6 +106,13 @@ Milestones stay reached even if the green fades later. You can't get to 10% with
 
 **Weapons.** Melee costs stamina. Guns are loud and bring mutants running. Hold **right click** to aim (the rifle has a scope), **R** reloads. Headshots do double damage.
 
+**Throwing.** Hold a **stone**, a **molotov** or a **pipe bomb** and hold **left click** to draw back; let go to throw. The longer you hold (up to about a second), the further it flies. Everything flies in an arc and bounces off walls and the ground.
+- **Stone:** bruises and shoves a mutant (or an animal) it hits hard, then lies where it stopped; pick it up again with **E** (stones landing close together make one pile).
+- **Molotov** (workbench: 1 fuel can, 1 cloth, 2 water bottles for 2): breaks on the first thing it hits and leaves a pool of fire for 8 seconds that burns and slows mutants. Thrown at a **nest** (within about 4 m) it sets it alight, no fuel can needed. Don't stand in it.
+- **Pipe bomb** (workbench tier 2: 2 scrap, 4 nails, 1 fuel can): bounces and rolls, and blows up 2.5 seconds after you throw it, harder than a landmine (it hurts you too, and your own walls within 3.5 m). It also burns out a nest close by.
+
+Dropped bags (**Q**) are tossed a step ahead, fall and roll, and blasts throw them about.
+
 **Defences.** Spike barricades, spike strips, barbed wire (slows them) and landmines. An electric fence and floodlights need power from a fuel generator (fuel cans come from car trunks): within 4 m they plug straight in, further away they need a **cable**. Make cable at the workbench (1 scrap, 1 cloth for 6), hold it, left click the generator and then the light, fence, **power switch** or turret (a cable costs one per 2 m, 24 m at most; right click takes a piece's cables back up). Power passes through switches only when they are on (E). A turret on power turns and fires 40% faster. At night an open gate closes by itself 8 seconds after you leave it, and **R** locks a shut metal door (locked, it takes half damage). A fire pit burns mutants that walk through it. Auto-turrets stand on tall masts and shoot anything they can see within 22 m, over your walls, using the 9mm rounds you load into them with **E**.
 
 **Cash and the shop.** Every night pays for kills, for surviving, and for how much of the base still stands (more if you kill the whole wave). The **shop terminal** next to the flag has four pages:
@@ -125,7 +132,7 @@ Milestones stay reached even if the green fades later. You can't get to 10% with
 | Space | Jump |
 | Ctrl / C | Crouch (quieter) |
 | Mouse | Look |
-| Left click | Swing, shoot, build (hold and drag for a line), use the hammer, dig with the shovel, pour the watering can, or plant seeds |
+| Left click | Swing, shoot, throw (hold to throw further), build (hold and drag for a line), use the hammer, dig with the shovel, pour the watering can, or plant seeds |
 | Right click | Aim a gun; hammer: demolish; shovel: fill; build mode: undo |
 | R | Reload; build mode: turn the piece; hammer: repair everything nearby; lock or unlock a metal door |
 | G | Build mode: pick a piece up and move it; hammer: upgrade everything like it nearby |

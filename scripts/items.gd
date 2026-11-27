@@ -71,6 +71,9 @@ const ITEMS := {
 	"prickly_pear": {"name": "Prickly pears", "weight": 0.3, "stack": 20},
 	"kit_dew": {"name": "Dew collector (crate)", "weight": 8.0, "stack": 1},
 	"kit_weather": {"name": "Weather station (crate)", "weight": 14.0, "stack": 1},
+	# v2.0 throwables (a stone can be thrown too).
+	"molotov": {"name": "Molotov", "weight": 0.8, "stack": 5},
+	"pipe_bomb": {"name": "Pipe bomb", "weight": 1.0, "stack": 5},
 }
 
 ## What each kind of container can hold: item -> [min, max]. A negative min
@@ -101,6 +104,8 @@ const RECIPES := {
 	"rope": {"count": 1, "cost": {"fibre": 3}, "info": "twist agave fibre into rope (sells well at the market)"},
 	"metal_detector": {"count": 1, "cost": {"scrap": 6, "nails": 4, "cloth": 2}, "info": "finds caches buried near the base"},
 	"spike_barricade": {"count": 1, "cost": {"wood": 4, "nails": 4}, "info": "build it in build mode"},
+	"molotov": {"count": 2, "cost": {"fuel": 1, "cloth": 1, "water": 2}, "info": "LMB throws (hold to throw further): a pool of fire, burns nests"},
+	"pipe_bomb": {"count": 1, "cost": {"scrap": 2, "nails": 4, "fuel": 1}, "info": "LMB throws (hold to throw further): bounces, blows up after 2.5 s", "tier": 2},
 	"pistol": {"count": 1, "cost": {"scrap": 10, "wood": 2, "nails": 6}, "info": "12 rounds. RMB aims, R reloads"},
 	"ammo_9mm": {"count": 8, "cost": {"scrap": 2, "nails": 3}, "info": "for the pistol"},
 	"shotgun": {"count": 1, "cost": {"scrap": 14, "wood": 4, "nails": 8}, "info": "6 shells, deadly up close", "tier": 2},

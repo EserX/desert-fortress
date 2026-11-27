@@ -14,7 +14,7 @@ const WEAPONS := {
 	"axe": {"damage": 34.0, "stamina": 11.0, "cooldown": 0.7, "reach": 2.3, "knock": 3.8, "stagger": 0.4},
 }
 ## Held in the hands but not swung at things (has its own left click).
-const TOOLS := ["hammer", "shovel", "pickaxe", "metal_detector", "watering_can"]
+const TOOLS := ["hammer", "shovel", "pickaxe", "metal_detector", "watering_can", "stone", "molotov", "pipe_bomb"]
 const HIT_TIME := 0.16  # seconds from the click to the hit
 const MIX_RATE := 22050.0
 const REST_POS := Vector3(0.3, -0.27, -0.5)
@@ -35,6 +35,8 @@ var _idle_t := 0.0
 var _rng := RandomNumberGenerator.new()
 var _audio: AudioStreamPlayer
 var _sounds := {}
+## 0 to 1: how far the hand is drawn back to throw (set by throwables.gd, v2.0).
+var wind_back := 0.0
 
 
 func _ready() -> void:
@@ -90,7 +92,20 @@ func _ready() -> void:
 	can.add_child(spout)
 	_box(spout, Vector3(0.035, 0.035, 0.26), Vector3(0, 0, -0.13), tin)
 	_box(spout, Vector3(0.07, 0.07, 0.02), Vector3(0, 0, -0.26), metal)  # rose
-	_models = {"pipe": pipe, "machete": machete, "hammer": hammer, "shovel": shovel, "pickaxe": pickaxe, "metal_detector": detector, "axe": axe, "watering_can": can}
+	# v2.0 throwables, held in the fist.
+	var stone := Node3D.new()
+	_box(stone, Vector3(0.12, 0.1, 0.11), Vector3(0, 0.08, 0), LowPoly.material(Color(0.52, 0.48, 0.44)))
+	var molotov := Node3D.new()
+	var glass := LowPoly.material(Color(0.35, 0.55, 0.3), 0.3)
+	_box(molotov, Vector3(0.08, 0.16, 0.08), Vector3(0, 0.06, 0), glass)
+	_box(molotov, Vector3(0.035, 0.08, 0.035), Vector3(0, 0.18, 0), glass)
+	_box(molotov, Vector3(0.04, 0.09, 0.03), Vector3(0, 0.25, 0), LowPoly.material(Color(0.85, 0.8, 0.7)))  # rag
+	var bomb := Node3D.new()
+	_box(bomb, Vector3(0.06, 0.22, 0.06), Vector3(0, 0.08, 0), LowPoly.material(Color(0.45, 0.46, 0.47), 0.4))
+	_box(bomb, Vector3(0.075, 0.03, 0.075), Vector3(0, 0.2, 0), metal)
+	_box(bomb, Vector3(0.075, 0.03, 0.075), Vector3(0, -0.03, 0), metal)
+	_box(bomb, Vector3(0.012, 0.06, 0.012), Vector3(0.0, 0.25, 0), LowPoly.material(Color(0.7, 0.2, 0.1)))  # fuse
+	_models = {"stone": stone, "molotov": molotov, "pipe_bomb": bomb, "pipe": pipe, "machete": machete, "hammer": hammer, "shovel": shovel, "pickaxe": pickaxe, "metal_detector": detector, "axe": axe, "watering_can": can}
 	for k in _models:
 		_models[k].rotation.x = ITEM_TILT
 		_models[k].visible = false
@@ -223,6 +238,9 @@ func _process(delta: float) -> void:
 			pos += Vector3(-0.2, -0.04, -0.12).lerp(Vector3.ZERO, t)
 		else:
 			swing_time = -1.0
+	if wind_back > 0.0:
+		pos += Vector3(0.08, 0.1, 0.0) * wind_back
+		rot += Vector3(-0.35, 0, -0.25) * wind_back
 	# The hand moves, the item in it turns (turning the whole arm would swing it into view).
 	_hand.position = pos
 	_hand.rotation = Vector3(0, rot.y * 0.3, 0)

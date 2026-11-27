@@ -2,7 +2,7 @@
 
 A 3D low-poly survival and fortress-defence game for Linux, made with Godot 4.5. Scavenge the desert by day, build and arm a fortress around the flag, and survive a bigger mutant wave every night. Each night pays cash you spend at the shop terminal on supplies, weapons, drone deliveries and base upgrades. Coming next: turning the desert green from a main well at the centre, with farms, oases and a market (see the roadmap).
 
-**Current version: v1.14.0.** See [ROADMAP.md](ROADMAP.md) for the plan and [DEVLOG.md](DEVLOG.md) for what changed in each update.
+**Current version: v1.14.1.** See [ROADMAP.md](ROADMAP.md) for the plan and [DEVLOG.md](DEVLOG.md) for what changed in each update.
 
 ## Play (Linux Mint)
 
@@ -113,7 +113,7 @@ Eat millet, melons, dates and dragon fruit with **F**. Exotic crops and flowers 
 | T | Build mode: switch between single pieces and ready-made buildings |
 | E | Search, open, use (gates, chests, workbench, generator, fire pit, turret, switch, well, shop), harvest a ripe plant |
 | Tab / I | Inventory |
-| 1–9, mouse wheel | Hotbar slot (build mode: piece) |
+| 1–9, mouse wheel | Hotbar slot (build mode: piece); on the workbench or chest screen the wheel scrolls the recipes or chest slots when the window is too small to show them all |
 | F | Eat, drink, use a bandage or medkit |
 | Q | Drop the selected stack |
 | B | Build mode |

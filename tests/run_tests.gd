@@ -1209,6 +1209,39 @@ func _test_drone() -> void:
 	main.inventory.load_data({})
 
 
+## Feedback (v1.14): the workbench and chest screens fit a 1280x720 window,
+## and the recipes (or chest slots) scroll when there isn't room for them all.
+func _test_screen_fit() -> void:
+	var ui = main.inventory_ui
+	var Items = main.Items
+	ui.close()
+	ui.window_height_override = 720.0
+	ui.open_bench("x")
+	check(ui.panel_height() <= 720.0, "the workbench screen fits a 720 px window (%d px)" % ui.panel_height())
+	check(not ui.list_fits() and ui._help.text.contains("scrolls the recipes"), "the recipes scroll there, and the help line says so")
+	var inside := 0
+	for id in ui._recipe_buttons:
+		if ui._recipe_scroll.is_ancestor_of(ui._recipe_buttons[id]):
+			inside += 1
+	check(inside == Items.RECIPES.size(), "every recipe is in the scroll list (%d)" % inside)
+	ui.close()
+	ui.window_height_override = 1200.0
+	ui.open_bench("x")
+	check(ui.list_fits() and not ui._help.text.contains("scrolls"), "a tall window shows every recipe without scrolling")
+	ui.close()
+	ui.window_height_override = 720.0
+	var Inventory = load("res://scripts/inventory.gd")
+	var big = Inventory.new(ui.MAX_CHEST)
+	big.add_all({"ammo_9mm": 90, "shells": 20, "cement": 4})  # wrapped three-line labels
+	ui.open_chest("x", big)
+	check(ui.panel_height() <= 720.0, "the biggest chest screen fits a 720 px window too (%d px)" % ui.panel_height())
+	ui.close()
+	ui.open()
+	check(ui.panel_height() <= 720.0, "the plain inventory fits as well")
+	ui.close()
+	ui.window_height_override = 0.0
+
+
 ## v0.24: base upgrades (zone, storage, workbench tiers, radio) and medkits.
 func _test_upgrades() -> void:
 	var sh = main.shop
@@ -2922,6 +2955,7 @@ func _process(_delta: float) -> bool:
 			_test_shop()
 			_test_drone()
 			_test_upgrades()
+			_test_screen_fit()
 			_test_difficulty_and_hints()
 		2370:
 			_start_turret()

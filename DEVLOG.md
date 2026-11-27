@@ -2,6 +2,18 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v1.14.1 (2026-11-27): Workbench screen fits a 1280x720 window
+Player feedback first (found by the v1.14 run): at 1280x720 the workbench screen was taller than the window, so the last recipe row was cut off and the help line under it was off screen.
+- **Recipes in 4 columns** instead of 3 (21 recipes now take 6 rows, not 7).
+- **The recipe list scrolls** when the window is still too short for it: the screen measures the window and makes the list as tall as there is room for, so the inventory, the list and the help line all stay on screen. A scroll bar shows, and the help line then says "Mouse wheel scrolls the recipes". At 1600x900 or bigger everything shows without scrolling. It refits when the window is resized.
+- The **chest screen** works the same way (the biggest 40-slot chest only just fitted at 720 px; its slots now scroll on smaller windows instead of running off the bottom).
+- Code: all in `scripts/inventory_ui.gd` (`fit_to_window`). One Godot catch, noted in the code: the first time the screen opens nothing is laid out yet, so a wrapping label reports a height of thousands of pixels; the labels get the panel's width before measuring, and the list refits once the wrapped button texts are laid out.
+- Decisions: scrolling rather than only more columns, because the v2.2 crafting chain will add more recipes. The list keeps at least 100 px even on a tiny window.
+- **Tests (6 new):** at 720 px the workbench screen fits (696 px), the recipes scroll and the help line says so, every recipe is in the list, a tall window shows them all without scrolling, the biggest chest fits (670 px), and the plain inventory fits.
+
+**Try:** run the game in a 1280x720 window (or smaller), open the workbench and scroll the recipes with the mouse wheel; the help line should sit at the bottom of the panel.
+**Next:** v1.15, the market: sell crops, flowers and fruit at the shop terminal at daily prices that drop when you sell a lot of one thing.
+
 ## v1.14.0 (2026-11-27): Seeds and farming
 Second step of the terraforming direction (M10): the soil you water can now be farmed.
 - **Seeds by drone** (shop terminal, Drone orders, at the end): millet, melon, cotton, agave pups, fast acacia seedlings, desert marigold, a date palm sapling, saffron bulbs and dragon fruit cuttings ($15 to $90).

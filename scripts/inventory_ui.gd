@@ -16,6 +16,12 @@ signal crafted(id: String, left: Dictionary)
 
 const COLUMNS := 10
 const SLOT_SIZE := Vector2(84, 72)
+const RECIPE_COLUMNS := 4
+## Room kept free above and below the panel, plus the panel's own margins and
+## border, when the chest or recipe list is fitted to the window height.
+const SCREEN_GAP := 12.0
+const PANEL_EDGES := 2 * 26.0 + 2 * 2.0
+const MIN_LIST_HEIGHT := 100.0
 
 var inventory: Inventory
 var held := -1  # slot picked up with the mouse, or -1
@@ -30,11 +36,18 @@ var _chest_buttons: Array[Button] = []
 const MAX_CHEST := 40      # biggest chest after storage upgrades
 ## Workbench tier (base upgrades): recipes above it are shown but locked.
 var bench_tier := 1
+var _col: VBoxContainer
 var _chest_box: VBoxContainer
 var _bench_box: VBoxContainer
+## The chest slots and the recipes scroll when the window is too short for them.
+var _chest_scroll: ScrollContainer
+var _recipe_scroll: ScrollContainer
 var _recipe_buttons := {}
 var _weight: Label
 var _help: Label
+var window_height_override := 0.0
+var _refit_queued := false
+var _help_base := ""  # help line before the "scroll for more" note
 
 
 func _ready() -> void:
@@ -49,6 +62,7 @@ func _ready() -> void:
 	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(dim)
 	var col := UI.panel(_root, COLUMNS * (SLOT_SIZE.x + 6))
+	_col = col
 	UI.title(col, "Inventory", 28)
 	var grid := GridContainer.new()
 	grid.columns = COLUMNS
@@ -66,7 +80,9 @@ func _ready() -> void:
 	cgrid.columns = COLUMNS
 	cgrid.add_theme_constant_override("h_separation", 6)
 	cgrid.add_theme_constant_override("v_separation", 6)
-	_chest_box.add_child(cgrid)
+	_chest_scroll = _list_scroll(_chest_box)
+	_chest_scroll.add_child(cgrid)
+	cgrid.minimum_size_changed.connect(_on_list_resized)
 	for i in MAX_CHEST:
 		var cb := _slot_button(cgrid, _on_chest_input.bind(i))
 		cb.custom_minimum_size.y = 50  # flatter, so a 40-slot chest still fits on screen
@@ -77,15 +93,18 @@ func _ready() -> void:
 	col.add_child(_bench_box)
 	UI.title(_bench_box, "Workbench", 22)
 	var rgrid := GridContainer.new()
-	rgrid.columns = 3
+	rgrid.columns = RECIPE_COLUMNS
+	rgrid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	rgrid.add_theme_constant_override("h_separation", 5)
 	rgrid.add_theme_constant_override("v_separation", 5)
-	_bench_box.add_child(rgrid)
+	_recipe_scroll = _list_scroll(_bench_box)
+	_recipe_scroll.add_child(rgrid)
+	rgrid.minimum_size_changed.connect(_on_list_resized)
 	for id in Items.RECIPES:
 		var b := UI.button(rgrid, "", craft.bind(id))
 		b.add_theme_font_size_override("font_size", 12)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.custom_minimum_size = Vector2(280, 40)
+		b.custom_minimum_size = Vector2(200, 40)
 		b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		b.tooltip_text = Items.RECIPES[id].info
 		_recipe_buttons[id] = b
@@ -94,7 +113,93 @@ func _ready() -> void:
 	_root.visible = false
 	if inventory:
 		inventory.changed.connect(refresh)
+	get_viewport().size_changed.connect(_on_window_resized)
 	refresh()
+
+
+## A scroll box (vertical only) for the chest slots or the recipes.
+func _list_scroll(parent: Control) -> ScrollContainer:
+	var sc := ScrollContainer.new()
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	sc.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	sc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	parent.add_child(sc)
+	return sc
+
+
+func _on_window_resized() -> void:
+	if is_open():
+		fit_to_window()
+
+
+## Wrapped button texts only get their real height once laid out, so fit
+## again then (once per frame at most).
+func _on_list_resized() -> void:
+	if is_open() and not _refit_queued:
+		_refit_queued = true
+		_refit.call_deferred()
+
+
+func _refit() -> void:
+	_refit_queued = false
+	if is_open():
+		var keep := (_recipe_scroll if bench_key != "" else _chest_scroll).scroll_vertical
+		fit_to_window()
+		(_recipe_scroll if bench_key != "" else _chest_scroll).scroll_vertical = keep
+
+
+## Window height the panel may use (window_height_override > 0 stands in for
+## it in tests, since the headless window has a fixed size).
+func _window_height() -> float:
+	return window_height_override if window_height_override > 0.0 else get_viewport().get_visible_rect().size.y
+
+
+## Makes the open chest or recipe list as tall as it needs, but no taller than
+## the window leaves room for (the rest of the list then scrolls), so the help
+## line under it stays on screen at 1280x720.
+func fit_to_window() -> void:
+	for sc: ScrollContainer in [_chest_scroll, _recipe_scroll]:
+		sc.custom_minimum_size.y = 0.0
+		sc.scroll_vertical = 0
+	_help.text = _help_base
+	var sc: ScrollContainer = _recipe_scroll if bench_key != "" else (_chest_scroll if chest else null)
+	if sc == null:
+		return
+	var want: float = (sc.get_child(0) as Control).get_combined_minimum_size().y
+	sc.custom_minimum_size.y = minf(want, _list_room())
+	if not list_fits():
+		# A shorter help line that mentions scrolling; measure the room again.
+		if bench_key != "":
+			_help.text = "Click a recipe to make it.   Mouse wheel scrolls the recipes.   Right-click drops a stack.   Tab or E closes."
+		else:
+			_help.text = "Right-click moves a stack between chest and pockets.   Mouse wheel scrolls the chest.   Tab or E closes."
+		sc.custom_minimum_size.y = 0.0
+		sc.custom_minimum_size.y = minf(want, _list_room())
+
+
+## Room left for the chest or recipe list (at height 0 while this runs).
+func _list_room() -> float:
+	# The first time the screen opens nothing is laid out yet, and a wrapping
+	# label measures its height at its old width (1 px, so thousands of px
+	# tall). Give the labels the panel's width before measuring.
+	var width := maxf(_col.size.x, _col.custom_minimum_size.x)
+	for c in _col.get_children():
+		if c is Label:
+			(c as Label).size.x = width
+			(c as Label).update_minimum_size()  # resizing alone leaves the cached height
+	var rest: float = _col.get_combined_minimum_size().y  # everything but the list
+	return maxf(_window_height() - 2.0 * SCREEN_GAP - PANEL_EDGES - rest, MIN_LIST_HEIGHT)
+
+
+## Height the open panel needs, margins included (for tests and tools).
+func panel_height() -> float:
+	return _col.get_combined_minimum_size().y + PANEL_EDGES
+
+
+## True when the whole list fits without scrolling (for tests and tools).
+func list_fits() -> bool:
+	var sc: ScrollContainer = _recipe_scroll if bench_key != "" else _chest_scroll
+	return sc.custom_minimum_size.y >= (sc.get_child(0) as Control).get_combined_minimum_size().y - 0.5
 
 
 func _slot_button(grid: GridContainer, handler: Callable) -> Button:
@@ -139,12 +244,13 @@ func _open(ck: String, storage: Inventory, bk: String) -> void:
 	_chest_box.visible = chest != null
 	_bench_box.visible = bench_key != ""
 	if chest:
-		_help.text = "Click a stack, then a slot to move it.   Right-click moves a stack between chest and pockets.   Tab or E closes."
+		_help_base = "Click a stack, then a slot to move it.   Right-click moves a stack between chest and pockets.   Tab or E closes."
 	else:
-		_help.text = "Click a stack, then a slot to move it.   Right-click drops it.   Slots 1–9 are your hotbar.   Tab%s closes." % (" or E" if bench_key != "" else "")
+		_help_base = "Click a stack, then a slot to move it.   Right-click drops it.   Slots 1–9 are your hotbar.   Tab%s closes." % (" or E" if bench_key != "" else "")
 	_root.visible = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	refresh()
+	fit_to_window()
 
 
 func close() -> void:

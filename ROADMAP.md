@@ -3,7 +3,6 @@
 ## Player feedback
 <!-- Write bugs, feelings and ideas here. Each run handles these BEFORE roadmap items. -->
 <!-- Example: - Sprint feels too slow. - Fell through the ground near a big rock. -->
-- (found by the dev run, v1.14) At 1280x720 the workbench screen is taller than the window: the last recipe row is cut and the help line under it is off screen. Make the recipe grid scroll or use more columns.
 
 ## Milestones
 One version per development run, in this order. The full plan with reasons is in the "Desert Fortress: Version Plan" doc. Player feedback above always comes first.

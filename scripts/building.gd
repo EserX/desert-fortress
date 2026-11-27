@@ -150,6 +150,9 @@ var chest_slots := CHEST_SLOTS
 var pieces := {}
 ## every slot key a piece takes up (stairs take two) -> main slot key
 var occupied := {}
+## Goes up whenever a piece is built, taken away, or a gate opens or shuts
+## (mutant pathfinding works its field out again then).
+var version := 0
 ## main slot key -> support in % (see MIN_SUPPORT), kept up to date
 var support := {}
 var _bulk := false  # loading: work out support once at the end
@@ -862,6 +865,7 @@ func place(type: String, slot: Dictionary, y: float, gate_open := false, tier :=
 		_add_turret_head(rec)
 	if type in ["floodlight", "electric_fence"]:
 		rec.powered = false
+	version += 1
 	if not _bulk:
 		_refresh_support()
 	return key
@@ -1064,6 +1068,7 @@ func set_gate(key: String, open: bool) -> void:
 		return
 	rec.open = open
 	rec.open_t = 0.0
+	version += 1
 	if rec.type == "trapdoor":
 		rec.hinge.rotation.x = PI * 0.5 if open else 0.0
 	else:
@@ -1266,6 +1271,7 @@ func remove(key: String, spill := true) -> String:
 		occupied.erase(k)
 	pieces.erase(key)
 	support.erase(key)
+	version += 1
 	if not cables_of(key).is_empty():
 		cables = cables.filter(func(c): return not key in c)
 		_rebuild_cables()

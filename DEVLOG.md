@@ -2,6 +2,25 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v1.10.0 (2026-11-27): Mutants find the way in
+The owner asked me to keep going and pick features from similar games. This is the planned M9 item, done the 7 Days to Die way: mutants work out the cheapest way into the base instead of walking in a straight line. Building also gets Valheim's stability colours.
+- **Pathfinding (flow field):** a 1 m grid 96 m across, centred on the flag, holds the cheapest way to the base from every spot. Open sand costs a metre. A wall, gate or fence costs what it takes to claw through it (4 + hit points / 12, so a wooden wall is like a 25 m detour and concrete like 130 m). An **open gate costs nothing**. A live electric fence costs 30 more, a trap 8 per square metre, and a pit a mutant can climb out of 10. A pit deeper than 1.9 m costs 80 (it would be stuck).
+  - Walkers, runners and spitters **walk round to an open gate**. With every gate shut they go for **the weakest wall on the cheapest way in**, and the whole wave picks the same one, so a battered wall draws them. They line up in front of a gateway before going through, so they don't snag on the posts, and they no longer tear down an open gate they brush against.
+  - **Brutes don't path:** they still come straight through.
+  - Once a mutant reaches the base it starts wrecking what is near, as before. If it can't see you because you are behind walls, it follows the way in instead of clawing at the nearest wall.
+  - The grid is worked out again within half a second after you build, take down, or open or shut anything, and every 4 seconds anyway (damaged walls, dug holes). The search takes about 50 ms, so it runs on a **worker thread** and the old field serves until the new one is ready: no stutter. Soak test (wave 8 against a bare wall ring, 12000 frames): the horde converges on one point, 6 of 24 walls still stand at the end against 0 before, and frames take 0.35 ms longer headless.
+- **Support colours (build mode):** an upstairs piece's preview is green when it is well held (60% or more), yellow from 35%, and orange close to the 20% limit. Red still means it can't be built.
+- **Code:** `scripts/flow_field.gd` (costs, Dijkstra with flat indices, `direction()`, `path_from()`, `rebuild_async()` / `poll()`), `building.version`, `mutants.field_for()`, mutant `field_dir()` / `arrived`, build mode `ghost_material()`.
+- **Tests (16 new):**
+  - Field: from 14 m north the field leads round the room and in at the open south gate without crossing a wall. With the gate shut it goes through one wooden wall, the near one. With that side in concrete it goes round to wood. A battered gate draws it.
+  - Costs: a trap makes its ground dear and a 2.25 m pit all but closes it.
+  - The worker thread's field comes in. Brutes don't path, and a mutant at its goal stops pathing.
+  - Live: a walker marching on the room walks round and in through the open gate in about 12 s without touching a wall.
+  - The preview colours.
+
+**Try:** build a wall ring with one gate and leave the gate open at dusk: they will queue at it, so put spikes and wire there. Then shut it and let one wall get battered: that's where the next wave goes.
+**Next:** v2.0, the physics pass (explosions push mutants and loose items, throwables, knockback per weapon, mutants falling into pits and off roofs).
+
 ## v1.9.0 (2026-11-27): Building overhaul: free turning, ready-made buildings, the horde button
 The owner asked for building to become a big part of the game, tuned like the survival builders: turn pieces before placing them, ready-made cabins, and a stand with a button that brings the enemies to you. This run does those instead of the planned mutant navigation (now v1.10).
 - **Turning pieces:** **R** still turns a quarter clockwise; new keys **Z / X** turn the other way and on. Objects (chest, workbench, barricade, traps, fire pit, generator, floodlight, turret, switch) turn in **15° steps**, so they no longer have to sit square to the grid; the build line shows "facing 120°". Grid pieces (walls, stairs...) turn a quarter with Z / X. The see-through preview now **swings round smoothly** instead of snapping. Turned objects are saved (older saves load as before).
@@ -76,7 +95,7 @@ Eight new pieces at the end of the build list (scroll the mouse wheel in build m
 - **Reaching down holes:** looking steeply down, the shovel and pickaxe reach further (about 4 m out, up to 6.4 m along the line of sight), so you can dig a shaft from its edge.
 - **Stamina for hard work:** a dig costs 7 (a fill 3.5), a pickaxe hit 9, building a piece 6, a hammer repair or upgrade 5. With too little: "Too tired: catch your breath".
 - That finishes **M7, digging and terrain**.
-- **Tests (14 new):** a well needing a deep shaft (the reason says 3.5 m and the pickaxe), the shaft depth, reaching its bottom looking down, the well standing at ground level, the footprint filled round the shaft, the filling prompt, a bottle every 75 s, taking it, the 6-bottle limit, the well staying put when you dig next to it, water saved, and stamina for digging. New screenshot view `45_well`.
+- **Tests (16 new):** a well needing a deep shaft (the reason says 3.5 m and the pickaxe), the shaft depth, reaching its bottom looking down, the well standing at ground level, the footprint filled round the shaft, the filling prompt, a bottle every 75 s, taking it, the 6-bottle limit, the well staying put when you dig next to it, water saved, and stamina for digging. New screenshot view `45_well`.
 
 **Try:** dig a shaft with the pickaxe next to your base, build a well over it, and stop hauling water bottles in from the wrecks.
 **Next:** M8, v1.5 structural stability: a support value for each piece counted from the ground, overhangs and tall towers that collapse, and debris.

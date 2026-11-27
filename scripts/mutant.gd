@@ -47,6 +47,12 @@ const SMELL := 30.0         # wave mutants know where you are this close, walls 
 ## anything higher holds them. Smaller rises than CLIMB_STEP are just walked.
 const CLIMB_MAX := 1.9
 const CLIMB_STEP := 0.15
+## Pathfinding (flow field round the base): a wave mutant counts as arrived when
+## the way left to its goal costs less than this. Brutes don't path: they go
+## straight through.
+const ARRIVE_COST := 1.5
+## Got to its goal once: from then on it wrecks what is near instead of pathing.
+var arrived := false
 
 signal attacked(damage: float, from: Vector3, kind: String)
 ## Lobbed a glob of acid (the manager adds it to the world).
@@ -210,6 +216,7 @@ func make_hunter(goal: Vector3) -> void:
 	hunter = true
 	home = goal
 	_wander_to = goal
+	arrived = false
 
 
 ## Dawn: the sun finishes off what is left of the wave (no kill counted).
@@ -357,7 +364,12 @@ func _physics_process(delta: float) -> void:
 			var to := _wander_to - global_position
 			to.y = 0
 			var far_from_home := Vector2(global_position.x - home.x, global_position.z - home.z).length() > 16.0
-			if hunter and far_from_home:
+			var fdir := field_dir() if hunter else Vector3.ZERO
+			if fdir != Vector3.ZERO:
+				# Round to an open gate or the weakest wall on the cheapest way in.
+				speed = stats.march
+				want = fdir
+			elif hunter and far_from_home:
 				# March on the base.
 				speed = stats.march
 				_wander_to = home
@@ -380,6 +392,11 @@ func _physics_process(delta: float) -> void:
 			var to: Vector3 = target.global_position - global_position
 			to.y = 0
 			want = to.normalized()
+			# Can't see you behind the walls: find the way in instead of clawing at the nearest wall.
+			if hunter and not _los and to.length() > 3.0 and _target_inside():
+				var fd := field_dir()
+				if fd != Vector3.ZERO:
+					want = fd
 			if stats.has("spit") and to.length() > stats.reach:
 				# Keep some distance and lob acid when there is a clear shot.
 				var sp: Dictionary = stats.spit
@@ -484,6 +501,30 @@ func _physics_process(delta: float) -> void:
 		_play("groan", _rng.randf_range(0.85, 1.05))
 
 
+## Which way the flow field leads a wave mutant to its goal, or ZERO when it
+## doesn't path (brutes), is outside the field, or has arrived.
+func field_dir() -> Vector3:
+	if type == "brute" or building == null or not get_parent().has_method("field_for"):
+		return Vector3.ZERO
+	if arrived:
+		return Vector3.ZERO
+	var f = get_parent().field_for(home)
+	var c: float = f.cost_from(global_position)
+	if c <= ARRIVE_COST:
+		arrived = true
+	if c == INF or c <= ARRIVE_COST:
+		return Vector3.ZERO
+	return f.direction(global_position)
+
+
+## The target is inside the base it marches on (nearer its goal than this mutant).
+func _target_inside() -> bool:
+	var tp: Vector3 = target.global_position
+	var dt := Vector2(tp.x - home.x, tp.z - home.z).length()
+	var dm := Vector2(global_position.x - home.x, global_position.z - home.z).length()
+	return dt < 20.0 and dm > dt + 2.0
+
+
 ## A wave mutant at the base picks the nearest building piece (not a trap)
 ## to tear down and heads for it. Returns false when there is none.
 func _wreck_target(delta: float) -> bool:
@@ -527,6 +568,9 @@ func _blocking_piece(want: Vector3) -> String:
 		var hit := space.intersect_ray(q)
 		if not hit.is_empty():
 			var key: String = building.piece_key_of(hit.collider)
+			var rec: Dictionary = building.pieces.get(key, {})
+			if not rec.is_empty() and rec.get("open", false) and building.PIECES[rec.type].get("gate", false):
+				continue  # an open gate's posts: walk round them, don't tear the gate down
 			if key != "":
 				return key
 	return ""

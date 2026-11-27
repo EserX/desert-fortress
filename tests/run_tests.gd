@@ -2213,6 +2213,137 @@ func _test_building_v19() -> void:
 	player.stamina = player.STAMINA_MAX
 
 
+## v1.10: the mutants' flow field. A 2x2 room at x -18..-14, z 8..12 with a
+## doorway on the south side (x -18..-16), goal in the middle.
+const NAV_GOAL := Vector3(-16, 0, 10)
+var nav_walker: Node
+var nav_inside_at := -1
+var nav_walls_whole := false
+
+
+func _nav_room(open: bool) -> String:
+	var b = main.building
+	main.terrain.load_data({})
+	b.load_data([])
+	for e in [[-9, 4, 0], [-8, 4, 0], [-8, 6, 0], [-9, 4, 1], [-9, 5, 1], [-7, 4, 1], [-7, 5, 1]]:
+		var sl := {"kind": "edge", "cx": e[0], "cz": e[1], "dir": e[2], "level": 0}
+		b.place("wall", sl, b.evaluate("wall", sl).y)
+	var ds := {"kind": "edge", "cx": -9, "cz": 6, "dir": 0, "level": 0}
+	return b.place("doorway", ds, b.evaluate("doorway", ds).y, open)
+
+
+func _test_navigation() -> void:
+	var b = main.building
+	var FlowField = load("res://scripts/flow_field.gd")
+	var f = FlowField.new()
+	_nav_room(true)
+	f.rebuild(b, main.terrain, NAV_GOAL)
+	var start := Vector3(-16, 0, -4)
+	var path: Array = f.path_from(start)
+	var last: Vector2i = path[path.size() - 1] if not path.is_empty() else Vector2i(-1, -1)
+	check(last == FlowField.to_cell(NAV_GOAL), "the field leads from 14 m north of the room to its middle (%d steps)" % path.size())
+	check(f.wall_cost_on(path) < 0.1, "through the open gate, not through a wall")
+	var entered_south := false
+	for i in range(1, path.size()):
+		var a: Vector2i = path[i - 1]
+		var c: Vector2i = path[i]
+		var wa: Vector3 = FlowField.cell_center(a)
+		var wc: Vector3 = FlowField.cell_center(c)
+		if wa.z > 12.0 and wc.z < 12.0 and wc.x > -18.0 and wc.x < -16.0:
+			entered_south = true
+	check(entered_south and path.size() > 18, "round the room and in at the south gate (%d steps, straight would be 14)" % path.size())
+	check(f.direction(start).length() > 0.99, "it gives a way to walk")
+	# Gate shut: through the weakest wall on the cheapest way.
+	var dk := _nav_room(false)
+	f.rebuild(b, main.terrain, NAV_GOAL)
+	path = f.path_from(start)
+	var wood: float = f.WALL_BASE + 250.0 * f.WALL_PER_HP
+	check(absf(f.wall_cost_on(path) - wood) < 0.01, "with the gate shut it goes through one wooden wall (cost %.1f)" % f.wall_cost_on(path))
+	check(path.size() < 16, "the near, north one (%d steps)" % path.size())
+	for k in b.keys_of(["wall"]):
+		if b.pieces[k].slot.cz == 4 and b.pieces[k].slot.dir == 0:
+			b.pieces[k].tier = 3
+			b.pieces[k].hp = b.max_hp(b.pieces[k])
+	f.rebuild(b, main.terrain, NAV_GOAL)
+	path = f.path_from(start)
+	check(f.wall_cost_on(path) <= wood + 0.01, "concrete on the north side: it goes round to a wooden one (%d steps)" % path.size())
+	b.damage(dk, 200.0)
+	f.rebuild(b, main.terrain, NAV_GOAL)
+	path = f.path_from(start)
+	var crossed_gate := false
+	for i in range(1, path.size()):
+		if FlowField.cell_center(path[i - 1]).z > 12.0 and FlowField.cell_center(path[i]).z < 12.0 and FlowField.cell_center(path[i]).x < -16.0:
+			crossed_gate = true
+	check(crossed_gate, "and to the battered gate when that is weakest")
+	# Traps and pits.
+	b.load_data([])
+	var ts := {"kind": "obj", "cx": -12, "cz": -6, "dir": 0, "level": 0}
+	b.place("spike_strip", ts, b.evaluate("spike_strip", ts).y)
+	_dig_pit(-20.0, 16.0, 9)
+	f.rebuild(b, main.terrain, NAV_GOAL)
+	var tc: Vector2i = FlowField.to_cell(Vector3(-23.5, 0, -11.5))
+	var pc: Vector2i = FlowField.to_cell(Vector3(-20.5, 0, 15.5))
+	check(f.cell_cost[tc.y * f.N + tc.x] > 5.0, "a trap makes its ground dear (%.1f)" % f.cell_cost[tc.y * f.N + tc.x])
+	check(f.cell_cost[pc.y * f.N + pc.x] > 50.0, "a 2.25 m pit is all but closed (%.1f)" % f.cell_cost[pc.y * f.N + pc.x])
+	# The worker thread.
+	var t0 := Time.get_ticks_msec()
+	f.rebuild_async(b, main.terrain, Vector3(10, 0, 10))
+	f.finish_job()
+	check(f.goal == FlowField.to_cell(Vector3(10, 0, 10)) and f.cost_from(Vector3(10, 0, 20)) < 14.0, "a field worked out on a worker thread comes in (%d ms)" % (Time.get_ticks_msec() - t0))
+	# Brutes don't path.
+	var br = main.mutants.spawn("brute", Vector3(-16, 0, -4))
+	br.make_hunter(NAV_GOAL)
+	var wk = main.mutants.spawn("walker", Vector3(-16, 0, -4))
+	wk.make_hunter(NAV_GOAL)
+	check(br.field_dir() == Vector3.ZERO and wk.field_dir() != Vector3.ZERO, "brutes go straight, walkers follow the field")
+	wk.global_position = NAV_GOAL + Vector3(0.2, 0, 0.2)
+	check(wk.field_dir() == Vector3.ZERO and wk.arrived, "at its goal it stops pathing and starts wrecking")
+	main.mutants.clear()
+	main.terrain.load_data({})
+	b.load_data([])
+	# Build mode colours a weakly held piece.
+	var bm = main.build_mode
+	bm.can_build = true
+	bm.support_preview = 90.0
+	var solid = bm.ghost_material()
+	bm.support_preview = 40.0
+	var mid = bm.ghost_material()
+	bm.support_preview = 22.0
+	var weak = bm.ghost_material()
+	check(solid != mid and mid != weak and weak != bm._bad_mat, "the preview goes green, yellow, orange as support drops")
+	bm.support_preview = -INF
+	bm.can_build = false
+
+
+## Physics: a walker marching on the room walks round to the open gate.
+func _start_nav() -> void:
+	main.mutants.clear()
+	main.mutants.reset_fields()
+	_nav_room(true)
+	var p = main.player
+	p.position = Vector3(60, main.terrain.surface_height(60, -60), -60)
+	nav_walker = main.mutants.spawn("walker", Vector3(-16, 0, -4))
+	nav_walker.make_hunter(NAV_GOAL)
+	nav_inside_at = -1
+
+
+func _track_nav() -> void:
+	if nav_walker == null or nav_inside_at >= 0 or not is_instance_valid(nav_walker):
+		return
+	var q: Vector3 = nav_walker.global_position
+	if q.x > -18.0 and q.x < -14.0 and q.z > 8.2 and q.z < 11.8:
+		nav_inside_at = frame
+		var b = main.building
+		nav_walls_whole = b.pieces.size() == 8 and b.pieces.values().all(func(r): return r.hp >= b.max_hp(r))
+
+
+func _check_nav() -> void:
+	check(nav_inside_at > 0, "a walker marching on a walled room walks round and in at the open gate (%.1f s)" % ((nav_inside_at - 3300) / 60.0))
+	check(nav_walls_whole, "without clawing at a wall on the way")
+	main.mutants.clear()
+	main.building.load_data([])
+
+
 func Building_index(t: String) -> int:
 	return main.building.ORDER.find(t)
 
@@ -2313,6 +2444,8 @@ func _process(_delta: float) -> bool:
 	var terrain = main.terrain
 	if frame > 2010 and frame < 2250 and not main.mutants.spits().is_empty():
 		spit_seen = true
+	if frame > 3300 and frame < 4200:
+		_track_nav()
 	if frame > 720 and frame < 811:
 		ramp_top = maxf(ramp_top, player.position.y - ramp_base)
 	match frame:
@@ -2527,11 +2660,15 @@ func _process(_delta: float) -> bool:
 			_test_fast_building()
 			_test_wiring()
 			_test_building_v19()
+			_test_navigation()
 			_start_ladder()
 		3300:
 			_check_debris()
 			_check_ladder()
-		3310:
+			_start_nav()
+		4200:
+			_check_nav()
+		4210:
 			if failures.is_empty():
 				print("== ALL TESTS PASSED ==")
 				quit(0)

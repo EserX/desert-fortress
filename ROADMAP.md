@@ -65,7 +65,7 @@ Building is to be a big part of the game, with the fine-tuned feel of survival-b
 - [ ] Later building ideas (not scheduled): more ready-made buildings (a walled compound, a bunker with a well), choosing the tier of a blueprint, a blueprint menu with pictures
 
 ### M9: Game logic, AI and physics
-- [ ] v1.10: **Mutant navigation:** a navigation mesh, rebuilt when the base or the ground changes, so mutants path round walls to an open gate or the weakest wall instead of walking straight in. Brutes go straight through, pits and wire are taken into account, and groups pick the same weak point
+- [x] v1.10: **Mutant navigation:** a navigation mesh, rebuilt when the base or the ground changes, so mutants path round walls to an open gate or the weakest wall instead of walking straight in. Brutes go straight through, pits and wire are taken into account, and groups pick the same weak point
 - [ ] v2.0: **Physics pass:** explosions push mutants and loose items, dropped items become physics props, throwables (molotov, pipe bomb, rocks) with arcs and bounces, knockback and stagger tuned per weapon, mutants falling into pits and off roofs
 - [ ] v2.1: **Survival depth:** cold nights (fire pits and walls keep you warm), bleeding wounds fixed with bandages, cooking at the fire pit, food that spoils, and carried weight slowing digging and climbing
 - [ ] v2.2: **Crafting chain:** a furnace (scrap to metal plates, sand to glass, clay to bricks), building parts made at the workbench, better tools (a steel shovel digs faster, a sledgehammer demolishes)

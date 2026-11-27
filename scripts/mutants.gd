@@ -4,6 +4,11 @@ extends Node3D
 
 const Mutant = preload("res://scripts/mutant.gd")
 const Spit = preload("res://scripts/spit.gd")
+const FlowField = preload("res://scripts/flow_field.gd")
+## Pathfinding fields are worked out again at most this often after the base
+## changes, and every FIELD_MAX_AGE seconds anyway (walls get damaged, holes dug).
+const FIELD_MIN_GAP := 0.5
+const FIELD_MAX_AGE := 4.0
 
 const WANDERERS := 5         # walkers roaming the desert by day
 const MIN_BASE_DIST := 70.0  # never spawn closer than this to the flag
@@ -23,6 +28,8 @@ var night := false
 var kills := 0
 var health_mult := 1.0  # difficulty
 var _sounds := {}
+## Flow fields by goal cell (the base, a called horde's stand): at most 3.
+var fields := {}
 var _count := 0
 var _rng := RandomNumberGenerator.new()
 
@@ -33,6 +40,39 @@ func _ready() -> void:
 	_sounds.attack = _make_sound("attack", 0.45)
 	_sounds.hurt = _make_sound("hurt", 0.3)
 	_sounds.death = _make_sound("death", 1.0)
+
+
+## The flow field leading to goal, worked out again when the base has changed.
+func field_for(goal: Vector3):
+	var key: Vector2i = FlowField.to_cell(goal)
+	var f = fields.get(key)
+	var now := Time.get_ticks_msec() / 1000.0
+	if f == null:
+		if fields.size() >= 3:
+			fields.erase(fields.keys()[0])
+		f = FlowField.new()
+		fields[key] = f
+	f.poll()
+	if f.dist.is_empty():
+		f.rebuild(building, terrain, goal)  # the first time: wait for it
+		f.built_at = now
+		return f
+	var stale: bool = f.built_version != (building.version if building else 0) or now - f.built_at > FIELD_MAX_AGE
+	if stale and now - f.built_at >= FIELD_MIN_GAP:
+		f.rebuild_async(building, terrain, goal)  # on a worker thread; the old field serves meanwhile
+		f.built_at = now
+	return f
+
+
+## Forget the fields (after loading or big changes): they are made again when needed.
+func reset_fields() -> void:
+	for f in fields.values():
+		f.finish_job()
+	fields = {}
+
+
+func _exit_tree() -> void:
+	reset_fields()
 
 
 func alive() -> Array:

@@ -40,6 +40,8 @@ If `git pull` complains about untracked `.uid` files, they are safe to delete.
 
 **Ready-made buildings and turning.** In build mode, **Z / X** turn the piece (chests, turrets, traps and other objects in 15° steps, so they don't have to sit square). **T** switches to ready-made buildings: shelter, cabin, big cabin, watchtower and gatehouse. Left click lays a free blue blueprint of the whole building; then walk up to it and press **E** to build the next piece (hold E to keep going), paid from your pockets and chests in reach. Right click on a blueprint in build mode scraps it. Blueprints are saved, so you can finish one later.
 
+**How mutants attack.** Wave mutants look for the cheapest way into the base: an open gate first, otherwise the weakest wall on the shortest way in, and the whole wave goes for the same spot. Deep trenches (2 m or more) and traps make them go round. Brutes ignore all that and walk straight through. In build mode, an upstairs piece's preview turns yellow, then orange, as its support gets weaker.
+
 **The horde button.** The yellow post with the red button by the spawn point calls a horde of mutants right away, day or night. It pays the kill bounty.
 
 **More pieces.** Half walls (1.2 m) and low walls (0.7 m) to shoot over, a gun slit wall with a slot at eye height, **pillars** that stand on the corners of the grid and hold up floors in the open, a **floor with a trapdoor** (E opens the hatch; put a ladder under it), **triangle foundations and roofs** for rounder towers, and a **metal door** (8 scrap, 4 nails, 1400 hit points).

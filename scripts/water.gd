@@ -34,6 +34,8 @@ const MAX_PLANTS := 3         # and small plants
 
 ## Emitted when the ground's soil or green changed (for the map and tests).
 signal ground_changed
+## Each morning before the squares' litres for the day are cleared (farming reads them).
+signal morning_tally
 ## Something to tell the player: a banner, or pick-up lines.
 signal message(text: String)
 signal pickup(lines: Array)
@@ -233,6 +235,7 @@ func well_prompt(has_can: bool) -> String:
 
 ## New day: the well fills up, and every square of ground counts what it got yesterday.
 func on_morning(_day := 0) -> void:
+	morning_tally.emit()
 	store = capacity
 	_set_level()
 	# Once a day, over every watered square (a few hundred at most); .keys() as squares go back to sand.
@@ -411,6 +414,24 @@ func water_cell(c: Vector2i, litres: float) -> float:
 	if not was_soil and e.total >= SOIL_NEED:
 		ground_changed.emit()
 	return n
+
+
+## Life from plants (v1.14): `soil` litres towards turning the square to soil (not
+## today's water) and `green` more green if it is soil. Keeps it from drying out.
+func add_life(c: Vector2i, soil: float, green: float) -> void:
+	if not cells.has(c):
+		if soil <= 0.0 or cell_center(c).length() > 225.0:
+			return
+		cells[c] = {"wet": 0.0, "total": 0.0, "green": 0.0, "dry": 0}
+	var e: Dictionary = cells[c]
+	var was_soil: bool = e.total >= SOIL_NEED
+	e.total = minf(e.total + soil, SOIL_NEED * 4.0)
+	e.dry = 0
+	if e.total >= SOIL_NEED:
+		e.green = minf(e.green + green, 1.0)
+	_mark_dirty(0.0)
+	if not was_soil and e.total >= SOIL_NEED:
+		ground_changed.emit()
 
 
 ## Left click with the watering can at a point on the ground. Returns "" or why not.

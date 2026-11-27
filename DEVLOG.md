@@ -2,6 +2,30 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v1.14.0 (2026-11-27): Seeds and farming
+Second step of the terraforming direction (M10): the soil you water can now be farmed.
+- **Seeds by drone** (shop terminal, Drone orders, at the end): millet, melon, cotton, agave pups, fast acacia seedlings, desert marigold, a date palm sapling, saffron bulbs and dragon fruit cuttings ($15 to $90).
+- **Seed beds:** hold a seed packet and **left click soil** to dig a seed bed and plant it. Beds sit on a 2 m grid, so four fit on one 4 m square of ground. Sand has to be watered into soil first (the prompt says so). Not on the main well.
+- **Growing:** each morning a plant grows one day if its square got the crop's litres the day before. The plant's prompt (look at it, whatever you hold) says the day, whether it's watered today, and what it needs. Plants get bigger as they grow, and each crop has its own simple look (millet stalks with heads, melons, cotton bolls, agave rosettes, an acacia with a flat crown, flowers, a date palm, purple saffron, dragon-fruit cactus).
+- **The midday heat (13:00):** a plant on a square that has had less than half its litres by then loses half its health; the next morning's water heals it. Hurt twice in a row and it dies (a brown stalk, **E** clears the bed). Saffron also gets hurt out in the sun.
+- **Harvests by type (E on a ripe plant):**
+  - **Food:** millet (3 days, 4 L, 4 millet), melon (4 days, 6 L, 2 melons). Both can be eaten with F (melons also quench thirst).
+  - **Resources:** cotton (4 days: 3 cotton, which make 2 cloth at the workbench), agave (5 days, only 2 L, never minds the heat: 4 fibre, 3 make a rope), fast acacia (4 days: 3 logs).
+  - **Flowers:** desert marigold (2 days, picked again every 2 days). Crops within 6 m of blooming marigolds grow 1.5 days a morning, and watered soil round them gets +10% green a morning on top.
+  - **Fruit tree:** date palm (6 days, then dates every 3 days). Once grown it shades plants within 3.5 m, survives dry days, and every morning adds soil and +10% green to the 3x3 squares round it, so the sand round a palm slowly turns to soil and green on its own.
+  - **Exotic:** saffron (4 days, 4 to 6 L: more rots it; needs shade at midday from a roof or a date palm) and dragon fruit (5 days, 6 L, fruit every 3 days). Both are worth the most at the market in v1.15; for now dragon fruit can be eaten.
+- Digging up a bed (shovel) uproots its plant.
+- **Saved:** every plant, its growth, health, and whether it has fruited. Older saves load with no plants; broken entries are skipped.
+- **Test boxes:** the test box only has 40 slots and there are now more items than that, so a **second test box** stands next to it with the newer items (the seeds and harvests). Further boxes appear by themselves as items are added.
+- Code: the new `scripts/farming.gd`. water.gd got a `morning_tally` signal (farming reads the squares' litres before they are cleared each morning) and `add_life` (palms and flowers adding soil and green). main.gd only creates it and passes clicks, prompts, E and saving through.
+- Also: the README now covers the main well and watering (left out in v1.13) as well as farming, and its version line is right again.
+- Decisions: a plant uses its square's water rather than having its own (the 4 L a day waters the whole square, all four beds). Plants don't use up the main well's water on top of what you pour. Seed beds are dug by planting rather than built in build mode, so farming works anywhere you have made soil, not just inside the base zone.
+- **Tests (40 new):** seeds for every crop on the drone, crops of all five kinds, no planting without seeds or on sand, one plant to a bed, not in the main well, the prompt, no growth on a dry day, a day a watered morning, ripe after 3 days, beds and stalks drawn, the crosshair finding a plant and E harvesting it, millet as food, wilting and then dying in the heat (through the 13:00 hour signal), clearing a dead plant, no harm when watered, hardy agave, saffron dying in the sun and rotting when too wet, marigolds blooming, speeding up the millet beside them and greening the soil, picked flowers growing back, a palm shading saffron and turning the sand round it to soil, dates and fruiting again, a grown palm surviving dry middays, saving, old and broken saves, digging uprooting, cotton to cloth, and the second test box.
+- New screenshot views `57_farm` (every crop from new bed to ripe) and `58_seeds` (planting prompt).
+
+**Try:** water a few squares into soil by the base, take seeds from the second test box (or order them by drone), plant a row of millet with marigolds beside it, and keep the squares at 4 L a day before 13:00. Plant a date palm and watch the green spread round it over the next days.
+**Next:** v1.15, the market: sell crops, flowers and fruit at the shop terminal at daily prices that drop when you sell a lot of one thing.
+
 ## v1.13.0 (2026-11-27): The main well and watering
 First step of the new terraforming direction (M10). There is now a big **main well** next to the flag, and its water turns the sand round your base into soil and then grass.
 - **The main well** stands between the flag and the crates, with a stone ring, a little roof and a crank. It holds **200 litres** and is **topped up every morning**; the water level inside goes down as you use it. Its prompt shows how much is left.

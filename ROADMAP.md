@@ -3,6 +3,7 @@
 ## Player feedback
 <!-- Write bugs, feelings and ideas here. Each run handles these BEFORE roadmap items. -->
 <!-- Example: - Sprint feels too slow. - Fell through the ground near a big rock. -->
+- (found by the dev run, v1.14) At 1280x720 the workbench screen is taller than the window: the last recipe row is cut and the help line under it is off screen. Make the recipe grid scroll or use more columns.
 
 ## Milestones
 One version per development run, in this order. The full plan with reasons is in the "Desert Fortress: Version Plan" doc. Player feedback above always comes first.
@@ -80,7 +81,7 @@ Design notes for every M10 run:
 
 ### M10: Terraforming
 - [x] v1.13: **The main well and watering:** a big main well at the spawn point (next to the flag) with a water store that refills each day and can be deepened with upgrades; a watering can, then a hand pump, pipes and sprinklers fed from it; watered sand turns to soil on a coarse map-wide grid and slowly greens (grass, small plants), shown on the ground. Saved
-- [ ] v1.14: **Seeds and farming:** seeds in the shop (by drone), seed beds and planting on soil, growth stages over days needing water (and shade for some), dying in the midday heat when dry; harvests by type (food, resources, flowers, fruit trees, exotic crops) with their own benefits
+- [x] v1.14: **Seeds and farming:** seeds in the shop (by drone), seed beds and planting on soil, growth stages over days needing water (and shade for some), dying in the midday heat when dry; harvests by type (food, resources, flowers, fruit trees, exotic crops) with their own benefits
 - [ ] v1.15: **The market:** sell crops, flowers, fruit and goods at the shop terminal for cash; daily prices, prices that drop when you sell a lot of one thing, exotic crops worth the most; buy food and goods with the cash
 - [ ] v1.16: **Water draws life:** by day animals (gazelles, birds, jackals) come to water and green land, hunted for meat (cooked at the fire pit); by night mutants are drawn to the main well, wave size grows with water use and green land rather than only the night count, and they go for fields and pipes too
 - [ ] v1.17: **Green and livable:** a **green %** for the whole map and a **livable** score for the base (shade, water, food, plants, shelter) on the HUD and map; fruit trees and groves spread on their own; livable milestones give comforts (faster healing, resting through the heat, a better shelter)

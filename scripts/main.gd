@@ -36,6 +36,7 @@ const Caches = preload("res://scripts/caches.gd")
 const HordeStand = preload("res://scripts/horde_stand.gd")
 const Nav = preload("res://scripts/nav.gd")
 const Water = preload("res://scripts/water.gd")
+const Farming = preload("res://scripts/farming.gd")
 
 ## Testing aid (temporary): a green box by the spawn point that holds a full
 ## stack of every item and tops your cash up to $2000 each time you open it.
@@ -95,6 +96,7 @@ var dummy: Dummy
 var mutants: Mutants
 var nav: Nav
 var water: Water
+var farming: Farming
 var waves: Waves
 var guns: Guns
 var traps: Traps
@@ -176,6 +178,12 @@ func _ready() -> void:
 	water.piece_at_crosshair = piece_under_crosshair
 	add_child(water)
 	terrain.add_no_dig(water.well.position, 2.0)
+	farming = Farming.new()
+	farming.name = "Farming"
+	farming.terrain = terrain
+	farming.water = water
+	add_child(farming)
+	water.morning_tally.connect(farming.on_tally)  # before the day's litres are cleared
 
 	base_zone = BaseZone.new()
 	base_zone.name = "BaseZone"
@@ -315,6 +323,8 @@ func _ready() -> void:
 	inventory.add("pipe", 1)    # and a rusty pipe
 	water.player = player
 	water.inventory = inventory
+	farming.player = player
+	farming.inventory = inventory
 
 	melee = Melee.new()
 	melee.name = "Hands"
@@ -455,6 +465,10 @@ func _ready() -> void:
 	survival.warning.connect(hud.show_banner)
 	water.message.connect(hud.show_banner)
 	water.pickup.connect(hud.show_pickup)
+	farming.message.connect(hud.show_banner)
+	farming.pickup.connect(hud.show_pickup)
+	farming.spilled.connect(loot.spawn_drop)
+	day_night.hour_changed.connect(farming.on_hour)
 
 	day_night.day_started.connect(_on_morning)
 	day_night.day_started.connect(water.on_morning)
@@ -486,6 +500,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif holding("axe") and _axe_input(event):
 		get_viewport().set_input_as_handled()
 	elif (holding("watering_can") or holding("water_pipe")) and water.handle_input(event, inventory.selected_stack().item):
+		get_viewport().set_input_as_handled()
+	elif Farming.crop_of_seed(inventory.selected_stack().get("item", "")) != "" and farming.handle_input(event, inventory.selected_stack().item):
 		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("rotate") and lock_door(player.interact_target()):
 		get_viewport().set_input_as_handled()
@@ -535,6 +551,10 @@ func _process(delta: float) -> void:
 				text = axe_prompt()
 			elif text == "" and (holding("watering_can") or holding("water_pipe")):
 				text = water.held_prompt(inventory.selected_stack().item)
+			elif text == "" and Farming.crop_of_seed(inventory.selected_stack().get("item", "")) != "":
+				text = farming.seed_prompt(inventory.selected_stack().item)
+			if text == "" and player.interact_target() == "":
+				text = farming.look_prompt()  # a plant under the crosshair
 		hud.set_prompt(text)
 		_hold_site(delta)
 		_update_dig_marker()
@@ -968,6 +988,7 @@ func _on_ground_changed(area: Rect2) -> void:
 	building.settle(area)
 	caches.check(area)
 	water.on_ground_changed(area)
+	farming.on_ground_changed(area)
 	var near := area.grow(0.6)
 	var bodies: Array = [player]
 	bodies.append_array(mutants.get_children())
@@ -1127,6 +1148,8 @@ func _prompt_for(id: String) -> String:
 		return "[E] Use the shop terminal   ($%d)" % shop.cash
 	if id == "testbox":
 		return "[E] Open the TEST box (every item, cash to $%d)" % TEST_CASH
+	if id.begins_with("testbox:"):
+		return "[E] Open TEST box %d (the newer items)" % (int(id.trim_prefix("testbox:")) + 1)
 	if id == "horde":
 		return horde_prompt()
 	if id == "mainwell":
@@ -1255,12 +1278,13 @@ func _build_input(event: InputEvent) -> bool:
 ## E on a container or a dropped bag: put what fits in the inventory.
 func interact(id: String) -> void:
 	if id == "":
+		farming.use_look()  # harvest the plant under the crosshair, if any
 		return
 	if id == "shop":
 		shop_ui.open()
 		return
-	if id == "testbox":
-		open_test_box()
+	if id == "testbox" or id.begins_with("testbox:"):
+		open_test_box(int(id.trim_prefix("testbox:")) if id != "testbox" else 0)
 		return
 	if id == "horde":
 		press_horde_button()
@@ -1676,38 +1700,54 @@ func _on_player_hit(dmg: float, from: Vector3, kind := "walker") -> void:
 
 var _attack_warned_at := -100000
 
-## The temporary test box: a green crate with a white cross on the lid.
+## Items each test box holds (a chest's 40 slots); newer items spill into a second box.
+const TEST_SLOTS := 40
+
+## Every item the test boxes hand out, in order (blueprints are bought, not given).
+static func test_items() -> Array:
+	return Items.ITEMS.keys().filter(func(i): return not i.begins_with("bp_"))
+
+
+## The temporary test boxes: green crates with a white cross on the lid. The
+## first holds the first 40 items; each further box (beside it) the next 40.
 func _make_test_box() -> void:
-	test_box = StaticBody3D.new()
-	test_box.name = "TestBox"
-	test_box.set_meta("interact_id", "testbox")
-	test_box.position = Vector3(3.0, terrain.surface_height(3.0, 7.0), 7.0)
-	add_child(test_box)
-	for b in [[Vector3(1.0, 0.7, 0.7), Vector3(0, 0.35, 0), Color(0.2, 0.55, 0.25)],
-			[Vector3(0.7, 0.02, 0.15), Vector3(0, 0.71, 0), Color(0.95, 0.95, 0.9)],
-			[Vector3(0.15, 0.02, 0.5), Vector3(0, 0.71, 0), Color(0.95, 0.95, 0.9)]]:
-		var mi := MeshInstance3D.new()
-		var m := BoxMesh.new()
-		m.size = b[0]
-		mi.mesh = m
-		mi.position = b[1]
-		mi.material_override = LowPoly.material(b[2])
-		test_box.add_child(mi)
-	var col := CollisionShape3D.new()
-	var shape := BoxShape3D.new()
-	shape.size = Vector3(1.0, 0.72, 0.7)
-	col.shape = shape
-	col.position.y = 0.36
-	test_box.add_child(col)
-	test_storage = Inventory.new(40)
+	var boxes := ceili(test_items().size() / float(TEST_SLOTS))
+	for i in boxes:
+		var box := StaticBody3D.new()
+		box.name = "TestBox" if i == 0 else "TestBox%d" % (i + 1)
+		box.set_meta("interact_id", "testbox" if i == 0 else "testbox:%d" % i)
+		var x := 3.0 + 1.3 * i
+		box.position = Vector3(x, terrain.surface_height(x, 7.0), 7.0)
+		add_child(box)
+		if i == 0:
+			test_box = box
+		else:
+			terrain.add_no_dig(box.position, 1.3)
+		for b in [[Vector3(1.0, 0.7, 0.7), Vector3(0, 0.35, 0), Color(0.2, 0.55, 0.25) if i == 0 else Color(0.3, 0.6, 0.2)],
+				[Vector3(0.7, 0.02, 0.15), Vector3(0, 0.71, 0), Color(0.95, 0.95, 0.9)],
+				[Vector3(0.15, 0.02, 0.5), Vector3(0, 0.71, 0), Color(0.95, 0.95, 0.9)]]:
+			var mi := MeshInstance3D.new()
+			var m := BoxMesh.new()
+			m.size = b[0]
+			mi.mesh = m
+			mi.position = b[1]
+			mi.material_override = LowPoly.material(b[2])
+			box.add_child(mi)
+		var col := CollisionShape3D.new()
+		var shape := BoxShape3D.new()
+		shape.size = Vector3(1.0, 0.72, 0.7)
+		col.shape = shape
+		col.position.y = 0.36
+		box.add_child(col)
+	test_storage = Inventory.new(TEST_SLOTS)
 
 
-## Refills the test box with a full stack of every item and opens it like a chest.
-func open_test_box() -> void:
+## Refills test box `page` with a full stack of each of its items and opens it like a chest.
+func open_test_box(page := 0) -> void:
 	test_storage.load_data({})
-	for item in Items.ITEMS:
-		if not item.begins_with("bp_"):
-			test_storage.add(item, int(Items.ITEMS[item].stack))
+	var all := test_items()
+	for k in range(page * TEST_SLOTS, mini((page + 1) * TEST_SLOTS, all.size())):
+		test_storage.add(all[k], int(Items.ITEMS[all[k]].stack))
 	if shop.cash < TEST_CASH:
 		shop.add_cash(TEST_CASH - shop.cash)
 	inventory_ui.open_chest("", test_storage)
@@ -1800,6 +1840,7 @@ func collect_save_data() -> Dictionary:
 			"hits": tree_hits.keys().map(func(k): return [k, tree_hits[k]]),
 			"pebbles": taken_pebbles.keys().map(func(k): return [k, taken_pebbles[k]])},
 		"water": water.save_data(),
+		"farming": farming.save_data(),
 	}
 
 
@@ -1855,6 +1896,8 @@ func apply_save_data(data: Dictionary) -> void:
 	building.sites_load_data(data.get("sites", []))
 	var wd = data.get("water", {})
 	water.load_data(wd if wd is Dictionary else {})  # after the sprinklers it pipes to
+	var fd = data.get("farming", {})
+	farming.load_data(fd if fd is Dictionary else {})
 	waves.load_data(data.get("waves", {"wave": maxi(day_night.day - 1, 0)}))
 	guns.load_data(data.get("guns", {}))
 	# Older saves: a little starting cash plus pay for the nights already survived.

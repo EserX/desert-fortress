@@ -47,6 +47,15 @@ const DRONE := [
 	{"name": "Blueprint: Auto-turret", "price": 150, "items": {"bp_turret": 1}},
 	{"name": "Blueprint: Electric fence", "price": 120, "items": {"bp_fence": 1}},
 	{"name": "Blueprint: Sandbag wall", "price": 60, "items": {"bp_sandbags": 1}},
+	{"name": "Seeds: 6 millet (food)", "price": 15, "items": {"seed_millet": 6}},
+	{"name": "Seeds: 4 melon (food, thirsty)", "price": 20, "items": {"seed_melon": 4}},
+	{"name": "Seeds: 6 cotton (cloth)", "price": 20, "items": {"seed_cotton": 6}},
+	{"name": "4 agave pups (fibre, hardy)", "price": 20, "items": {"seed_agave": 4}},
+	{"name": "4 fast acacia seedlings (logs)", "price": 25, "items": {"seed_acacia": 4}},
+	{"name": "Seeds: 6 desert marigold (flower)", "price": 20, "items": {"seed_marigold": 6}},
+	{"name": "Date palm sapling (fruit tree)", "price": 45, "items": {"seed_date_palm": 1}},
+	{"name": "2 saffron bulbs (exotic, shade)", "price": 90, "items": {"seed_saffron": 2}},
+	{"name": "2 dragon fruit cuttings (exotic)", "price": 70, "items": {"seed_dragon_fruit": 2}},
 ]
 ## Blueprint item -> the build piece it unlocks.
 const BLUEPRINTS := {"bp_turret": "turret", "bp_fence": "electric_fence", "bp_sandbags": "sandbags"}

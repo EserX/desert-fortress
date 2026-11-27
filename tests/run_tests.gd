@@ -2958,6 +2958,7 @@ func _process(_delta: float) -> bool:
 			_test_building_v19()
 			_test_resources()
 			_test_water()
+			_test_farming()
 			_start_ladder()
 		3300:
 			_check_debris()
@@ -3118,5 +3119,173 @@ func _test_water() -> void:
 		sh.upgrades[id] = 0
 	main.apply_upgrades()
 	b.load_data([])
+	w.load_data({})
+	inv.load_data({})
+
+
+## v1.14: seeds, seed beds, growing over days with water, the midday heat, harvests.
+func _test_farming() -> void:
+	var f = main.farming
+	var w = main.water
+	var inv = main.inventory
+	var player = main.player
+	var F = load("res://scripts/farming.gd")
+	var W = load("res://scripts/water.gd")
+	var Items = load("res://scripts/items.gd")
+	var Shop = load("res://scripts/shop.gd")
+	main.building.load_data([])
+	main.mutants.clear()
+	inv.load_data({})
+	w.load_data({})
+	f.load_data({})
+	# Seeds by drone, for every crop.
+	var seeds := {}
+	for e in Shop.DRONE:
+		for item in e.items:
+			if F.crop_of_seed(item) != "":
+				seeds[F.crop_of_seed(item)] = true
+	check(seeds.size() == F.CROPS.size(), "the drone sells seeds for all %d crops" % seeds.size())
+	var kinds := {}
+	for c in F.CROPS:
+		kinds[F.CROPS[c].kind] = true
+		for item in F.CROPS[c].yield:
+			if not Items.ITEMS.has(item) or not Items.ITEMS.has(F.seed_of(c)):
+				check(false, "%s's seed and harvest (%s) are real items" % [c, item])
+	check(kinds.size() == 5, "crops of every kind: food, resource, flower, fruit tree, exotic")
+	# Planting needs soil.
+	var p := Vector3(14.5, 0, 14.5)
+	p.y = main.terrain.surface_height(p.x, p.z)
+	var s: Vector2i = F.spot_of(p.x, p.z)
+	var c: Vector2i = F.cell_of_spot(s)
+	check(f.plant(p, "millet").begins_with("You have no"), "no seeds, no planting")
+	inv.add("seed_millet", 3)
+	check(f.plant(p, "millet").begins_with("Seeds need soil"), "seeds don't go in sand: " + f.plant(p, "millet"))
+	w.water_cell(c, W.SOIL_NEED)
+	check(f.plant(p, "millet") == "" and f.plants.has(s) and inv.count_of("seed_millet") == 2, "on soil a seed bed is dug and planted (one seed used)")
+	check(f.plant(p, "millet") == "There is already a plant here", "one plant to a bed")
+	check(f.plant_problem(Vector3(W.WELL_POS.x, 0, W.WELL_POS.y)) != "", "not in the main well")
+	w.cells[c].wet = 0.0
+	check(f.plant_prompt(s).contains("day 1 of 3") and f.plant_prompt(s).contains("needs 4 L"), "its prompt: " + f.plant_prompt(s).replace("\n", " / "))
+	# Growing a day per watered morning.
+	w.on_morning()
+	check(f.plants[s].grow == 0.0, "a dry day: no growth")
+	w.water_cell(c, 4.0)
+	check(f.plant_prompt(s).contains("watered today"), "watered: " + f.plant_prompt(s).replace("\n", " / "))
+	w.on_morning()
+	check(is_equal_approx(f.plants[s].grow, 1.0), "a watered day: one day grown")
+	for i in 2:
+		w.water_cell(c, 4.0)
+		w.on_morning()
+	check(f.is_ripe(f.plants[s]) and f.plant_prompt(s).contains("[E] Harvest (4 millet)"), "ripe after 3 days: " + f.plant_prompt(s).replace("\n", " / "))
+	f.redraw()
+	check(f._beds.multimesh.instance_count == 1 and f._stalks.multimesh.instance_count >= 6, "a bed and stalks are drawn")
+	# Harvest by looking at it and pressing E.
+	var cc: Vector2 = F.spot_center(s)
+	var g: float = main.terrain.surface_height(cc.x, cc.y)
+	player.position = Vector3(cc.x, g, cc.y + 2.4)
+	player.rotation.y = 0.0
+	player.head.rotation.x = -0.55
+	player.head.position.y = player.EYE_HEIGHT
+	check(f.look_spot() == s, "the crosshair finds the plant (%s)" % str(f.look_spot()))
+	main.interact("")
+	check(inv.count_of("millet") == 4 and not f.plants.has(s), "E harvests 4 millet and the bed is free again")
+	var food0: float = main.survival.food
+	main.survival.food = 50.0
+	main.survival.consume("millet")
+	check(main.survival.food > 50.0, "millet is food")
+	main.survival.food = food0
+	# The midday heat.
+	f.plant(p, "millet")
+	w.cells[c].wet = 0.0
+	main.day_night.hour_changed.emit(main.day_night.day, F.HEAT_HOUR)
+	check(is_equal_approx(f.plants[s].hp, 1.0 - F.HEAT_HARM) and f.plant_prompt(s).contains("wilting"), "a dry plant wilts in the midday heat")
+	f.midday()
+	check(f.plants[s].dead and f.plant_prompt(s).begins_with("Dead millet"), "a second dry midday kills it: " + f.plant_prompt(s).replace("\n", " / "))
+	f.harvest(s)
+	check(not f.plants.has(s), "E clears a dead plant")
+	f.plant(p, "millet")
+	w.water_cell(c, 4.0)
+	f.midday()
+	check(is_equal_approx(f.plants[s].hp, 1.0), "watered before noon: no harm")
+	f.plants.erase(s)
+	# Agave is hardy; saffron needs shade and hates too much water.
+	var s2: Vector2i = s + Vector2i(-1, 0)  # the other bed on the same square
+	var p2 := Vector3(F.spot_center(s2).x, 0, F.spot_center(s2).y)
+	inv.add("seed_agave", 1)
+	inv.add("seed_saffron", 1)
+	w.cells[c].wet = 0.0
+	f.plant(p, "agave")
+	f.plant(p2, "saffron")
+	f.midday()
+	check(is_equal_approx(f.plants[s].hp, 1.0), "agave doesn't mind the heat")
+	check(f.plants[s2].dead, "saffron, dry and in the sun, is hurt twice over and dies")
+	f.plants[s2].dead = false
+	f.plants[s2].hp = 1.0
+	w.water_cell(c, 4.0)
+	check(f.plant_prompt(s2).contains("needs shade"), "saffron wants shade: " + f.plant_prompt(s2).replace("\n", " / "))
+	f.midday()
+	check(is_equal_approx(f.plants[s2].hp, 1.0 - F.HEAT_HARM), "watered but in the sun it is still hurt")
+	w.water_cell(c, 3.0)
+	f.plants[s2].hp = 1.0
+	w.on_morning()
+	check(f.plants[s2].grow == 0.0 and f.plants[s2].hp < 1.0, "saffron rots with more than 6 L a day")
+	f.plants.erase(s)
+	f.plants.erase(s2)
+	# Flowers make crops near them grow faster and come back after picking.
+	inv.add("seed_marigold", 1)
+	inv.add("seed_millet", 1)
+	f.plant(p, "marigold")
+	f.plant(p2, "millet")
+	for i in 2:
+		w.water_cell(c, 4.0)
+		w.on_morning()
+	check(f.is_ripe(f.plants[s]) and is_equal_approx(f.plants[s2].grow, 2.0), "marigolds bloom in 2 days")
+	w.cells[c].green = 0.2
+	var green0: float = w.green_of(c)
+	w.water_cell(c, 4.0)
+	w.on_morning()
+	check(is_equal_approx(f.plants[s2].grow, 3.0) or f.is_ripe(f.plants[s2]), "the millet next to them grows faster (%.1f)" % f.plants[s2].grow)
+	check(w.green_of(c) > green0 + W.GROW + 0.05, "and the soil round blooming flowers greens faster (%.2f to %.2f)" % [green0, w.green_of(c)])
+	var got: Dictionary = f.harvest(s)
+	check(got.get("flowers", 0) == 2 and f.plants.has(s) and f.plants[s].fruited and not f.is_ripe(f.plants[s]), "picked marigolds grow back")
+	f.plants.erase(s)
+	f.plants.erase(s2)
+	# A grown date palm shades saffron and spreads soil round it.
+	inv.add("seed_date_palm", 1)
+	f.plant(p, "date_palm")
+	f.plants[s].grow = float(F.CROPS.date_palm.days)
+	inv.add("seed_saffron", 1)
+	f.plant(p2, "saffron")
+	check(f.shaded(s2), "a grown date palm shades the saffron beside it")
+	var far: Vector2i = c + Vector2i(1, 1)
+	check(not w.is_soil(far), "the sand beyond is dry")
+	for i in int(W.SOIL_NEED / F.TREE_SOIL):
+		w.on_morning()
+	check(w.is_soil(far), "after %d mornings the palm has turned the sand round it to soil" % int(W.SOIL_NEED / F.TREE_SOIL))
+	check(f.harvest(s).get("dates", 0) == 4 and f.plants[s].fruited, "it gives dates and keeps fruiting")
+	for i in 3:
+		f.midday()
+	check(not f.plants[s].dead, "a grown palm survives dry middays")
+	# Saved.
+	var data: Dictionary = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	var n: int = f.plants.size()
+	f.load_data({})
+	check(f.plants.is_empty(), "an old save has no plants")
+	f.load_data({"plants": [[1, 2, "millet", "x", null, 0, 0], [1, 2, "triffid", 1, 1, false, false], "junk", 5]})
+	check(f.plants.size() == 1 and f.plants[Vector2i(1, 2)].grow == 0.0 and f.plants[Vector2i(1, 2)].hp == 1.0, "a broken save loads with sensible defaults")
+	main.apply_save_data(data)
+	check(f.plants.size() == n and f.plants[s].crop == "date_palm" and f.plants[s].fruited, "plants, growth and fruiting are saved")
+	# Digging uproots.
+	f.on_ground_changed(Rect2(cc.x - 0.5, cc.y - 0.5, 1.0, 1.0))
+	check(not f.plants.has(s) and f.plants.has(s2), "digging a bed up uproots its plant only")
+	# Crafting and the test boxes.
+	inv.load_data({})
+	inv.add("cotton", 3)
+	Items.craft("cloth", inv)
+	check(inv.count_of("cloth") == 2, "3 cotton spin into 2 cloth")
+	main.open_test_box(1)
+	check(main.test_storage.count_of("seed_dragon_fruit") > 0, "the second test box holds the newer items (seeds)")
+	main.inventory_ui.close()
+	f.load_data({})
 	w.load_data({})
 	inv.load_data({})

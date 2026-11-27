@@ -64,6 +64,8 @@ var shots := [
 	{"name": "54_blast", "pos": Vector3(0, 0, 0), "yaw": 0.0, "pitch": -0.05, "hour": 16.0, "blast": true},
 	{"name": "55_greening", "pos": Vector3(15, 0, 13), "yaw": 0.62, "pitch": -0.3, "hour": 10.0, "greening": true},
 	{"name": "56_watering_can", "pos": Vector3(16, 0, 6), "yaw": 0.59, "pitch": -0.6, "hour": 15.0, "greening": true, "can": true},
+	{"name": "57_farm", "pos": Vector3(24, 0, 29.5), "yaw": 0.0, "pitch": -0.42, "hour": 10.0, "farm": true},
+	{"name": "58_seeds", "pos": Vector3(19, 0, 25.2), "yaw": 0.0, "pitch": -0.6, "hour": 16.0, "farm": true, "seeds": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -184,6 +186,8 @@ func _process(_d: float) -> bool:
 			_blast_sample(p)
 		if s.get("greening", false):
 			_greening_sample(s.get("can", false))
+		if s.get("farm", false):
+			_farm_sample(s.get("seeds", false))
 		if s.get("horde", false):
 			main.building.load_data([])
 			main.building.sites_load_data([])
@@ -818,6 +822,39 @@ func _greening_sample(can: bool) -> void:
 		main.inventory.add("watering_can", 1)
 		main.inventory.selected = 0
 		w.can = 7.0
+
+
+## A field with every crop, from new seed beds (back) to ripe (front), and a dead one.
+func _farm_sample(seeds: bool) -> void:
+	var w = main.water
+	var f = main.farming
+	main.terrain.load_data({})
+	main.mutants.clear()
+	main.building.load_data([])
+	main.building.sites_load_data([])
+	w.load_data({})
+	f.load_data({})
+	for x in range(3, 9):
+		for z in range(2, 7):
+			var c := Vector2i(x, z)
+			w.water_cell(c, 8.0)
+			w.cells[c].total = 20.0
+			w.cells[c].green = 0.3 if (x == 3 or x == 8 or z == 2) else 0.05
+			w.cells[c].wet = 5.0
+	var crops: Array = f.CROPS.keys()
+	for i in crops.size():
+		var crop: String = crops[i]
+		for row in 4:  # z spot 6 (back, new) .. 11 (front, ripe)
+			var sp := Vector2i(7 + i, 6 + row * 2)
+			var e := {"crop": crop, "grow": float(f.CROPS[crop].days) * row / 3.0, "hp": 1.0, "dead": false, "fruited": false}
+			f.plants[sp] = e
+	f.plants[Vector2i(16, 13)] = {"crop": "millet", "grow": 1.0, "hp": 0.0, "dead": true, "fruited": false}
+	w.redraw()
+	f.redraw()
+	if seeds:
+		main.inventory.load_data({})
+		main.inventory.add("seed_millet", 6)
+		main.inventory.selected = 0
 
 
 func _machines_sample() -> void:

@@ -2,7 +2,7 @@
 
 A 3D low-poly survival and fortress-defence game for Linux, made with Godot 4.5. Scavenge the desert by day, build and arm a fortress around the flag, and survive a bigger mutant wave every night. Each night pays cash you spend at the shop terminal on supplies, weapons, drone deliveries and base upgrades. Coming next: turning the desert green from a main well at the centre, with farms, oases and a market (see the roadmap).
 
-**Current version: v1.12.0.** See [ROADMAP.md](ROADMAP.md) for the plan and [DEVLOG.md](DEVLOG.md) for what changed in each update.
+**Current version: v1.14.0.** See [ROADMAP.md](ROADMAP.md) for the plan and [DEVLOG.md](DEVLOG.md) for what changed in each update.
 
 ## Play (Linux Mint)
 
@@ -58,6 +58,24 @@ If `git pull` complains about untracked `.uid` files, they are safe to delete.
 
 **Water well.** Dig a shaft at least **3.5 m** deep (the last metre is stone, so bring the pickaxe; looking straight down into a hole reaches its bottom), then build a **water well** over it (8 stone, 4 wood, 2 scrap). It fills a bottle of water every 75 seconds, up to 6; press **E** on it to take them. Hard work costs **stamina**: a dig 7 (filling 3.5), a pickaxe hit 9, building a piece 6, a hammer repair or upgrade 5. Out of breath, you have to wait.
 
+**The main well and watering.** The big stone well next to the flag holds 200 litres and fills up again every morning (deepen it in the shop for more). Make a **watering can** (workbench: 2 scrap, 2 nails), fill it with **E** at the main well and left click the sand to pour. The ground is a grid of 4 m squares: 6 L turns sand into **soil**, and soil that gets 4 L in a day turns a little greener each morning (grass, then small plants). With the **hand pump** upgrade, lay **water pipes** from the main well to **sprinklers** (build mode), which water the squares round them by day.
+
+**Farming.** Seeds come by drone (shop terminal, Drone orders). Hold a seed packet and left click **soil** to dig a seed bed and plant it (four beds to a square). A plant grows one day each morning if its square got enough water the day before (the prompt says how much). At **13:00** the midday heat hurts plants on squares that are still dry, and a plant hurt twice without water in between dies (E clears it). Look at a plant to see how it is doing, and press **E** to harvest it when it is ripe.
+
+| Crop | Days | Water a day | What it gives |
+|---|---|---|---|
+| Millet | 3 | 4 L | millet (food) |
+| Melon | 4 | 6 L | melons (food and drink) |
+| Cotton | 4 | 4 L | cotton: 3 make 2 cloth at the workbench |
+| Agave | 5 | 2 L | fibre (3 make rope); never minds the heat |
+| Fast acacia | 4 | 4 L | 3 logs |
+| Desert marigold | 2 | 4 L | flowers, again every 2 days; crops within 6 m grow half as fast again and the soil round them greens faster |
+| Date palm | 6 | 4 L | dates every 3 days; shades plants within 3.5 m, turns the sand round it to soil and greens it, and once grown survives dry days |
+| Saffron (exotic) | 4 | 4 to 6 L | saffron; needs shade at midday (a roof or a date palm) and rots with more than 6 L |
+| Dragon fruit (exotic) | 5 | 6 L | dragon fruit every 3 days |
+
+Eat millet, melons, dates and dragon fruit with **F**. Exotic crops and flowers are for selling at the market (next update). Digging up a bed uproots its plant.
+
 **Nights.** At 18:30 a siren warns you. At 20:00 a wave of mutants comes in from the edge of the map and marches on the base. Close to you they know where you are, walls or not. They find their way round your walls: through an open gate if there is one, otherwise they all go for the weakest wall or gate (a damaged or wooden one before stone), and they walk round deep trenches and, if it's short, round barbed wire and spikes. Brutes don't bother and come straight through. The wave ends when all are dead or at dawn. A summary shows your kills and your pay.
 
 | Mutant | What to know |
@@ -87,13 +105,13 @@ If `git pull` complains about untracked `.uid` files, they are safe to delete.
 | Space | Jump |
 | Ctrl / C | Crouch (quieter) |
 | Mouse | Look |
-| Left click | Swing, shoot, build (hold and drag for a line), use the hammer, or dig with the shovel |
+| Left click | Swing, shoot, build (hold and drag for a line), use the hammer, dig with the shovel, pour the watering can, or plant seeds |
 | Right click | Aim a gun; hammer: demolish; shovel: fill; build mode: undo |
 | R | Reload; build mode: turn the piece; hammer: repair everything nearby; lock or unlock a metal door |
 | G | Build mode: pick a piece up and move it; hammer: upgrade everything like it nearby |
 | Z / X | Build mode: turn the piece back / on (objects in 15° steps) |
 | T | Build mode: switch between single pieces and ready-made buildings |
-| E | Search, open, use (gates, chests, workbench, generator, fire pit, turret, switch, well, shop) |
+| E | Search, open, use (gates, chests, workbench, generator, fire pit, turret, switch, well, shop), harvest a ripe plant |
 | Tab / I | Inventory |
 | 1–9, mouse wheel | Hotbar slot (build mode: piece) |
 | F | Eat, drink, use a bandage or medkit |

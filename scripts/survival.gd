@@ -20,6 +20,10 @@ const FALL_DAMAGE := 9.0     # per m/s above the safe speed
 const CONSUMABLES := {
 	"canned_food": {"food": 35.0, "water": 5.0},
 	"water": {"water": 40.0},
+	"millet": {"food": 12.0},
+	"melon": {"food": 15.0, "water": 25.0},
+	"dates": {"food": 20.0, "water": 2.0},
+	"dragon_fruit": {"food": 12.0, "water": 12.0},
 	"bandage": {"health": 30.0},
 	"medkit": {"health": 70.0},
 }

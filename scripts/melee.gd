@@ -12,9 +12,11 @@ const WEAPONS := {
 	"pipe": {"damage": 25.0, "stamina": 12.0, "cooldown": 0.75, "reach": 2.4, "knock": 5.5, "stagger": 0.55},
 	"machete": {"damage": 40.0, "stamina": 9.0, "cooldown": 0.55, "reach": 2.2, "knock": 1.8, "stagger": 0.2},
 	"axe": {"damage": 34.0, "stamina": 11.0, "cooldown": 0.7, "reach": 2.3, "knock": 3.8, "stagger": 0.4},
+	# v2.2: slow and tiring, but it flattens what it hits (it also knocks down building pieces, see main.gd).
+	"sledgehammer": {"damage": 55.0, "stamina": 18.0, "cooldown": 1.1, "reach": 2.5, "knock": 8.0, "stagger": 0.9},
 }
 ## Held in the hands but not swung at things (has its own left click).
-const TOOLS := ["hammer", "shovel", "pickaxe", "metal_detector", "watering_can", "stone", "molotov", "pipe_bomb"]
+const TOOLS := ["hammer", "shovel", "steel_shovel", "pickaxe", "metal_detector", "watering_can", "stone", "molotov", "pipe_bomb"]
 const HIT_TIME := 0.16  # seconds from the click to the hit
 const MIX_RATE := 22050.0
 const REST_POS := Vector3(0.3, -0.27, -0.5)
@@ -72,6 +74,13 @@ func _ready() -> void:
 	_box(shovel, Vector3(0.035, 0.7, 0.035), Vector3(0, 0.22, 0), wood)
 	_box(shovel, Vector3(0.12, 0.035, 0.035), Vector3(0, -0.12, 0), wood)
 	_box(shovel, Vector3(0.15, 0.19, 0.02), Vector3(0, 0.64, 0.01), LowPoly.material(Color(0.32, 0.33, 0.34), 0.5))
+	var steel_shovel := Node3D.new()  # v2.2: a bright steel blade with a T grip
+	_box(steel_shovel, Vector3(0.035, 0.72, 0.035), Vector3(0, 0.22, 0), wood)
+	_box(steel_shovel, Vector3(0.14, 0.035, 0.035), Vector3(0, -0.13, 0), grip)
+	_box(steel_shovel, Vector3(0.17, 0.22, 0.02), Vector3(0, 0.66, 0.01), LowPoly.material(Color(0.72, 0.74, 0.78), 0.25))
+	var sledge := Node3D.new()
+	_box(sledge, Vector3(0.035, 0.62, 0.035), Vector3(0, 0.18, 0), wood)
+	_box(sledge, Vector3(0.09, 0.09, 0.2), Vector3(0, 0.5, -0.02), LowPoly.material(Color(0.3, 0.31, 0.33), 0.45))
 	var pickaxe := Node3D.new()
 	_box(pickaxe, Vector3(0.04, 0.62, 0.04), Vector3(0, 0.2, 0), wood)
 	_box(pickaxe, Vector3(0.05, 0.06, 0.42), Vector3(0, 0.5, -0.03), LowPoly.material(Color(0.32, 0.33, 0.34), 0.5))
@@ -105,7 +114,7 @@ func _ready() -> void:
 	_box(bomb, Vector3(0.075, 0.03, 0.075), Vector3(0, 0.2, 0), metal)
 	_box(bomb, Vector3(0.075, 0.03, 0.075), Vector3(0, -0.03, 0), metal)
 	_box(bomb, Vector3(0.012, 0.06, 0.012), Vector3(0.0, 0.25, 0), LowPoly.material(Color(0.7, 0.2, 0.1)))  # fuse
-	_models = {"stone": stone, "molotov": molotov, "pipe_bomb": bomb, "pipe": pipe, "machete": machete, "hammer": hammer, "shovel": shovel, "pickaxe": pickaxe, "metal_detector": detector, "axe": axe, "watering_can": can}
+	_models = {"stone": stone, "molotov": molotov, "pipe_bomb": bomb, "pipe": pipe, "machete": machete, "hammer": hammer, "shovel": shovel, "steel_shovel": steel_shovel, "sledgehammer": sledge, "pickaxe": pickaxe, "metal_detector": detector, "axe": axe, "watering_can": can}
 	for k in _models:
 		_models[k].rotation.x = ITEM_TILT
 		_models[k].visible = false

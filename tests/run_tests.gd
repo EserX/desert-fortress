@@ -3044,6 +3044,7 @@ func _process(_delta: float) -> bool:
 		4270:
 			_check_throws()
 			_test_survival_depth()
+			_test_crafting_chain()
 			_start_shelter()
 		4280:
 			_check_shelter()
@@ -4676,6 +4677,129 @@ func _test_survival_depth() -> void:
 	check(main.player.load_mult > 1.2 and cp.load_mult() == main.player.load_mult, "a heavy load slows climbing (x%.2f, %.0f kg)" % [main.player.load_mult, inv.weight()])
 	inv.load_data({})
 	bd.load_data([])
+
+
+## v2.2 crafting chain: the furnace, brick pieces, glass panes and steel tools.
+func _test_crafting_chain() -> void:
+	var Furnace = load("res://scripts/furnace.gd")
+	var Items = load("res://scripts/items.gd")
+	var Melee = load("res://scripts/melee.gd")
+	var Building = load("res://scripts/building.gd")
+	var bd = main.building
+	var inv = main.inventory
+	bd.load_data([])
+	inv.load_data({})
+	var fs := {"kind": "obj", "cx": -4, "cz": 6, "dir": 0, "level": 0}
+	var ev: Dictionary = bd.evaluate("furnace", fs)
+	check(ev.ok, "a furnace can be built on open sand (%s)" % ev.get("reason", ""))
+	var fk: String = bd.place("furnace", fs, ev.y)
+	var f: Dictionary = bd.pieces[fk]
+	check(f.node.get_meta("interact_id") == "furnace:" + fk and f.heat == 0.0 and f.load == 0, "a new furnace is cold and empty")
+	check(main._prompt_for("furnace:" + fk).contains("Hold scrap, sand or clay"), "its prompt says what to hold: " + main._prompt_for("furnace:" + fk).replace("\n", " / "))
+	inv.add_all({"clay": 40, "wood": 20, "sand": 9, "scrap": 4})
+	var lines: Array = Furnace.use(f, inv, "clay")
+	check(f.smelt == "clay" and f.load == Furnace.LOAD_MAX and inv.count_of("clay") == 40 - Furnace.LOAD_MAX, "E with clay in hand loads the hopper, up to %d (%s)" % [Furnace.LOAD_MAX, str(lines)])
+	lines = Furnace.use(f, inv, "sand")
+	check(f.smelt == "clay" and inv.count_of("sand") == 9 and lines[0].begins_with("!"), "one kind at a time: %s" % str(lines))
+	check(not Furnace.work(f, 10.0) and f.made.is_empty(), "no fuel, no smelting")
+	check(Furnace.prompt(f, "").contains("out of fuel"), "and the prompt says it's out of fuel")
+	Furnace.use(f, inv, "wood")
+	check(is_equal_approx(f.heat, Furnace.HEAT_MAX) and inv.count_of("wood") == 20 - int(Furnace.HEAT_MAX / Furnace.FUEL.wood), "E with wood burns it, up to %d s of fuel (%.0f)" % [int(Furnace.HEAT_MAX), f.heat])
+	for i in 30:
+		Furnace.work(f, 0.5)  # 15 s at 6 s a batch: 2 batches
+	check(int(f.made.get("brick", 0)) == 4 and f.load == Furnace.LOAD_MAX - 4, "2 clay make 2 bricks every 6 s (%s, %d left)" % [str(f.made), f.load])
+	check(is_equal_approx(f.heat, Furnace.HEAT_MAX - 15.0), "burning fuel only while it smelts (%.1f)" % f.heat)
+	check(Furnace.prompt(f, "").contains("smelting clay to bricks") and Furnace.prompt(f, "").contains("4 bricks ready"), "the prompt: " + Furnace.prompt(f, "").replace("\n", " / "))
+	# The furnace node does the same four times a second, shows its glow and warms you.
+	main.furnace.tick(0.25)
+	check(f.working and f.glow.visible, "a working furnace glows")
+	check(main.camp.fire_near(f.node.global_position + Vector3(2, 0, 0)), "and keeps you warm like a fire pit")
+	lines = Furnace.use(f, inv, "")
+	check(inv.count_of("brick") == 4 and f.made.is_empty() and lines.size() == 1, "E takes out what's ready (%s)" % str(lines))
+	for i in 200:
+		Furnace.work(f, 1.0)
+	check(f.load == 0 and f.smelt == "" and int(f.made.get("brick", 0)) == 26, "it smelts the whole load and then rests (%s)" % str(f.made))
+	check(not Furnace.work(f, 1.0) and Furnace.prompt(f, "").contains("cold"), "an empty furnace is idle")
+	# Full: it stops until you take things out.
+	Furnace.use(f, inv, "sand")
+	f.made = {"glass": Furnace.MADE_MAX}
+	check(not Furnace.can_work(f) and Furnace.prompt(f, "").contains("full"), "a full furnace stops: " + Furnace.prompt(f, "").replace("\n", " / "))
+	f.made = {}
+	for i in 30:
+		Furnace.work(f, 1.0)
+	check(int(f.made.get("glass", 0)) == 3 and f.load == 0, "3 sand make a glass (%s)" % str(f.made))
+	Furnace.use(f, inv, "scrap")
+	for i in 30:
+		Furnace.work(f, 1.0)
+	check(int(f.made.get("metal_plate", 0)) == 2 and inv.count_of("scrap") == 0, "2 scrap make a metal plate (%s)" % str(f.made))
+	check(inv.count_of("glass") == 3, "loading the scrap took out the glass")
+	# Saving.
+	Furnace.use(f, inv, "clay")
+	Furnace.work(f, 2.0)
+	f.made = {"glass": 2}
+	var data: Dictionary = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	main.apply_save_data(data)
+	var fk2: Array = bd.keys_of(["furnace"])
+	var g: Dictionary = bd.pieces[fk2[0]] if fk2.size() == 1 else {}
+	check(not g.is_empty() and g.smelt == "clay" and g.load == 10 and int(g.made.get("glass", 0)) == 2 and absf(g.heat - f.heat) < 0.01 and absf(g.progress - 2.0) < 0.01, "a furnace's fuel, load, progress and finished goods are saved")
+	check(g.has("glow") and g.node.get_meta("interact_id") == "furnace:" + fk2[0], "and it loads as a working furnace")
+	var broken := {"heat": "hot", "smelt": "gold", "load": 5, "made": {"brick": "lots", "nope": 3, "glass": 999}, "progress": [1]}
+	var h := {}
+	Furnace.restore(h, broken)
+	check(h.heat == 0.0 and h.smelt == "" and h.load == 0 and h.made == {"glass": Furnace.MADE_MAX} and h.progress == 0.0, "a broken furnace in a save falls back (%s)" % str(h))
+	var old := {}
+	Furnace.restore(old, {})
+	check(old.smelt == "" and old.made.is_empty(), "missing fields load as an empty furnace")
+	# Brick pieces.
+	bd.load_data([])
+	inv.load_data({})
+	var ws: Dictionary = Building.slot_for("brick_wall", Vector3(-6, 0, 10), 0)
+	var wev: Dictionary = bd.evaluate("brick_wall", ws)
+	var wk: String = bd.place("brick_wall", ws, wev.y)
+	var w: Dictionary = bd.pieces[wk]
+	check(is_equal_approx(bd.max_hp(w), 1200.0) and bd.describe(w) == "Brick wall" and bd.upgrade_cost(w).is_empty(), "a brick wall: 1200 hit points, no tiers")
+	bd.damage(wk, 400.0)
+	check(bd.repair_cost(w) == {"brick": 2}, "it is mended with bricks (%s)" % str(bd.repair_cost(w)))
+	check(bd.refund(w) == {"brick": 6, "clay": 1}, "and knocked down for half its bricks back (%s)" % str(bd.refund(w)))
+	check("brick_wall" in Building.WALLISH and "glass_window" in Building.WALLISH, "brick walls hold up floors like walls")
+	var gs: Dictionary = Building.slot_for("glass_window", Vector3(-4, 0, 10), 0)
+	var gk: String = bd.place("glass_window", gs, bd.evaluate("glass_window", gs).y)
+	var has_glass: bool = bd.pieces[gk].node.get_children().any(func(c): return c is MeshInstance3D and c.get_meta("mat", "") == "glass")
+	check(has_glass and Building.piece_colliders("glass_window").size() == 1, "the glass window wall has a pane and is solid all over")
+	check("furnace" in Building.ORDER and "brick_wall" in Building.ORDER and "glass_window" in Building.ORDER, "the new pieces are in build mode")
+	# Workbench parts and tools.
+	inv.add_all({"glass": 2, "metal_plate": 7, "wood": 6, "cloth": 1})
+	check(Items.craft("glass_pane", inv) != null and inv.count_of("glass_pane") == 1, "2 glass and a piece of wood make a glass pane")
+	check(Items.craft("steel_shovel", inv) != null and Items.craft("sledgehammer", inv) != null, "metal plates make a steel shovel and a sledgehammer")
+	check(Melee.is_weapon("sledgehammer") and "steel_shovel" in Melee.TOOLS, "the sledgehammer is a weapon, the steel shovel a tool")
+	# The steel shovel digs faster.
+	inv.selected = inv.slots.find(inv.slots.filter(func(sl): return not sl.is_empty() and sl.item == "steel_shovel")[0])
+	check(main.dig_tool() == "shovel" and is_equal_approx(main.dig_speed(), 2.0), "the steel shovel is a shovel that digs twice as fast")
+	# A sledgehammer blow knocks a piece down at once, with the half refund.
+	inv.selected = inv.slots.find(inv.slots.filter(func(sl): return not sl.is_empty() and sl.item == "sledgehammer")[0])
+	main.melee.swing_time = -1.0
+	main.player.stamina = 100.0
+	var bricks: int = inv.count_of("brick")
+	check(main.sledge.blow(wk) and not bd.pieces.has(wk) and inv.count_of("brick") == bricks + 6, "one sledgehammer blow knocks the brick wall down (+6 bricks)")
+	check(main.sledge.blow(gk) and bd.pieces.has(gk), "the next blow waits for the swing")
+	main.melee.swing_time = -1.0
+	var rock := -1
+	for i in main.props.rocks.size():
+		if not main.broken_rocks.has(i) and main.rock_hits_left(i) > _sledge_rock_hits():
+			rock = i
+			break
+	var stones: int = inv.count_of("stone")
+	var hits: int = main.rock_hits_left(rock) if rock >= 0 else 0
+	check(rock >= 0 and main.sledge.blow("", rock) and inv.count_of("stone") == stones + _sledge_rock_hits() and main.rock_hits_left(rock) == hits - _sledge_rock_hits(), "a blow at a rock smashes off %d stone" % _sledge_rock_hits())
+	if rock >= 0:
+		main.rock_hits.erase(rock)
+	main.melee.swing_time = -1.0
+	inv.load_data({})
+	bd.load_data([])
+
+
+func _sledge_rock_hits() -> int:
+	return load("res://scripts/sledge.gd").ROCK_HITS
 
 
 var shelter := {}

@@ -85,6 +85,8 @@ var shots := [
 	{"name": "75_pipe_bomb", "pos": Vector3(-30, 0, -40), "yaw": PI, "pitch": 0.05, "hour": 16.0, "throw": "pipe_bomb"},
 	{"name": "76_throw_stone", "pos": Vector3(-30, 0, -40), "yaw": PI, "pitch": 0.12, "hour": 10.0, "throw": "stone"},
 	{"name": "77_cold_night", "pos": Vector3(-26, 0, -40), "yaw": PI * 0.5, "pitch": -0.55, "hour": 23.5, "camp": true},
+	{"name": "78_furnace", "pos": Vector3(-26, 0, -40), "yaw": PI * 0.5, "pitch": -0.2, "hour": 19.6, "forge": "furnace"},
+	{"name": "79_sledgehammer", "pos": Vector3(-26, 0, -40), "yaw": PI * 0.5, "pitch": -0.05, "hour": 15.0, "forge": "sledge"},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -223,6 +225,8 @@ func _process(_d: float) -> bool:
 			main.throwables.clear()
 		if s.get("camp", false):
 			_camp_sample(p)
+		if s.has("forge"):
+			_forge_sample(p, s.forge)
 		if s.has("goals"):
 			_goals_sample(s.goals)
 		elif main.ending_ui.is_open():
@@ -1153,3 +1157,42 @@ func _camp_sample(p: Node3D) -> void:
 	sv.stop_bleeding()
 	sv.wound(25.0)
 	sv.health = 64.0
+
+
+## v2.2: a working furnace in front of a brick wall with a glass window, the
+## furnace prompt with clay in hand ("furnace"), or the sledgehammer at the wall.
+## The views face -X (yaw PI / 2).
+func _forge_sample(p: Node3D, kind: String) -> void:
+	main.mutants.clear()
+	main.building.load_data([])
+	main.building.sites_load_data([])
+	main.inventory.load_data({})
+	var b = main.building
+	var fwd := Vector3(-1, 0, 0)
+	var side := Vector3(0, 0, 1)
+	var wall_at: Vector3 = p.position + fwd * (6.0 if kind == "furnace" else 2.6)
+	var edges: Array = []
+	for i in [-1, 0, 1]:
+		var type := "glass_window" if i == 0 else "brick_wall"
+		var slot: Dictionary = b.slot_for(type, wall_at + side * (2.0 * i), 1)
+		edges.append(b.place(type, slot, b.evaluate(type, slot).y))
+	var fat: Vector3 = p.position + (fwd * 2.4 if kind == "furnace" else fwd * 1.0 + side * 3.0)
+	var fslot: Dictionary = b.slot_for("furnace", fat, 3)
+	var fk: String = b.place("furnace", fslot, b.evaluate("furnace", fslot).y)
+	var f: Dictionary = b.pieces[fk]
+	f.heat = 300.0
+	f.smelt = "clay"
+	f.load = 18
+	f.made = {"brick": 6}
+	main.furnace.tick(0.25)
+	main.inventory.selected = 0
+	if kind == "furnace":
+		main.inventory.add_all({"clay": 12, "wood": 6, "sledgehammer": 1})
+		var fp: Vector3 = f.node.global_position - fwd * 2.0
+		p.position = Vector3(fp.x, main.terrain.surface_height(fp.x, fp.z), fp.z)
+		var d: Vector3 = f.node.global_position + Vector3(0, 0.6, 0) - (p.position + Vector3(0, 1.6, 0))
+		p.rotation.y = atan2(-d.x, -d.z)  # face the furnace, so its prompt shows
+		p.head.rotation.x = atan2(d.y, Vector2(d.x, d.z).length())
+	else:
+		main.inventory.add_all({"sledgehammer": 1, "steel_shovel": 1, "brick": 14})
+		p.head.rotation.x = -0.1

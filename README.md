@@ -2,7 +2,7 @@
 
 A 3D low-poly survival and fortress-defence game for Linux, made with Godot 4.5. Scavenge the desert by day, build and arm a fortress around the flag, and survive a bigger mutant wave every night. Each night pays cash you spend at the shop terminal on supplies, weapons, drone deliveries and base upgrades. Now also: turning the desert green from a main well at the centre, farming it and selling the harvest at the market, and hunting the animals the green land draws in (by night the water draws the mutants); claiming hidden oases as outposts, and green milestones that end with the rain coming back (then free play). A peaceful mode leaves out the mutants altogether.
 
-**Current version: v2.1.0.** See [ROADMAP.md](ROADMAP.md) for the plan and [DEVLOG.md](DEVLOG.md) for what changed in each update.
+**Current version: v2.2.0.** See [ROADMAP.md](ROADMAP.md) for the plan and [DEVLOG.md](DEVLOG.md) for what changed in each update.
 
 ## Play (Linux Mint)
 
@@ -43,6 +43,12 @@ If `git pull` complains about untracked `.uid` files, they are safe to delete.
 **Ready-made buildings and turning.** In build mode, **Z / X** turn the piece (chests, turrets, traps and other objects in 15° steps, so they don't have to sit square). **T** switches to ready-made buildings: shelter, cabin, big cabin, watchtower and gatehouse. Left click lays a free blue blueprint of the whole building; then walk up to it and press **E** to build the next piece (hold E to keep going), paid from your pockets and chests in reach. Right click on a blueprint in build mode scraps it. Blueprints are saved, so you can finish one later.
 
 **Gathering and machines.** Chop trees in the palm groves with an **axe** (left click) for logs, and pick up loose stones with **E**. Logs split into 2 wood at the workbench, or 5 at a **sawmill**. Machines come by drone from the shop terminal: the **sawmill** (logs to wood), the **rock crusher** (stone to cement) and the **nail press** (scrap to nails). Place one next to a generator or cable it to one, then **E** loads it and takes what it made. Generators start up by day for machines with work. **Log stakes** are a trap made from logs. Felled trees grow back after 3 days.
+
+**The furnace and steel tools.** Build a **furnace** in build mode (10 stone, 4 clay). Hold **wood** (40 s of fire each) or **logs** (2 minutes) and press **E** to fuel it, then hold what you want to smelt and press **E** to load it (30 at a time, one kind at a time): **2 scrap make a metal plate** (10 s), **3 sand make a glass** (8 s) and **2 clay make 2 bricks** (6 s). It only burns fuel while it is smelting, glows while it works and warms you like a fire pit. **E** always takes out what is ready. With what it makes:
+- **Brick wall** (build mode: 12 bricks, 2 clay): 1200 hit points straight away, holds up floors like a wall, mended with bricks. The **brick wall with a glass window** (9 bricks, 1 glass pane, 2 clay; 1000 hit points) lets you see out but nothing gets through.
+- **Glass pane** (workbench: 2 glass, 1 wood) for the window wall.
+- **Steel shovel** (workbench: 3 metal plates, 2 wood): a shovel that digs twice as fast for less stamina.
+- **Sledgehammer** (workbench: 4 metal plates, 3 wood, 1 cloth): left click a building piece to knock it down in **one blow** (half the cost back, like the hammer), or a rock to smash off 3 stone at once. At anything else it is a slow, heavy weapon that throws mutants back.
 
 **How mutants attack.** Wave mutants look for the cheapest way into the base: an open gate first, otherwise the weakest wall on the shortest way in, and the whole wave goes for the same spot. Deep trenches (2 m or more) and traps make them go round. Brutes ignore all that and walk straight through. In build mode, an upstairs piece's preview turns yellow, then orange, as its support gets weaker.
 

@@ -73,14 +73,15 @@ func sense() -> void:
 	survival.shelter = shelter_at(player)
 
 
-## True when a burning fire pit is within FIRE_REACH.
+## True when a burning fire pit (or, v2.2, a furnace at work) is within FIRE_REACH.
 func fire_near(pos: Vector3) -> bool:
 	if building == null:
 		return false
 	# Every piece, twice a second from sense(): a base has a few hundred at most.
 	for rec in building.pieces.values():
-		if rec.type == "fire_pit" and float(rec.get("burn", 0.0)) > 0.0 \
-				and rec.node.global_position.distance_to(pos) <= FIRE_REACH:
+		var lit: bool = (rec.type == "fire_pit" and float(rec.get("burn", 0.0)) > 0.0) \
+				or (rec.type == "furnace" and bool(rec.get("working", false)))
+		if lit and rec.node.global_position.distance_to(pos) <= FIRE_REACH:
 			return true
 	return false
 

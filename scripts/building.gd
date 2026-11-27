@@ -10,6 +10,7 @@ extends Node3D
 const LowPoly = preload("res://scripts/lowpoly.gd")
 const Inventory = preload("res://scripts/inventory.gd")
 const Prefabs = preload("res://scripts/prefabs.gd")
+const Furnace = preload("res://scripts/furnace.gd")
 
 const CELL := 2.0
 const WALL_H := 2.4
@@ -117,9 +118,13 @@ const PIECES := {
 	"sprinkler": {"name": "Sprinkler", "slot": "obj", "cost": {"scrap": 3, "nails": 2}, "dirs": 1, "fixed": true},
 	"dew_collector": {"name": "Dew collector", "slot": "obj", "cost": {"kit_dew": 1}, "dirs": 4, "fixed": true, "pickup": true},
 	"weather_station": {"name": "Weather station", "slot": "obj", "cost": {"kit_weather": 1}, "dirs": 4, "fixed": true, "pickup": true},
+	# v2.2 crafting chain: the furnace and pieces made from what it smelts.
+	"furnace": {"name": "Furnace", "slot": "obj", "cost": {"stone": 10, "clay": 4}, "dirs": 4, "fixed": true, "hp": 1000.0, "repair": "stone"},
+	"brick_wall": {"name": "Brick wall", "slot": "edge", "cost": {"brick": 12, "clay": 2}, "dirs": 2, "fixed": true, "hp": 1200.0, "repair": "brick"},
+	"glass_window": {"name": "Brick wall with glass window", "slot": "edge", "cost": {"brick": 9, "glass_pane": 1, "clay": 2}, "dirs": 2, "fixed": true, "hp": 1000.0, "repair": "brick"},
 	"spiked_pit": {"name": "Spiked pit", "slot": "obj", "cost": {"wood": 4, "nails": 6}, "dirs": 1, "fixed": true, "trap": true, "steep_ok": true, "pit": PIT_DEPTH},
 }
-const ORDER := ["foundation", "wall", "doorway", "window", "floor", "stairs", "ramp", "roof", "chest", "workbench", "spikes", "spike_strip", "barbed_wire", "landmine", "fire_pit", "generator", "electric_fence", "floodlight", "turret", "landing_pad", "sandbags", "ladder", "spiked_pit", "well", "half_wall", "low_wall", "slit_wall", "pillar", "trapdoor", "tri_foundation", "tri_roof", "metal_door", "switch", "log_stakes", "sawmill", "crusher", "nail_press", "sprinkler", "dew_collector", "weather_station"]
+const ORDER := ["foundation", "wall", "doorway", "window", "floor", "stairs", "ramp", "roof", "chest", "workbench", "spikes", "spike_strip", "barbed_wire", "landmine", "fire_pit", "generator", "electric_fence", "floodlight", "turret", "landing_pad", "sandbags", "ladder", "spiked_pit", "well", "half_wall", "low_wall", "slit_wall", "pillar", "trapdoor", "tri_foundation", "tri_roof", "metal_door", "switch", "log_stakes", "sawmill", "crusher", "nail_press", "sprinkler", "dew_collector", "weather_station", "furnace", "brick_wall", "glass_window"]
 ## Pieces marked "blueprint" must be unlocked first (blueprints come by drone).
 const TURRET_RANGE := 22.0
 const TURRET_AMMO := 240     # 9mm rounds its ammo box holds
@@ -135,7 +140,7 @@ const MAX_DEBRIS := 72
 ## which only the hammer's aim ray looks at.
 const TRAP_LAYER := 16
 ## Edge pieces that hold up whatever is built above them.
-const WALLISH := ["wall", "doorway", "window", "slit_wall", "metal_door"]
+const WALLISH := ["wall", "doorway", "window", "slit_wall", "metal_door", "brick_wall", "glass_window"]
 ## Cell pieces you can stand on at an upper level.
 const DECKS := ["floor", "roof", "trapdoor", "tri_roof"]
 ## Ground pieces that walls and floors stand on.
@@ -151,7 +156,7 @@ const PILLAR_T := 0.3
 const HATCH := 1.0    # trapdoor opening, on the north side of its square
 ## Objects that turn freely in TURN_STEP steps (Z / X in build mode), not just
 ## the four grid ways: slot "turn" holds the extra steps (0..5) past "dir".
-const FREE_TURN := ["chest", "workbench", "spikes", "spike_strip", "barbed_wire", "landmine", "fire_pit", "generator", "floodlight", "turret", "switch", "log_stakes", "sawmill", "crusher", "nail_press"]
+const FREE_TURN := ["chest", "workbench", "spikes", "spike_strip", "barbed_wire", "landmine", "fire_pit", "generator", "floodlight", "turret", "switch", "log_stakes", "sawmill", "crusher", "nail_press", "furnace"]
 const TURN_STEP := PI / 12.0
 ## Blueprints of ready-made buildings (see prefabs.gd) sit on interact layer 2.
 const SITE_LAYER := 2
@@ -221,6 +226,17 @@ func _ready() -> void:
 	_mats.blueprint.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	_mats.blueprint.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_mats.blueprint.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_mats.brick = LowPoly.material(Color(0.62, 0.3, 0.2))
+	_mats.brick_dark = LowPoly.material(Color(0.54, 0.25, 0.17))
+	_mats.mortar = LowPoly.material(Color(0.72, 0.66, 0.56))
+	_mats.glass = StandardMaterial3D.new()
+	_mats.glass.albedo_color = Color(0.7, 0.88, 0.95, 0.3)
+	_mats.glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_mats.glass.metallic_specular = 0.9
+	_mats.glass.roughness = 0.05
+	_mats.ember = StandardMaterial3D.new()
+	_mats.ember.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_mats.ember.albedo_color = Color(1.0, 0.45, 0.1)
 	_mats.flame = StandardMaterial3D.new()
 	_mats.flame.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_mats.flame.albedo_color = Color(1.0, 0.6, 0.15)
@@ -603,6 +619,39 @@ static func piece_boxes(type: String) -> Array:
 				var x := -0.72 + i * 0.48
 				out.append([Vector3(0.16, 0.16, 1.5), Vector3(x, 0.45, 0), "wood", 0.55])
 				out.append([Vector3(0.16, 0.16, 1.5), Vector3(x + 0.12, 0.45, 0), "plank", -0.55])
+		"furnace":
+			# A squat stone oven: a body, a darker hearth mouth at the front, a chimney.
+			out.append([Vector3(1.3, 1.2, 1.2), Vector3(0, 0.6, 0), "stone_block"])
+			out.append([Vector3(1.4, 0.15, 1.3), Vector3(0, 1.27, 0), "stone_dark"])
+			out.append([Vector3(1.0, 0.18, 0.9), Vector3(0, 1.43, 0), "stone_block"])
+			out.append([Vector3(0.6, 0.45, 0.05), Vector3(0, 0.45, 0.6), "stone_dark"])  # mouth
+			out.append([Vector3(0.7, 0.06, 0.12), Vector3(0, 0.2, 0.62), "metal"])       # grate lip
+			out.append([Vector3(0.4, 1.2, 0.4), Vector3(0.3, 2.1, -0.3), "stone_dark"])  # chimney
+			out.append([Vector3(0.46, 0.08, 0.46), Vector3(0.3, 2.72, -0.3), "metal"])
+		"brick_wall", "glass_window":
+			# Brick courses (alternate rows of a lighter and darker red) with mortar lines.
+			# The window hole (glass_window) is 0.94 m wide, from 0.9 to 1.8 m up.
+			if type == "brick_wall":
+				out.append([Vector3(CELL, WALL_H, WALL_T), Vector3(0, WALL_H * 0.5, 0), "mortar"])
+			else:
+				out.append([Vector3(CELL, 0.9, WALL_T), Vector3(0, 0.45, 0), "mortar"])
+				out.append([Vector3(CELL, WALL_H - 1.8, WALL_T), Vector3(0, (WALL_H + 1.8) * 0.5, 0), "mortar"])
+				for s in [-1.0, 1.0]:
+					out.append([Vector3(0.53, 0.9, WALL_T), Vector3(s * 0.735, 1.35, 0), "mortar"])
+			var rows := 8
+			var rh := WALL_H / rows
+			for r in rows:
+				var mid := (r + 0.5) * rh
+				if type == "glass_window" and mid > 0.9 and mid < 1.8:
+					for s in [-1.0, 1.0]:
+						out.append([Vector3(0.52, rh - 0.04, WALL_T + 0.02), Vector3(s * 0.73, mid, 0), "brick" if r % 2 == 0 else "brick_dark"])
+					continue
+				out.append([Vector3(CELL - 0.02, rh - 0.04, WALL_T + 0.02), Vector3(0, mid, 0), "brick" if r % 2 == 0 else "brick_dark"])
+			if type == "glass_window":
+				out.append([Vector3(1.0, 0.06, WALL_T + 0.08), Vector3(0, 0.9, 0), "metal"])    # sill
+				out.append([Vector3(1.0, 0.06, WALL_T + 0.04), Vector3(0, 1.8, 0), "metal"])    # lintel
+				out.append([Vector3(0.04, 0.88, 0.06), Vector3(0, 1.35, 0), "metal"])           # glazing bar
+				out.append([Vector3(0.94, 0.88, 0.03), Vector3(0, 1.35, 0), "glass"])
 		"sawmill":
 			out.append([Vector3(1.8, 0.75, 0.8), Vector3(0, 0.375, 0), "wood_dark"])   # bench
 			out.append([Vector3(1.8, 0.06, 0.7), Vector3(0, 0.78, 0), "plank"])        # table
@@ -794,6 +843,10 @@ static func piece_colliders(type: String) -> Array:
 			return [[Vector3(1.9, 0.9, 1.3), Vector3(0, 0.45, 0), 0.0]]
 		"sawmill":
 			return [[Vector3(1.8, 1.0, 1.0), Vector3(0, 0.5, 0.1), 0.0]]
+		"furnace":
+			return [[Vector3(1.3, 1.5, 1.2), Vector3(0, 0.75, 0), 0.0], [Vector3(0.4, 1.2, 0.4), Vector3(0.3, 2.1, -0.3), 0.0]]
+		"brick_wall", "glass_window":
+			return [[Vector3(CELL, WALL_H, WALL_T), Vector3(0, WALL_H * 0.5, 0), 0.0]]
 		"crusher":
 			return [[Vector3(1.5, 1.4, 1.3), Vector3(0, 0.7, 0.1), 0.0]]
 		"nail_press":
@@ -964,6 +1017,10 @@ func place(type: String, slot: Dictionary, y: float, gate_open := false, tier :=
 		rec.powered = false
 		body.set_meta("interact_id", "machine:" + key)
 		_add_rotor(rec)
+	elif type == "furnace":
+		Furnace.init_rec(rec)
+		body.set_meta("interact_id", "furnace:" + key)
+		_add_glow(rec)
 	elif type == "turret":
 		rec.ammo = 0
 		body.set_meta("interact_id", "turret:" + key)
@@ -1208,6 +1265,27 @@ func _add_flame(rec: Dictionary) -> void:
 	flame.add_child(light)
 	flame.visible = false
 	rec.flame = flame
+
+
+## The glowing hearth of a furnace and its light, shown while it smelts.
+func _add_glow(rec: Dictionary) -> void:
+	var glow := Node3D.new()
+	glow.name = "Glow"
+	rec.node.add_child(glow)
+	var mi := MeshInstance3D.new()
+	mi.mesh = _box_mesh(Vector3(0.5, 0.35, 0.02))
+	mi.position = Vector3(0, 0.43, 0.63)
+	mi.material_override = _mats.ember
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	glow.add_child(mi)
+	var light := OmniLight3D.new()
+	light.light_color = Color(1.0, 0.5, 0.2)
+	light.light_energy = 1.6
+	light.omni_range = 6.0
+	light.position = Vector3(0, 0.6, 1.0)
+	glow.add_child(light)
+	glow.visible = false
+	rec.glow = glow
 
 
 ## A plank gate on a hinge inside a doorway. E opens and closes it.
@@ -1560,7 +1638,7 @@ func repair_cost(rec: Dictionary) -> Dictionary:
 	var missing: float = 1.0 - rec.hp / max_hp(rec)
 	if missing <= 0.001:
 		return {}
-	return {TIER_ITEM[rec.tier]: int(ceil(missing * 4.0))}
+	return {String(PIECES[rec.type].get("repair", TIER_ITEM[rec.tier])): int(ceil(missing * 4.0))}
 
 
 ## What demolishing gives back: half of everything put into it, rounded down.
@@ -2087,7 +2165,7 @@ func piece_data(key: String) -> Dictionary:
 		d.turn = int(p.slot.turn)
 	if p.has("storage"):
 		d.items = p.storage.save_data()
-	for k in ["fuel", "burn", "ammo", "water", "locked", "input", "output", "progress"]:
+	for k in ["fuel", "burn", "ammo", "water", "locked", "input", "output", "progress", "heat", "smelt", "load", "made"]:
 		if p.has(k):
 			d[k] = p[k]
 	return d
@@ -2125,6 +2203,8 @@ func restore_piece(p: Dictionary, slot := {}, y := NAN, old_tiers := false) -> S
 		rec.input = clampi(int(p.get("input", 0)), 0, MACHINE_IN_MAX)
 		rec.output = clampi(int(p.get("output", 0)), 0, MACHINE_OUT_MAX)
 		rec.progress = float(p.get("progress", 0.0))
+	if rec.type == "furnace":
+		Furnace.restore(rec, p)
 	if p.get("locked", false) and rec.type == "metal_door":
 		rec.locked = true
 	return key

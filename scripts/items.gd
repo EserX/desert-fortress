@@ -78,6 +78,13 @@ const ITEMS := {
 	"flatbread": {"name": "Flatbread", "weight": 0.2, "stack": 20},
 	"stew": {"name": "Stew", "weight": 0.6, "stack": 10},
 	"rotten_food": {"name": "Rotten food", "weight": 0.3, "stack": 30},
+	# v2.2 crafting chain: what the furnace smelts, parts and better tools.
+	"metal_plate": {"name": "Metal plate", "weight": 1.2, "stack": 20},
+	"glass": {"name": "Glass", "weight": 0.6, "stack": 20},
+	"brick": {"name": "Bricks", "weight": 1.0, "stack": 30},
+	"glass_pane": {"name": "Glass pane", "weight": 1.5, "stack": 5},
+	"steel_shovel": {"name": "Steel shovel", "weight": 2.2, "stack": 1},
+	"sledgehammer": {"name": "Sledgehammer", "weight": 4.0, "stack": 1},
 }
 
 ## What each kind of container can hold: item -> [min, max]. A negative min
@@ -106,6 +113,9 @@ const RECIPES := {
 	"cloth": {"count": 2, "cost": {"cotton": 3}, "info": "spin cotton from your fields into cloth"},
 	"fibre": {"count": 2, "cost": {"reeds": 3}, "info": "strip oasis reeds for fibre"},
 	"rope": {"count": 1, "cost": {"fibre": 3}, "info": "twist agave fibre into rope (sells well at the market)"},
+	"glass_pane": {"count": 1, "cost": {"glass": 2, "wood": 1}, "info": "a framed pane: builds the brick wall with a glass window"},
+	"steel_shovel": {"count": 1, "cost": {"metal_plate": 3, "wood": 2}, "info": "digs twice as fast for less stamina (metal plates come from a furnace)"},
+	"sledgehammer": {"count": 1, "cost": {"metal_plate": 4, "wood": 3, "cloth": 1}, "info": "LMB knocks a building piece down in one blow, breaks rocks fast, a heavy weapon"},
 	"metal_detector": {"count": 1, "cost": {"scrap": 6, "nails": 4, "cloth": 2}, "info": "finds caches buried near the base"},
 	"spike_barricade": {"count": 1, "cost": {"wood": 4, "nails": 4}, "info": "build it in build mode"},
 	"molotov": {"count": 2, "cost": {"fuel": 1, "cloth": 1, "water": 2}, "info": "LMB throws (hold to throw further): a pool of fire, burns nests"},

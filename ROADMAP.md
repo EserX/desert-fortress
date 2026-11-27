@@ -92,7 +92,7 @@ Design notes for every M10 run:
 - [x] v1.12: **Physics pass, part 1:** knockback and stagger tuned per weapon, mine blasts throw mutants (and their bodies) and scatter debris, a Brute's fist shoves you, mutants knocked into pits and off roofs, and long falls hurt them
 - [x] v2.0: **Physics pass, part 2:** dropped items become physics props, throwables (molotov, pipe bomb, rocks) with arcs and bounces that use the v1.12 blasts
 - [x] v2.1: **Survival depth:** cold nights (fire pits and walls keep you warm), bleeding wounds fixed with bandages, cooking at the fire pit, food that spoils, and carried weight slowing digging and climbing
-- [ ] v2.2: **Crafting chain:** a furnace (scrap to metal plates, sand to glass, clay to bricks), building parts made at the workbench, better tools (a steel shovel digs faster, a sledgehammer demolishes)
+- [x] v2.2: **Crafting chain:** a furnace (scrap to metal plates, sand to glass, clay to bricks), building parts made at the workbench, better tools (a steel shovel digs faster, a sledgehammer demolishes) (built with brick walls and a glass window wall as the building parts; see DEVLOG v2.2)
 - [ ] v2.3: **Events:** sandstorms (short view range, mutants out by day, dug holes slowly fill in), a boss mutant every 10 nights, and day raids on outposts away from the base
 
 ### Later (not scheduled, the owner picks)

@@ -10,6 +10,7 @@ const HINTS := {
 	"shovel": "Shovel: left click digs out a 1 m patch and gives sand, right click fills it back in. Deeper down comes clay, then stone (that needs a pickaxe). Dig too close to a wall and it falls down.",
 	"detector": "Metal detector: walk around the base and listen. The faster it beeps, the closer a buried cache is. At the steady tone, dig that square 1 m down.",
 	"hammer": "Hammer: left click a piece to repair or upgrade it, right click twice to demolish it for half the cost back.",
+	"sledge": "Sledgehammer: left click a building piece to knock it down in one blow (half the cost back, like the hammer), or a rock to smash off stone. It swings hard at mutants too, but tires you fast.",
 	"throw": "Throwing: hold left click to draw back and let go to throw; the longer you hold, the further it flies. Stones bruise, molotovs leave a pool of fire (and burn nests), pipe bombs bounce and blow up after 2.5 s.",
 	"gun": "Hold right click to aim down the sights and R to reload. Gunshots bring mutants running.",
 	"dusk": "The siren means night is coming. Get behind your walls, close the gates and have a weapon ready.",

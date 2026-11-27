@@ -47,6 +47,8 @@ const Goals = preload("res://scripts/goals.gd")
 const EndingUI = preload("res://scripts/ending_ui.gd")
 const Throwables = preload("res://scripts/throwables.gd")
 const Camp = preload("res://scripts/camp.gd")
+const Furnace = preload("res://scripts/furnace.gd")
+const Sledge = preload("res://scripts/sledge.gd")
 
 ## Testing aid (temporary): a green box by the spawn point that holds a full
 ## stack of every item and tops your cash up to $2000 each time you open it.
@@ -62,6 +64,8 @@ const SUPPLY_CHANCE := 0.5
 const HAMMER_REACH := 3.5
 const SHOVEL_REACH := 4.0
 const SHOVEL_COOLDOWN := 0.45  # seconds between digs
+const STEEL_SHOVEL_SPEED := 2.0   # v2.2: the steel shovel digs twice as often...
+const STEEL_SHOVEL_EFFORT := 0.6  # ...for 60% of the stamina a dig
 const PICK_REACH := 3.0
 ## Stamina for hard work: a dig, a pickaxe hit, building a piece, a hammer job.
 const STAMINA_DIG := 7.0
@@ -114,6 +118,8 @@ var oases: Oases
 var weather: Weather
 var throwables: Throwables
 var camp: Camp  # v2.1: warmth round you, cooking, food going bad, heavy loads
+var furnace: Furnace  # v2.2: smelting in furnace pieces
+var sledge: Sledge  # v2.2: the sledgehammer's blows
 var goals: Goals
 var ending_ui: EndingUI
 var waves: Waves
@@ -506,6 +512,7 @@ func _ready() -> void:
 	_setup_goals()  # after water.on_morning: the rain falls on the new day
 	_setup_throwables()
 	_setup_camp()
+	_setup_furnace()
 	# Autosave every morning (after the morning loot is in place).
 	day_night.day_started.connect(func(_d): Game.save_game("auto", _screenshot()))
 	Game.saved.connect(func(slot): hud.show_banner("Game saved (%s)" % Game.slot_label(slot)))
@@ -525,6 +532,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif build_mode.active and _build_input(event):
 		get_viewport().set_input_as_handled()
 	elif holding_hammer() and _hammer_input(event):
+		get_viewport().set_input_as_handled()
+	elif holding("sledgehammer") and sledge.handle_input(event):
 		get_viewport().set_input_as_handled()
 	elif dig_tool() != "" and _shovel_input(event):
 		get_viewport().set_input_as_handled()
@@ -581,6 +590,8 @@ func _process(delta: float) -> void:
 				text = hammer_prompt(piece_under_crosshair())
 			elif text == "" and dig_tool() != "":
 				text = shovel_prompt()
+			elif text == "" and holding("sledgehammer"):
+				text = sledge.prompt()
 			elif text == "" and holding("metal_detector"):
 				text = detector_text()
 			elif text == "" and holding("cable"):
@@ -613,8 +624,10 @@ func _process(delta: float) -> void:
 			hints.show_hint("build")
 		elif hand == "hammer":
 			hints.show_hint("hammer")
-		elif hand == "shovel":
+		elif hand in ["shovel", "steel_shovel"]:
 			hints.show_hint("shovel")
+		elif hand == "sledgehammer":
+			hints.show_hint("sledge")
 		elif hand == "metal_detector":
 			hints.show_hint("detector")
 		elif Guns.is_gun(hand):
@@ -685,12 +698,18 @@ func holding_shovel() -> bool:
 	return dig_tool() == "shovel"
 
 
-## "shovel" or "pickaxe" when one is in your hands, otherwise "".
+## "shovel" or "pickaxe" when one is in your hands, otherwise "" (the v2.2
+## steel shovel is a shovel that digs faster, see dig_speed()).
 func dig_tool() -> String:
 	var s := inventory.selected_stack()
-	if s.is_empty() or build_mode.active or survival.dead or not s.item in ["shovel", "pickaxe"]:
+	if s.is_empty() or build_mode.active or survival.dead or not s.item in ["shovel", "steel_shovel", "pickaxe"]:
 		return ""
-	return s.item
+	return "shovel" if s.item == "steel_shovel" else s.item
+
+
+## How much faster the digging tool in your hands works (the steel shovel: 2x).
+func dig_speed() -> float:
+	return STEEL_SHOVEL_SPEED if holding("steel_shovel") else 1.0
 
 
 func holding_throwable() -> bool:
@@ -945,10 +964,11 @@ func _shovel_input(event: InputEvent) -> bool:
 		return false
 	if Time.get_ticks_msec() < _shovel_ready_at:
 		return true
-	var cool := SHOVEL_COOLDOWN * (1.4 if tool == "pickaxe" else 1.0)
+	var cool := SHOVEL_COOLDOWN * (1.4 if tool == "pickaxe" else 1.0) / dig_speed()
 	_shovel_ready_at = Time.get_ticks_msec() + int(cool * 1000.0)
 	var filling: bool = event.button_index == MOUSE_BUTTON_RIGHT
-	if not use_stamina((STAMINA_PICK if tool == "pickaxe" else (STAMINA_DIG * 0.5 if filling else STAMINA_DIG)) * camp.load_mult()):
+	var effort := 1.0 if dig_speed() <= 1.0 else STEEL_SHOVEL_EFFORT
+	if not use_stamina((STAMINA_PICK if tool == "pickaxe" else (STAMINA_DIG * 0.5 if filling else STAMINA_DIG)) * camp.load_mult() * effort):
 		return true
 	melee.play_swing(cool)
 	if rock >= 0:
@@ -1132,14 +1152,23 @@ func hammer_demolish(key: String) -> bool:
 		_demolish_until = Time.get_ticks_msec() + 3000
 		return false
 	_demolish_armed = ""
+	demolish_piece(key)
+	return true
+
+
+## Takes a piece down with a half refund (the hammer's second right click, a
+## sledgehammer blow). Whatever it held up comes down too. Returns the refund.
+func demolish_piece(key: String) -> Dictionary:
+	if not building.pieces.has(key):
+		return {}
 	var back: Dictionary = building.refund(building.pieces[key])
 	building.remove(key)
-	building.collapse_unsupported()  # whatever it held up comes down too
+	building.collapse_unsupported()
 	var left := inventory.add_all(back)
 	if not left.is_empty():
 		loot.spawn_drop(left, _drop_spot())
 	hud.show_pickup(["Demolished, got back " + (_cost_text(back) if not back.is_empty() else "nothing")])
-	return true
+	return back
 
 
 func _hammer_input(event: InputEvent) -> bool:
@@ -1214,6 +1243,9 @@ func _prompt_for(id: String) -> String:
 		return weather.prompt(id.trim_prefix("weather:"))
 	if id.begins_with("fire:"):
 		return building.prompt(id) + camp.cook_prompt(building.pieces.get(id.trim_prefix("fire:"), {}))
+	if id.begins_with("furnace:"):
+		var frec: Dictionary = building.pieces.get(id.trim_prefix("furnace:"), {})
+		return "" if frec.is_empty() else Furnace.prompt(frec, inventory.selected_stack().get("item", ""))
 	if id.begins_with("machine:"):
 		var mk := id.trim_prefix("machine:")
 		var mrec: Dictionary = building.pieces.get(mk, {})
@@ -1367,6 +1399,15 @@ func interact(id: String) -> void:
 		return  # nothing to do with them; the prompt says what they do
 	if id.begins_with("machine:"):
 		use_machine(id.trim_prefix("machine:"))
+		return
+	if id.begins_with("furnace:"):
+		var frec: Dictionary = building.pieces.get(id.trim_prefix("furnace:"), {})
+		if not frec.is_empty():
+			var lines: Array = Furnace.use(frec, inventory, inventory.selected_stack().get("item", ""))
+			if lines.size() == 1 and String(lines[0]).begins_with("!"):
+				hud.show_banner(String(lines[0]).substr(1))
+			else:
+				hud.show_pickup(lines)
 		return
 	if id.begins_with("site:"):
 		build_site_step(int(id.trim_prefix("site:")))
@@ -1873,6 +1914,16 @@ func _setup_throwables() -> void:
 
 
 ## v2.1: warmth from fires and shelter, cooking, food going bad, heavy loads.
+## v2.2: furnaces smelt on their own node; the sledgehammer's blows.
+func _setup_furnace() -> void:
+	furnace = Furnace.new()
+	furnace.name = "Furnace"
+	furnace.building = building
+	add_child(furnace)
+	sledge = Sledge.new()
+	sledge.main = self
+
+
 func _setup_camp() -> void:
 	camp = Camp.new()
 	camp.name = "Camp"

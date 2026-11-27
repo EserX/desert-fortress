@@ -13,11 +13,14 @@ const CATALOG := [
 	{"cat": "Materials", "name": "5 cloth", "price": 10, "items": {"cloth": 5}},
 	{"cat": "Materials", "name": "3 cement bags", "price": 30, "items": {"cement": 3}},
 	{"cat": "Materials", "name": "2 fuel cans", "price": 25, "items": {"fuel": 2}},
+	{"cat": "Materials", "name": "10 water pipes", "price": 25, "items": {"water_pipe": 10}},
+	{"cat": "Materials", "name": "Sprinkler parts", "price": 20, "items": {"scrap": 3, "nails": 2}},
 	{"cat": "Supplies", "name": "3 canned food", "price": 15, "items": {"canned_food": 3}},
 	{"cat": "Supplies", "name": "3 water bottles", "price": 15, "items": {"water": 3}},
 	{"cat": "Supplies", "name": "3 bandages", "price": 20, "items": {"bandage": 3}},
 	{"cat": "Supplies", "name": "Shovel", "price": 40, "items": {"shovel": 1}},
 	{"cat": "Supplies", "name": "Axe", "price": 40, "items": {"axe": 1}},
+	{"cat": "Supplies", "name": "Watering can", "price": 20, "items": {"watering_can": 1}},
 	{"cat": "Weapons", "name": "Machete", "price": 50, "items": {"machete": 1}},
 	{"cat": "Weapons", "name": "Pistol", "price": 120, "items": {"pistol": 1}},
 	{"cat": "Weapons", "name": "Shotgun", "price": 260, "items": {"shotgun": 1}},
@@ -53,6 +56,8 @@ const UPGRADES := {
 	"storage": {"name": "More chest storage", "levels": [{"price": 150, "value": 30, "text": "30 slots"}, {"price": 300, "value": 40, "text": "40 slots"}]},
 	"bench": {"name": "Workbench tier", "levels": [{"price": 200, "value": 2, "text": "tier 2: shotgun, shells"}, {"price": 400, "value": 3, "text": "tier 3: rifle, 7.62, medkits"}]},
 	"radio": {"name": "Radio", "levels": [{"price": 120, "value": 1, "text": "hear at dusk what is coming"}]},
+	"well": {"name": "Deepen the main well", "levels": [{"price": 150, "value": 350.0, "text": "350 litres a day"}, {"price": 300, "value": 550.0, "text": "550 litres a day"}, {"price": 500, "value": 800.0, "text": "800 litres a day"}]},
+	"pump": {"name": "Hand pump on the main well", "levels": [{"price": 120, "value": 1, "text": "feeds water pipes and sprinklers"}]},
 }
 const START_CASH := 50
 
@@ -64,7 +69,7 @@ var cash := START_CASH
 var unlocked := {}
 var drone  # Drone
 ## Upgrade id -> how many levels bought.
-var upgrades := {"zone": 0, "storage": 0, "bench": 0, "radio": 0}
+var upgrades := {"zone": 0, "storage": 0, "bench": 0, "radio": 0, "well": 0, "pump": 0}
 var _radio: Node3D
 
 

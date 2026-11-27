@@ -2957,6 +2957,7 @@ func _process(_delta: float) -> bool:
 			_test_wiring()
 			_test_building_v19()
 			_test_resources()
+			_test_water()
 			_start_ladder()
 		3300:
 			_check_debris()
@@ -2981,3 +2982,139 @@ func _process(_delta: float) -> bool:
 				print("== %d TEST(S) FAILED ==" % failures.size())
 				quit(1)
 	return false
+
+
+## v1.13: the main well, the watering can, soil turning green, pipes and sprinklers.
+func _test_water() -> void:
+	var w = main.water
+	var b = main.building
+	var inv = main.inventory
+	var sh = main.shop
+	var player = main.player
+	var W = load("res://scripts/water.gd")
+	b.load_data([])
+	inv.load_data({})
+	main.mutants.clear()
+	for id in sh.upgrades:
+		sh.upgrades[id] = 0
+	main.apply_upgrades()
+	w.load_data({})
+	check(w.well.position.distance_to(Vector3(0, w.well.position.y, 0)) < 5.0, "the main well stands by the flag (%s)" % str(w.well.position))
+	check(is_equal_approx(w.store, W.STORE_BASE) and w.cells.is_empty(), "it starts full (%d L) and the sand is dry" % int(w.store))
+	# Look at it.
+	player.position = Vector3(w.well.position.x, w.well.position.y, w.well.position.z + 2.6)
+	player.rotation.y = 0.0
+	player.head.rotation.x = -0.5
+	player.head.position.y = player.EYE_HEIGHT
+	check(player.interact_target() == "mainwell", "the crosshair finds the main well (%s)" % player.interact_target())
+	check(main._prompt_for("mainwell").contains("You need a watering can"), "without a can: " + main._prompt_for("mainwell").replace("\n", " / "))
+	check(main.fill_can() == 0.0, "and E gives nothing")
+	inv.add("watering_can", 1)
+	check(main._prompt_for("mainwell").contains("[E] Fill the watering can"), "with a can: " + main._prompt_for("mainwell").replace("\n", " / "))
+	main.interact("mainwell")
+	check(is_equal_approx(w.can, W.CAN_MAX) and is_equal_approx(w.store, W.STORE_BASE - W.CAN_MAX), "E fills the can (%.0f L) from the well (%.0f L left)" % [w.can, w.store])
+	check(main._prompt_for("mainwell").contains("is full"), "a full can says so")
+	# Pour on the sand.
+	var p := Vector3(14.5, 0, 14.5)
+	var c: Vector2i = W.cell_of(p.x, p.z)
+	check(w.ground_prompt(p).begins_with("Dry sand"), "dry sand: " + w.ground_prompt(p).replace("\n", " / "))
+	check(w.pour(p) == "" and is_equal_approx(w.can, W.CAN_MAX - W.POUR), "a pour uses %.0f L of the can" % W.POUR)
+	check(not w.is_soil(c) and w.ground_prompt(p).begins_with("Damp sand"), "damp sand isn't soil yet: " + w.ground_prompt(p).replace("\n", " / "))
+	w.pour(p)
+	w.pour(p)
+	check(w.is_soil(c) and w.soil_count() == 1, "%.0f L turns the square to soil" % W.SOIL_NEED)
+	w.pour(p)
+	check(w.pour(p) == "This ground is soaked for today" and is_equal_approx(w.cell_info(c).wet, W.WET_MAX), "a square soaks up %.0f L a day at most" % W.WET_MAX)
+	check(is_equal_approx(w.can, 2.0), "the can has 2 L left")
+	# Another square only gets a little.
+	var p2 := Vector3(22.5, 0, 14.5)
+	var c2: Vector2i = W.cell_of(p2.x, p2.z)
+	w.pour(p2)
+	check(w.pour(p2).begins_with("The watering can is empty"), "an empty can says where to fill it")
+	w.redraw()
+	check(w._soil.mesh != null and w._grass.multimesh.instance_count == 0, "soil shows on the ground, no grass yet")
+	main.day_night.day_started.emit(main.day_night.day)
+	check(is_equal_approx(w.green_of(c), W.GROW) and is_equal_approx(w.cell_info(c).wet, 0.0), "next morning the watered soil is greener (%.2f) and dry again" % w.green_of(c))
+	check(w.green_of(c2) == 0.0 and not w.is_soil(c2), "the damp sand next to it didn't green")
+	check(is_equal_approx(w.store, W.STORE_BASE), "and the main well is full again")
+	w.redraw()
+	check(w._grass.multimesh.instance_count > 0, "grass comes up (%d tufts)" % w._grass.multimesh.instance_count)
+	for i in 6:
+		w.water_cell(c, W.DAY_NEED)
+		w.on_morning()
+	check(is_equal_approx(w.green_of(c), 1.0), "five well-watered mornings make it fully green")
+	w.redraw()
+	check(w._plants.multimesh.instance_count > 0, "with small plants (%d)" % w._plants.multimesh.instance_count)
+	w.on_morning()
+	check(is_equal_approx(w.green_of(c), 1.0 - W.WILT), "a dry morning wilts it a little (%.2f)" % w.green_of(c))
+	# Saved.
+	w.can = 4.0
+	var data: Dictionary = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	w.load_data({})
+	check(w.cells.is_empty() and w.can == 0.0, "an old save has dry sand and an empty can")
+	main.apply_save_data(data)
+	check(is_equal_approx(w.green_of(c), 1.0 - W.WILT) and w.is_soil(c) and is_equal_approx(w.can, 4.0), "soil, green and the can are saved")
+	# Bare soil left dry goes back to sand.
+	w.cells = {}
+	w.water_cell(c2, W.SOIL_NEED)
+	w.cells[c2].wet = 0.0
+	for i in W.SAND_DAYS:
+		w.on_morning()
+	check(not w.cells.has(c2), "bare soil dry for %d mornings is sand again" % W.SAND_DAYS)
+	# Sprinklers and pipes.
+	w.cells = {}
+	sh.cash = 2000
+	var ss := {"kind": "obj", "cx": 4, "cz": 4, "dir": 0}  # centre (9, 9)
+	var ev: Dictionary = b.evaluate("sprinkler", ss)
+	check(ev.ok, "a sprinkler can be built in the base (%s)" % ev.reason)
+	var sk: String = b.place("sprinkler", ss, ev.y)
+	check(w.sprinkler_prompt(sk).contains("no hand pump"), "it needs the hand pump: " + w.sprinkler_prompt(sk).replace("\n", " / "))
+	check(sh.buy_upgrade("pump") and w.pump and w._pump_node.visible, "the hand pump upgrade puts a pump on the well")
+	check(w.sprinkler_prompt(sk).contains("lay a water pipe"), "then it needs a pipe: " + w.sprinkler_prompt(sk).replace("\n", " / "))
+	inv.add("water_pipe", 3)
+	var cost: int = w.pipe_cost("main", sk)
+	check(main.pipe_click("main") == "" and main.pipe_from == "main", "click the well to start a pipe")
+	check(main.pipe_click(sk).begins_with("Not enough water pipe"), "a %d-pipe run needs the pipes" % cost)
+	inv.add("water_pipe", 20)
+	main.pipe_click(sk)
+	check(w.pipes.size() == 1 and inv.count_of("water_pipe") == 23 - cost and w.fed_sprinklers().has(sk), "then a sprinkler is piped to it (%d pipes)" % cost)
+	check(w.sprinkler_prompt(sk).begins_with("Sprinkler: watering"), "and waters: " + w.sprinkler_prompt(sk).replace("\n", " / "))
+	var near: Array = W.spray_cells(b.pieces[sk].node.global_position)
+	check(near.size() >= 4, "it covers %d squares" % near.size())
+	w.tick(0.5, true)
+	w.tick(0.6, false)
+	check(w.cells.is_empty(), "not at night")
+	var before: float = w.store
+	w.tick(50.0, true)
+	var wet: float = w.cell_info(near[0]).wet
+	check(is_equal_approx(wet, 1.0) and is_equal_approx(before - w.store, near.size() * 1.0), "by day it waters every square round it (%.2f L each, %.1f L from the well)" % [wet, before - w.store])
+	check(b.pieces[sk].spray.emitting, "throwing droplets")
+	w.tick(1000.0, true)
+	check(is_equal_approx(w.cell_info(near[0]).wet, W.SPRAY_TO), "up to %.0f L a square a day" % W.SPRAY_TO)
+	before = w.store
+	w.tick(10.0, true)
+	check(is_equal_approx(before, w.store) and not b.pieces[sk].spray.emitting, "then it stops using water")
+	main.interact("sprinkler:" + sk)
+	check(w.sprinkler_prompt(sk).contains("turned off"), "E turns it off")
+	# A second sprinkler chained on from the first, too far for one pipe from the well.
+	var ss2 := {"kind": "obj", "cx": 12, "cz": 4, "dir": 0}  # centre (25, 9), 24.2 m from the well
+	var sk2: String = b.place("sprinkler", ss2, ev.y)
+	check(w.pipe_problem("main", sk2).begins_with("Too far"), "a pipe is %d m at most" % int(W.PIPE_MAX))
+	check(w.connect_pipe(sk, sk2) and w.fed_sprinklers().has(sk2), "sprinklers pass water on to the next")
+	data = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	w.pipes = []
+	main.apply_save_data(data)
+	check(w.pipes.size() == 2 and not b.pieces[sk].open and b.pieces[sk2].open, "pipes and the valve are saved")
+	b.remove(sk)
+	w.prune_pipes()
+	check(w.pipes.is_empty(), "taking a sprinkler down takes its pipes")
+	check(sh.buy_upgrade("well") and is_equal_approx(w.capacity, 350.0), "deepening the main well holds more (%.0f L)" % w.capacity)
+	w.on_morning()
+	check(is_equal_approx(w.store, 350.0), "and fills it each morning")
+	# Clean up.
+	for id in sh.upgrades:
+		sh.upgrades[id] = 0
+	main.apply_upgrades()
+	b.load_data([])
+	w.load_data({})
+	inv.load_data({})

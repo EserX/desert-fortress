@@ -38,6 +38,8 @@ const ITEMS := {
 	"kit_sawmill": {"name": "Sawmill (crate)", "weight": 12.0, "stack": 1},
 	"kit_crusher": {"name": "Rock crusher (crate)", "weight": 15.0, "stack": 1},
 	"kit_press": {"name": "Nail press (crate)", "weight": 12.0, "stack": 1},
+	"watering_can": {"name": "Watering can", "weight": 1.0, "stack": 1},
+	"water_pipe": {"name": "Water pipe", "weight": 0.3, "stack": 50},
 }
 
 ## What each kind of container can hold: item -> [min, max]. A negative min
@@ -60,6 +62,8 @@ const RECIPES := {
 	"axe": {"count": 1, "cost": {"scrap": 3, "wood": 2}, "info": "fells trees for logs; a decent weapon too"},
 	"wood": {"count": 2, "cost": {"log": 1}, "info": "split a log by hand (a sawmill gets 5)"},
 	"cable": {"count": 6, "cost": {"scrap": 1, "cloth": 1}, "info": "hold it: click a generator, then a light, fence, switch or turret"},
+	"watering_can": {"count": 1, "cost": {"scrap": 2, "nails": 2}, "info": "fill it at the main well, LMB pours water on the sand"},
+	"water_pipe": {"count": 4, "cost": {"scrap": 2, "nails": 1}, "info": "hold it: click the main well, then a sprinkler (needs the hand pump)"},
 	"metal_detector": {"count": 1, "cost": {"scrap": 6, "nails": 4, "cloth": 2}, "info": "finds caches buried near the base"},
 	"spike_barricade": {"count": 1, "cost": {"wood": 4, "nails": 4}, "info": "build it in build mode"},
 	"pistol": {"count": 1, "cost": {"scrap": 10, "wood": 2, "nails": 6}, "info": "12 rounds. RMB aims, R reloads"},

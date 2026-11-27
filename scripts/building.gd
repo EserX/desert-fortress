@@ -114,9 +114,10 @@ const PIECES := {
 	"sawmill": {"name": "Sawmill", "slot": "obj", "cost": {"kit_sawmill": 1}, "dirs": 4, "fixed": true, "pickup": true},
 	"crusher": {"name": "Rock crusher", "slot": "obj", "cost": {"kit_crusher": 1}, "dirs": 4, "fixed": true, "pickup": true},
 	"nail_press": {"name": "Nail press", "slot": "obj", "cost": {"kit_press": 1}, "dirs": 4, "fixed": true, "pickup": true},
+	"sprinkler": {"name": "Sprinkler", "slot": "obj", "cost": {"scrap": 3, "nails": 2}, "dirs": 1, "fixed": true},
 	"spiked_pit": {"name": "Spiked pit", "slot": "obj", "cost": {"wood": 4, "nails": 6}, "dirs": 1, "fixed": true, "trap": true, "steep_ok": true, "pit": PIT_DEPTH},
 }
-const ORDER := ["foundation", "wall", "doorway", "window", "floor", "stairs", "ramp", "roof", "chest", "workbench", "spikes", "spike_strip", "barbed_wire", "landmine", "fire_pit", "generator", "electric_fence", "floodlight", "turret", "landing_pad", "sandbags", "ladder", "spiked_pit", "well", "half_wall", "low_wall", "slit_wall", "pillar", "trapdoor", "tri_foundation", "tri_roof", "metal_door", "switch", "log_stakes", "sawmill", "crusher", "nail_press"]
+const ORDER := ["foundation", "wall", "doorway", "window", "floor", "stairs", "ramp", "roof", "chest", "workbench", "spikes", "spike_strip", "barbed_wire", "landmine", "fire_pit", "generator", "electric_fence", "floodlight", "turret", "landing_pad", "sandbags", "ladder", "spiked_pit", "well", "half_wall", "low_wall", "slit_wall", "pillar", "trapdoor", "tri_foundation", "tri_roof", "metal_door", "switch", "log_stakes", "sawmill", "crusher", "nail_press", "sprinkler"]
 ## Pieces marked "blueprint" must be unlocked first (blueprints come by drone).
 const TURRET_RANGE := 22.0
 const TURRET_AMMO := 240     # 9mm rounds its ammo box holds
@@ -674,6 +675,11 @@ static func piece_boxes(type: String) -> Array:
 			for i in int(LADDER_H / 0.35):
 				var h := 0.3 + i * 0.35
 				out.append([Vector3(0.56, 0.05, 0.05), Vector3(0, h, -0.8 + (h - LADDER_H * 0.5) * -tan(lean)), "wood"])
+		"sprinkler":
+			out.append([Vector3(0.4, 0.06, 0.4), Vector3(0, 0.03, 0), "concrete_dark"])
+			out.append([Vector3(0.06, 0.55, 0.06), Vector3(0, 0.3, 0), "metal"])
+			out.append([Vector3(0.16, 0.08, 0.16), Vector3(0, 0.6, 0), "rust"])
+			out.append([Vector3(0.36, 0.03, 0.04), Vector3(0, 0.66, 0), "metal"])
 		"switch":
 			out.append([Vector3(0.1, 1.2, 0.1), Vector3(0, 0.6, 0.1), "wood_dark"])
 			out.append([Vector3(0.28, 0.36, 0.14), Vector3(0, 1.1, 0), "metal"])
@@ -784,6 +790,8 @@ static func piece_colliders(type: String) -> Array:
 			return [[Vector3(1.8, 0.6, 1.8), Vector3(0, 0.3, 0), 0.0]]
 		"switch":
 			return [[Vector3(0.3, 1.3, 0.3), Vector3(0, 0.65, 0.05), 0.0]]
+		"sprinkler":
+			return [[Vector3(0.4, 0.7, 0.4), Vector3(0, 0.35, 0), 0.0]]
 		"well":
 			var out: Array = []
 			for b in piece_boxes("well").slice(0, 4):
@@ -907,6 +915,10 @@ func place(type: String, slot: Dictionary, y: float, gate_open := false, tier :=
 	elif type == "well":
 		rec.water = 0.0
 		body.set_meta("interact_id", "well:" + key)
+	elif type == "sprinkler":
+		rec.open = true  # "open": the valve is on (see water.gd)
+		body.set_meta("interact_id", "sprinkler:" + key)
+		_add_spray(rec)
 	elif MACHINES.has(type):
 		rec.input = 0
 		rec.output = 0
@@ -923,6 +935,32 @@ func place(type: String, slot: Dictionary, y: float, gate_open := false, tier :=
 	if not _bulk:
 		_refresh_support()
 	return key
+
+
+## The fan of droplets a sprinkler throws while it waters.
+func _add_spray(rec: Dictionary) -> void:
+	var p := CPUParticles3D.new()
+	p.position = Vector3(0, 0.68, 0)
+	p.amount = 40
+	p.lifetime = 0.9
+	p.emitting = false
+	p.direction = Vector3(0, 1, 0)
+	p.spread = 80.0
+	p.initial_velocity_min = 3.0
+	p.initial_velocity_max = 4.5
+	p.gravity = Vector3(0, -9.8, 0)
+	p.scale_amount_min = 0.5
+	p.scale_amount_max = 1.0
+	var m := BoxMesh.new()
+	m.size = Vector3(0.05, 0.05, 0.05)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.7, 0.85, 1.0, 0.7)
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.material = mat
+	p.mesh = m
+	rec.node.add_child(p)
+	rec.spray = p
 
 
 ## A part that turns while a machine works (a saw blade, crusher jaws, a flywheel).
@@ -2016,6 +2054,8 @@ func restore_piece(p: Dictionary, slot := {}, y := NAN, old_tiers := false) -> S
 		tier += 1
 	var key := place(p.type, slot, y, bool(p.get("open", false)), tier, float(p.get("hp", -1.0)))
 	var rec: Dictionary = pieces[key]
+	if rec.type == "sprinkler":
+		rec.open = bool(p.get("open", true))
 	if rec.has("storage") and p.has("items"):
 		rec.storage.load_data(p.items)
 	if rec.has("fuel"):

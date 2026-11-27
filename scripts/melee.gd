@@ -14,7 +14,7 @@ const WEAPONS := {
 	"axe": {"damage": 34.0, "stamina": 11.0, "cooldown": 0.7, "reach": 2.3, "knock": 3.8, "stagger": 0.4},
 }
 ## Held in the hands but not swung at things (has its own left click).
-const TOOLS := ["hammer", "shovel", "pickaxe", "metal_detector"]
+const TOOLS := ["hammer", "shovel", "pickaxe", "metal_detector", "watering_can"]
 const HIT_TIME := 0.16  # seconds from the click to the hit
 const MIX_RATE := 22050.0
 const REST_POS := Vector3(0.3, -0.27, -0.5)
@@ -80,7 +80,17 @@ func _ready() -> void:
 	_box(detector, Vector3(0.03, 0.75, 0.03), Vector3(0, 0.25, 0), metal)
 	_box(detector, Vector3(0.08, 0.1, 0.06), Vector3(0, 0.05, 0.03), grip)
 	_box(detector, Vector3(0.24, 0.02, 0.18), Vector3(0, 0.63, -0.04), LowPoly.material(Color(0.85, 0.65, 0.1)))
-	_models = {"pipe": pipe, "machete": machete, "hammer": hammer, "shovel": shovel, "pickaxe": pickaxe, "metal_detector": detector, "axe": axe}
+	var can := Node3D.new()
+	var tin := LowPoly.material(Color(0.36, 0.5, 0.42), 0.5)
+	_box(can, Vector3(0.04, 0.16, 0.04), Vector3(0, 0.06, 0), grip)       # handle
+	_box(can, Vector3(0.14, 0.15, 0.12), Vector3(0, 0.22, 0.02), tin)     # body
+	var spout := Node3D.new()
+	spout.position = Vector3(0, 0.25, -0.05)
+	spout.rotation.x = -0.9
+	can.add_child(spout)
+	_box(spout, Vector3(0.035, 0.035, 0.26), Vector3(0, 0, -0.13), tin)
+	_box(spout, Vector3(0.07, 0.07, 0.02), Vector3(0, 0, -0.26), metal)  # rose
+	_models = {"pipe": pipe, "machete": machete, "hammer": hammer, "shovel": shovel, "pickaxe": pickaxe, "metal_detector": detector, "axe": axe, "watering_can": can}
 	for k in _models:
 		_models[k].rotation.x = ITEM_TILT
 		_models[k].visible = false

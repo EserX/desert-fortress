@@ -62,6 +62,8 @@ var shots := [
 	{"name": "52_trees", "pos": Vector3(0, 0, 0), "yaw": 0.0, "pitch": 0.05, "hour": 9.5, "trees": true},
 	{"name": "53_machines", "pos": Vector3(-8, 0, 12.5), "yaw": 0.1, "pitch": -0.3, "hour": 14.0, "machines": true},
 	{"name": "54_blast", "pos": Vector3(0, 0, 0), "yaw": 0.0, "pitch": -0.05, "hour": 16.0, "blast": true},
+	{"name": "55_greening", "pos": Vector3(15, 0, 13), "yaw": 0.62, "pitch": -0.3, "hour": 10.0, "greening": true},
+	{"name": "56_watering_can", "pos": Vector3(16, 0, 6), "yaw": 0.59, "pitch": -0.6, "hour": 15.0, "greening": true, "can": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -180,6 +182,8 @@ func _process(_d: float) -> bool:
 			_machines_sample()
 		if s.get("blast", false):
 			_blast_sample(p)
+		if s.get("greening", false):
+			_greening_sample(s.get("can", false))
 		if s.get("horde", false):
 			main.building.load_data([])
 			main.building.sites_load_data([])
@@ -238,7 +242,7 @@ func _process(_d: float) -> bool:
 			main.hud._hint_time = 0.0
 		if s.get("upgrades", false):
 			main.shop.cash = 520
-			main.shop.upgrades = {"zone": 1, "storage": 0, "bench": 2, "radio": 0}
+			main.shop.upgrades = {"zone": 1, "storage": 0, "bench": 2, "radio": 0, "well": 1, "pump": 0}
 			main.shop_ui.open()
 			main.shop_ui.show_page(2)
 		elif s.get("bigchest", false):
@@ -774,6 +778,46 @@ func _blast_sample(p: Node3D) -> void:
 	var br = main.mutants.spawn("brute", mine + Vector3(3.2, 0, 1.2))
 	br.rotation.y = PI
 	main.traps.detonate(k)
+
+
+## v1.13: green squares round the main well, two piped sprinklers, the hand pump.
+func _greening_sample(can: bool) -> void:
+	var b = main.building
+	var w = main.water
+	main.terrain.load_data({})
+	main.mutants.clear()
+	b.load_data([])
+	b.sites_load_data([])
+	w.load_data({})
+	main.shop.upgrades.pump = 1
+	main.apply_upgrades()
+	var put := func(cx: int, cz: int) -> String:
+		var sl := {"kind": "obj", "cx": cx, "cz": cz, "dir": 0, "level": 0}
+		var ev: Dictionary = b.evaluate("sprinkler", sl)
+		return b.place("sprinkler", sl, ev.y) if ev.ok else ""
+	var s1: String = put.call(5, -1)
+	var s2: String = put.call(8, 3)
+	if s1 != "":
+		w.connect_pipe("main", s1)
+		if s2 != "":
+			w.connect_pipe(s1, s2)
+	# Squares at every stage: damp sand, bare soil, young grass, full green with plants.
+	for x in range(0, 6):
+		for z in range(-3, 3):
+			var c := Vector2i(x, z)
+			var d := Vector2(x - 3, z).length()
+			w.water_cell(c, 3.0 if d > 3.2 else 8.0)
+			if d <= 3.2:
+				w.cells[c].total = 20.0
+				w.cells[c].green = clampf(1.1 - d * 0.3, 0.0, 1.0)
+				w.cells[c].wet = 2.0 if (x + z) % 3 == 0 else 6.0
+	w.tick(1.1, true)
+	w.redraw()
+	if can:
+		main.inventory.load_data({})
+		main.inventory.add("watering_can", 1)
+		main.inventory.selected = 0
+		w.can = 7.0
 
 
 func _machines_sample() -> void:

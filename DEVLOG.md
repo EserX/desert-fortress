@@ -2,6 +2,28 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v1.13.0 (2026-11-27): The main well and watering
+First step of the new terraforming direction (M10). There is now a big **main well** next to the flag, and its water turns the sand round your base into soil and then grass.
+- **The main well** stands between the flag and the crates, with a stone ring, a little roof and a crank. It holds **200 litres** and is **topped up every morning**; the water level inside goes down as you use it. Its prompt shows how much is left.
+- **Watering can** (workbench: 2 scrap, 2 nails; shop $20). **E** at the main well fills it (10 L). Hold it and **left click** the sand to pour 2 L. The prompt says what the ground needs.
+- **The ground is a grid of 4 m squares across the whole map:**
+  - **6 L** in all turns dry sand into **soil** (damp sand first, then dark soil, shown on the ground).
+  - Soil that gets **4 L in a day** is a little **greener each morning** (20% a morning, so 5 days to full): grass tufts come up, then small plants once it is past 40%.
+  - A dry morning wilts it 10%. Bare soil left dry for 4 mornings goes back to sand.
+  - A square takes at most 8 L a day ("soaked for today").
+- **Hand pump, pipes and sprinklers:**
+  - **Hand pump on the main well**: new base upgrade in the shop ($120). It puts a pump beside the well, and the pipes need it.
+  - **Water pipe** (workbench: 4 for 2 scrap and 1 nail; shop: 10 for $25). Hold it and click the main well, then a sprinkler, like the power cable: 1 pipe per 2 m, 24 m at most per pipe. Sprinklers pass water on to the next sprinkler. **RMB** takes up the pipes on an end.
+  - **Sprinkler** (build mode, end of the list: 3 scrap, 2 nails; base zone only). When it is piped to the well, it waters every square within 5 m **by day** (about 4 squares) up to 6 L each, taking the water from the main well, and you can see the spray. **E** turns it off or on. Its prompt says why it isn't watering (no pump, no pipe, well dry, turned off).
+- **Deepen the main well**: new base upgrade with 3 levels ($150, $300, $500) for 350, 550 and 800 litres a day.
+- Saved: the well's water, your can, every square's soil, wetness and green, the pipes, and whether each sprinkler is on. Older saves load with a full well and dry sand.
+- Decisions: the main well is a fixed part of the world (not a build piece), so it can't be destroyed or moved. One watering can is all you need (it holds the water, not each can). Greening is checked each morning, so you see damp soil straight away and grass from the next day. Mutants don't care about water yet (v1.16).
+- **Tests (47 new):** the well by the flag and full, the crosshair finding it, no water without a can, filling the can, pours using the can, damp sand then soil at 6 L, the 8 L cap, an empty can, soil drawn on the ground, greening next morning (not on damp sand), the well refilling, grass and then plants, wilting, saving and old saves, soil going back to sand, sprinklers needing the pump and a pipe, pipe cost, watering by day only, up to 6 L, stopping when done, turning off, the 24 m pipe limit, chained sprinklers, pipes and valves saved, pipes going with their sprinkler, and the deeper well.
+- New screenshot views `55_greening` and `56_watering_can`.
+
+**Try:** make a watering can at the workbench (or take one from the test box), fill it at the main well by the flag and water a patch of sand until it turns to soil. Come back after the next morning (keep it at 4 L a day) and look for grass. Then buy the hand pump, build a sprinkler, pipe it to the well and let it do the work.
+**Next:** v1.14, seeds and farming: seeds by drone, seed beds on soil, crops that grow over days with water and die in the midday heat when dry.
+
 ## v1.12.0 (2026-11-27): Physics pass, part 1 (knockback, stagger, blasts, falls)
 PR #14 (v1.11 gathering and processing) was merged into main first. Then the first half of the v2.0 physics pass: hits now move mutants, and blasts throw them. The roadmap item was big, so it is split: this run did the combat physics, part 2 (dropped items as physics props, throwables) is next.
 - **Knockback and stagger per weapon.** Every hit now has a shove (m/s) and a stagger (seconds). While staggered, a mutant doesn't walk, and a swing or spit it was winding up is cut short. It leans back from the blow.

@@ -69,6 +69,22 @@ Resource gathering and processing: trees and an axe, rocks to pick up, machines 
 - [x] v1.11: **Gathering and processing:** groves of palms and acacias felled with an axe for logs (they grow back), loose stones to pick up, a sawmill, rock crusher and nail press bought by drone and run on generator power, splitting logs by hand at the workbench, log stakes trap
 - [ ] Later resource ideas (not scheduled): a furnace and the v2.2 crafting chain feeding off these machines, a water purifier, machines that feed a chest automatically
 
+### New direction (owner, 2026-11-27): terraform the desert
+The aim of the game shifts from pure base defence to **turning the dead desert green**. Explore, find oases and resources, build water infrastructure and farms, and push the green outwards. Mutants stay, as the desert fighting back: they are drawn to water and green land, so the more you grow, the harder they push. Base defence stays as one part of the game, not the whole of it. M10 comes **before** the rest of M9 (v2.0 to v2.3 wait until M10 is done, unless the owner says otherwise).
+
+Design notes for every M10 run:
+- Track greening on a **coarse grid** over the whole map (for example 4 to 8 m cells: moisture and a stage from dead sand to firm ground, soil, grassland and grove) and blend ground colour and MultiMesh plants from it. Keep the fine diggable ground only where you build. Smooth on a GTX 1650-class laptop.
+- Every step must be playable on its own and saved.
+- Keep the existing systems (digging, wells, power, machines, waves) and connect them rather than replace them.
+
+### M10: Terraforming
+- [ ] v1.13: **Soil and farming:** irrigation from a well (watering can, then a hand pump with short pipes), sand that turns to soil when watered and fertilised, seed beds, crops that grow over days (dates, cactus fruit, millet) and feed you. Crops need water and die in the midday heat without shade
+- [ ] v1.14: **Oases:** 3 to 5 hidden oases around the map with a spring, palms, reeds, clay and rare seeds, guarded by mutants or a nest. Shown on the map once found. Claiming one with a flag makes it an outpost where you can build
+- [ ] v1.15: **Greening:** the coarse greening grid. Wet ground slowly moves from dead sand to soil, grass and groves; planted trees hold the sand, give shade and spread water a little. A **green %** for the whole map on the HUD and map. Saved
+- [ ] v1.16: **Moving water:** pumps on generator power, pipes and dug channels that carry water out from wells and springs, sprinklers that water an area. Outposts get their own build zone and defences
+- [ ] v1.17: **The desert fights back:** mutants are drawn to water and green land; waves target the greenest places (outposts too), and mutant nests in the desert keep the land around them dead until you burn them out
+- [ ] v1.18: **Goals and an ending:** green % milestones (10, 25, 50) unlock new seeds, machines and a weather station; animals (jackals, lizards, birds) come back to green land for hunting; reaching the final milestone brings back rain (an ending, then free play). A peaceful terraform-only mode in the difficulty settings
+
 ### M9: Game logic, AI and physics
 - [x] v1.10: **Mutant navigation:** a navigation mesh, rebuilt when the base or the ground changes, so mutants path round walls to an open gate or the weakest wall instead of walking straight in. Brutes go straight through, pits and wire are taken into account, and groups pick the same weak point
 - [x] v1.12: **Physics pass, part 1:** knockback and stagger tuned per weapon, mine blasts throw mutants (and their bodies) and scatter debris, a Brute's fist shoves you, mutants knocked into pits and off roofs, and long falls hurt them
@@ -87,5 +103,6 @@ A buggy, outposts, animated low-poly characters, a generated soundtrack, Windows
 - Camera: first person only
 - Weapons: realistic guns
 - Order: building before combat
+- Aim: terraform the desert (owner, 2026-11-27); base defence is one part of the game
 - Visuals: simple low-poly, no art or animation work (focus on logic, physics, building, digging)
 - Testing aid: a green **test box** next to the spawn point holds a stack of every item and tops your cash up to $2000 (`TEST_BOX` in `scripts/main.gd`). Keep it until the owner asks to remove it, and add new items to it automatically (it fills from `Items.ITEMS`)

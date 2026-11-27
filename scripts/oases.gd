@@ -60,6 +60,8 @@ var player_dead := func(): return false
 var pay := Callable()
 var has_cost := Callable()
 var world_seed := 1337
+## Peaceful mode (v1.19): no guards come out and nests don't breed (they still kill the land).
+var peaceful := false
 ## One entry per oasis: {"pos": Vector3 (pond centre), "nest_pos", "post_pos",
 ## "stash_pos", "clay_pos", "has_nest": bool (from the seed), "nest": "alive",
 ## "burning" or "gone" ("none" without one), "guards": guards still to come,
@@ -220,11 +222,11 @@ func tick(dt: float) -> void:
 		var d := pp.distance_to(Vector2(o.pos.x, o.pos.z))
 		if not o.found and d < FIND_R:
 			o.found = true
-			var text := "You found an oasis! A spring, reeds, clay and an old stash. Guards are about."
+			var text := "You found an oasis! A spring, reeds, clay and an old stash." + ("" if peaceful else " Guards are about.")
 			if nest_alive(i):
 				text = "You found an oasis, but a mutant nest keeps it dead. Burn the nest (a fuel can and E)."
 			message.emit(text)
-		if o.nest == "alive" and o.guards < NEST_GUARDS:
+		if o.nest == "alive" and o.guards < NEST_GUARDS and not peaceful:
 			o.breed += dt
 			if o.breed >= NEST_BREED:
 				o.breed = 0.0
@@ -243,6 +245,8 @@ func guards_of(i: int) -> Array:
 ## Sends out guards until GUARD_CAP are about (or none are left). Returns how many came.
 func wake_guards(i: int) -> int:
 	var o: Dictionary = list[i]
+	if peaceful:
+		return 0
 	var out := guards_of(i).size()
 	var n := 0
 	while out < GUARD_CAP and o.guards > 0:
@@ -318,7 +322,7 @@ func claim_problem(i: int) -> String:
 		return ""
 	if nest_alive(i):
 		return "Burn out the mutant nest first"
-	var left: int = guards_of(i).size() + int(o.guards)
+	var left: int = guards_of(i).size() + (0 if peaceful else int(o.guards))
 	if left > 0:
 		return "Kill the guards first (%d left)" % left
 	if has_cost.is_valid() and not has_cost.call(CLAIM_COST):

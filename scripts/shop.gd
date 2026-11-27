@@ -56,6 +56,11 @@ const DRONE := [
 	{"name": "Date palm sapling (fruit tree)", "price": 45, "items": {"seed_date_palm": 1}},
 	{"name": "2 saffron bulbs (exotic, shade)", "price": 90, "items": {"seed_saffron": 2}},
 	{"name": "2 dragon fruit cuttings (exotic)", "price": 70, "items": {"seed_dragon_fruit": 2}},
+	# v1.19: "goal" = the green milestone (goals.gd) that unlocks the order.
+	{"name": "2 olive saplings (fruit tree, hardy)", "price": 60, "items": {"seed_olive": 2}, "goal": 1},
+	{"name": "4 prickly pear pads (food, hardy)", "price": 30, "items": {"seed_prickly_pear": 4}, "goal": 1},
+	{"name": "Machine: Dew collector (waters 8 m)", "price": 120, "items": {"kit_dew": 1}, "goal": 2},
+	{"name": "Machine: Weather station (rain)", "price": 400, "items": {"kit_weather": 1}, "goal": 3},
 ]
 ## Blueprint item -> the build piece it unlocks.
 const BLUEPRINTS := {"bp_turret": "turret", "bp_fence": "electric_fence", "bp_sandbags": "sandbags"}
@@ -77,6 +82,8 @@ var cash := START_CASH
 ## Build pieces unlocked by blueprints.
 var unlocked := {}
 var drone  # Drone
+## Green milestones reached (set by goals.gd): unlocks the drone orders with a "goal".
+var goal_level := 0
 ## Upgrade id -> how many levels bought.
 var upgrades := {"zone": 0, "storage": 0, "bench": 0, "radio": 0, "well": 0, "pump": 0}
 var _radio: Node3D
@@ -166,12 +173,17 @@ func blueprint_owned(item: String) -> bool:
 
 
 func can_order(i: int) -> bool:
-	if drone == null or drone.pad_position() == null or cash < int(DRONE[i].price):
+	if drone == null or drone.pad_position() == null or cash < int(DRONE[i].price) or not order_unlocked(i):
 		return false
 	for item in DRONE[i].items:
 		if BLUEPRINTS.has(item) and blueprint_owned(item):
 			return false
 	return true
+
+
+## True once the green milestone a drone order needs is reached (v1.19).
+func order_unlocked(i: int) -> bool:
+	return goal_level >= int(DRONE[i].get("goal", 0))
 
 
 ## Sends a drone order. Returns false if it can't be ordered now.

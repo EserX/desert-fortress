@@ -64,6 +64,13 @@ const ITEMS := {
 	"cooked_meat": {"name": "Cooked meat", "weight": 0.4, "stack": 10},
 	# v1.18 oases: reeds cut at the pond (clay is dug from the bank there too).
 	"reeds": {"name": "Reeds", "weight": 0.2, "stack": 30},
+	# v1.19 goals: seeds unlocked by the first green milestone, and machines.
+	"seed_olive": {"name": "Olive sapling", "weight": 2.0, "stack": 5},
+	"seed_prickly_pear": {"name": "Prickly pear pads", "weight": 0.4, "stack": 10},
+	"olives": {"name": "Olives", "weight": 0.1, "stack": 40},
+	"prickly_pear": {"name": "Prickly pears", "weight": 0.3, "stack": 20},
+	"kit_dew": {"name": "Dew collector (crate)", "weight": 8.0, "stack": 1},
+	"kit_weather": {"name": "Weather station (crate)", "weight": 14.0, "stack": 1},
 }
 
 ## What each kind of container can hold: item -> [min, max]. A negative min

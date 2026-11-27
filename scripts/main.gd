@@ -42,6 +42,9 @@ const Animals = preload("res://scripts/animals.gd")
 const Raids = preload("res://scripts/raids.gd")
 const Livable = preload("res://scripts/livable.gd")
 const Oases = preload("res://scripts/oases.gd")
+const Weather = preload("res://scripts/weather.gd")
+const Goals = preload("res://scripts/goals.gd")
+const EndingUI = preload("res://scripts/ending_ui.gd")
 
 ## Testing aid (temporary): a green box by the spawn point that holds a full
 ## stack of every item and tops your cash up to $2000 each time you open it.
@@ -106,6 +109,9 @@ var animals: Animals
 var raids: Raids
 var livable: Livable
 var oases: Oases
+var weather: Weather
+var goals: Goals
+var ending_ui: EndingUI
 var waves: Waves
 var guns: Guns
 var traps: Traps
@@ -286,6 +292,7 @@ func _ready() -> void:
 	mutants.player_dead = func(): return survival == null or survival.dead
 	add_child(mutants)
 	mutants.health_mult = Game.diff("health")
+	mutants.peaceful = Game.is_peaceful()
 	mutants.top_up(day_night.day)
 
 	traps = Traps.new()
@@ -316,6 +323,7 @@ func _ready() -> void:
 	waves.world_seed = world_seed
 	waves.size_mult = Game.diff("waves")
 	waves.cash_mult = Game.diff("cash")
+	waves.peaceful = Game.is_peaceful()
 	add_child(waves)
 	power.waves = waves
 	if horde_stand:
@@ -493,6 +501,7 @@ func _ready() -> void:
 	day_night.day_started.connect(_on_morning)
 	day_night.day_started.connect(water.on_morning)
 	day_night.day_started.connect(mutants.top_up)
+	_setup_goals()  # after water.on_morning: the rain falls on the new day
 	# Autosave every morning (after the morning loot is in place).
 	day_night.day_started.connect(func(_d): Game.save_game("auto", _screenshot()))
 	Game.saved.connect(func(slot): hud.show_banner("Game saved (%s)" % Game.slot_label(slot)))
@@ -1186,6 +1195,8 @@ func _prompt_for(id: String) -> String:
 		return animals.prompt(id)
 	if id.begins_with("oasis:"):
 		return oases.prompt(id)
+	if id.begins_with("weather:"):
+		return weather.prompt(id.trim_prefix("weather:"))
 	if id.begins_with("fire:"):
 		return building.prompt(id) + animals.cook_prompt(building.pieces.get(id.trim_prefix("fire:"), {}))
 	if id.begins_with("machine:"):
@@ -1202,6 +1213,8 @@ func _prompt_for(id: String) -> String:
 
 ## "[E] Press the red button: call the horde (8 mutants)"
 func horde_prompt() -> String:
+	if waves.peaceful:
+		return "Horde button   (peaceful mode: no mutants come)"
 	if waves.active:
 		return "Horde button   (a wave is already out: %d left)" % waves.remaining()
 	var n := maxi(waves.wave, 1)
@@ -1212,6 +1225,9 @@ func horde_prompt() -> String:
 ## E at the horde stand: a wave comes for you straight away.
 func press_horde_button() -> bool:
 	horde_stand.press()
+	if waves.peaceful:
+		hud.show_banner("Peaceful mode: no mutants come.")
+		return false
 	if not waves.call_horde(horde_stand.global_position):
 		hud.show_banner("A wave is already out. Finish it first.")
 		return false
@@ -1332,6 +1348,8 @@ func interact(id: String) -> void:
 	if id.begins_with("oasis:"):
 		oases.interact(id)
 		return
+	if id.begins_with("weather:"):
+		return  # nothing to do with them; the prompt says what they do
 	if id.begins_with("machine:"):
 		use_machine(id.trim_prefix("machine:"))
 		return
@@ -1786,6 +1804,7 @@ func _setup_oases() -> void:
 	oases.pay = pay_near
 	oases.has_cost = has_near
 	oases.world_seed = world_seed
+	oases.peaceful = Game.is_peaceful()
 	add_child(oases)
 	var avoid: Array = []
 	for c in props.get_children():  # once per world: every prop (a few hundred)
@@ -1800,6 +1819,41 @@ func _setup_oases() -> void:
 	oases.spilled.connect(loot.spawn_drop)
 	water.morning_tally.connect(oases.on_tally)
 	raids.wild_green = oases.wild_green
+
+
+## Green milestones, the weather (dew, rain) and the ending (v1.19).
+func _setup_goals() -> void:
+	weather = Weather.new()
+	weather.name = "Weather"
+	weather.water = water
+	weather.building = building
+	weather.player = player
+	weather.day_night = day_night
+	weather.world_seed = world_seed
+	add_child(weather)
+	weather.message.connect(hud.show_banner)
+	day_night.day_started.connect(weather.on_morning)
+	goals = Goals.new()
+	goals.name = "Goals"
+	goals.livable = livable
+	goals.shop = shop
+	goals.weather = weather
+	goals.day_night = day_night
+	add_child(goals)
+	goals.message.connect(hud.show_banner)
+	ending_ui = EndingUI.new()
+	ending_ui.name = "EndingUI"
+	add_child(ending_ui)
+	goals.ended.connect(func(): ending_ui.open(ending_lines()))
+	goals.load_data({})
+
+
+## A few lines about the game for the ending screen.
+func ending_lines() -> Array:
+	var mins := int(Game.playtime / 60.0)
+	return ["Day %d, %d nights survived" % [day_night.day, waves.wave],
+		"Green: %s of the desert   Livable base: %d" % [livable.percent_text(), livable.score],
+		"Played for %d h %02d min" % [mins / 60, mins % 60]]
 
 
 ## A mutant clawed you: lose health, red flash on the side it came from.
@@ -1967,6 +2021,8 @@ func collect_save_data() -> Dictionary:
 		"animals": animals.save_data(),
 		"livable": livable.save_data(),
 		"oases": oases.save_data(),
+		"weather": weather.save_data(),
+		"goals": goals.save_data(),
 	}
 
 
@@ -2074,6 +2130,10 @@ func apply_save_data(data: Dictionary) -> void:
 	nav.rebuild_map()  # the mutants' path map, worked out now rather than when the first one arrives
 	var lv = data.get("livable", {})
 	livable.load_data(lv if lv is Dictionary else {})  # last: scores what was loaded
+	var wd2 = data.get("weather", {})
+	weather.load_data(wd2 if wd2 is Dictionary else {})
+	var gd = data.get("goals", {})
+	goals.load_data(gd if gd is Dictionary else {})  # after livable: needs the green %
 
 
 ## Graphics quality: sun shadows and how far you can see.

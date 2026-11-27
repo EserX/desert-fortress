@@ -5,6 +5,7 @@ extends CanvasLayer
 
 const UI = preload("res://scripts/menu_ui.gd")
 const Items = preload("res://scripts/items.gd")
+const Goals = preload("res://scripts/goals.gd")
 
 signal bought(index: int, left: Dictionary)
 signal ordered(index: int)
@@ -78,12 +79,12 @@ func _ready() -> void:
 	var dgrid := GridContainer.new()
 	dgrid.columns = 3
 	dgrid.add_theme_constant_override("h_separation", 6)
-	dgrid.add_theme_constant_override("v_separation", 6)
+	dgrid.add_theme_constant_override("v_separation", 4)
 	_drone_page.add_child(dgrid)
 	for i in shop.DRONE.size():
 		var b := UI.button(dgrid, "", order.bind(i))
 		b.add_theme_font_size_override("font_size", 14)
-		b.custom_minimum_size = Vector2(244, 52)
+		b.custom_minimum_size = Vector2(244, 44)  # 8 rows must fit a 720 px window
 		drone_buttons.append(b)
 	var cat := ""
 	var grid: GridContainer
@@ -248,7 +249,10 @@ func refresh() -> void:
 		for item in e.items:
 			if shop.BLUEPRINTS.has(item) and shop.blueprint_owned(item):
 				owned = true
-		drone_buttons[i].text = "%s\n%s" % [e.name, "Owned" if owned else "$%d" % e.price]
+		var price := "Owned" if owned else "$%d" % e.price
+		if not shop.order_unlocked(i):
+			price = "Locked: reach %s green" % Goals.at_text(int(e.goal))
+		drone_buttons[i].text = "%s\n%s" % [e.name, price]
 		drone_buttons[i].disabled = not shop.can_order(i)
 
 

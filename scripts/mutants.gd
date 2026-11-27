@@ -23,6 +23,7 @@ var world_seed := 1337
 var night := false
 var kills := 0
 var health_mult := 1.0  # difficulty
+var peaceful := false   # peaceful mode (v1.19): no walkers roam the desert
 ## Raids' raid_point (plants and pipes for wave mutants to wreck), given to each mutant.
 var raid := Callable()
 var _sounds := {}
@@ -85,7 +86,7 @@ func top_up(day: int) -> int:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash("mutants:%d:%d" % [world_seed, day])
 	var n := 0
-	while alive().filter(func(m): return not m.hunter and m.guard_of < 0).size() < WANDERERS:
+	while not peaceful and alive().filter(func(m): return not m.hunter and m.guard_of < 0).size() < WANDERERS:
 		spawn("walker", random_spot(rng))
 		n += 1
 	return n

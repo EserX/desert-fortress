@@ -39,6 +39,9 @@ const CROPS := {
 	"date_palm": {"name": "Date palm", "kind": "tree", "days": 6, "need": 4.0, "yield": {"dates": 4}, "regrow": 3, "tough": true, "h": 4.0},
 	"saffron": {"name": "Saffron", "kind": "exotic", "days": 4, "need": 4.0, "max": 6.0, "shade": true, "yield": {"saffron": 1}, "h": 0.35},
 	"dragon_fruit": {"name": "Dragon fruit", "kind": "exotic", "days": 5, "need": 6.0, "yield": {"dragon_fruit": 2}, "regrow": 3, "h": 1.4},
+	# v1.19: unlocked at the first green milestone. Both get by on little water.
+	"olive": {"name": "Olive tree", "kind": "tree", "days": 7, "need": 2.0, "yield": {"olives": 6}, "regrow": 3, "tough": true, "h": 3.0},
+	"prickly_pear": {"name": "Prickly pear", "kind": "food", "days": 4, "need": 2.0, "yield": {"prickly_pear": 3}, "regrow": 2, "hardy": true, "h": 1.1},
 }
 
 signal message(text: String)
@@ -333,7 +336,7 @@ func shaded(s: Vector2i) -> bool:
 	for dx in range(-2, 3):
 		for dz in range(-2, 3):
 			var o: Vector2i = s + Vector2i(dx, dz)
-			if o != s and plants.has(o) and plants[o].crop == "date_palm" and is_grown(plants[o]) \
+			if o != s and plants.has(o) and CROPS[plants[o].crop].kind == "tree" and is_grown(plants[o]) \
 					and spot_center(o).distance_to(c) <= TREE_SHADE_R:
 				return true
 	if not is_inside_tree() or terrain == null:
@@ -394,7 +397,7 @@ func on_tally() -> void:
 		var e: Dictionary = plants[s]
 		if is_grown(e) and e.crop == "marigold":
 			flowers.append(spot_center(s))
-		if is_grown(e) and e.crop == "date_palm":
+		if is_grown(e) and CROPS[e.crop].kind == "tree":
 			trees.append(s)
 	for s in plants:  # once a day, every plant times the blooming flowers (a handful)
 		var e: Dictionary = plants[s]
@@ -602,6 +605,27 @@ func _plant_parts(e: Dictionary, o: Vector3, rng: RandomNumberGenerator, stalks:
 				for i in 3:
 					var a := i * TAU / 3.0 + 0.5
 					_blob(blobs, o + Vector3(cos(a) * 0.35, 1.0, sin(a) * 0.35), Vector3(0.2, 0.24, 0.2), Color(0.9, 0.2, 0.45))
+		"olive":
+			# A short gnarled trunk with a wide, grey-green crown.
+			var h := 3.0 * k
+			var yaw := rng.randf() * TAU
+			_stalk(stalks, o, h * 0.6, 0.14, Color(0.42, 0.37, 0.3), 0.18, yaw)
+			_blob(blobs, o + Vector3(0, h * 0.75, 0), Vector3(2.0, 1.1, 2.0) * k, Color(0.45, 0.52, 0.38), yaw)
+			if ripe:
+				for i in 6:
+					var a := rng.randf() * TAU
+					_blob(blobs, o + Vector3(cos(a) * 0.8, h * 0.6, sin(a) * 0.8), Vector3.ONE * 0.12, Color(0.25, 0.22, 0.15))
+		"prickly_pear":
+			# Flat round pads stacked on each other, red fruit on the rims.
+			var col := Color(0.32, 0.52, 0.3)
+			_blob(blobs, o + Vector3(0, 0.3 * k, 0), Vector3(0.55, 0.6, 0.14) * k, col, rng.randf() * TAU)
+			for i in 3:
+				var a := i * TAU / 3.0 + rng.randf() * 0.4
+				_blob(blobs, o + Vector3(cos(a) * 0.25, 0.75 * k, sin(a) * 0.25), Vector3(0.45, 0.5, 0.12) * k, col.lightened(0.05), a, 0.3)
+			if ripe:
+				for i in 4:
+					var a := rng.randf() * TAU
+					_blob(blobs, o + Vector3(cos(a) * 0.3, 1.0, sin(a) * 0.3), Vector3(0.12, 0.16, 0.12), Color(0.85, 0.2, 0.3))
 
 
 static func _fill(mm: MultiMesh, items: Array) -> void:

@@ -21,6 +21,8 @@ const DIFFICULTIES := {
 		"info": "The game as designed."},
 	"hard": {"name": "Hard", "waves": 1.4, "health": 1.25, "damage": 1.4, "cash": 0.9, "needs": 1.3,
 		"info": "Bigger waves, tougher mutants that hit harder, less pay, hungrier days."},
+	"peaceful": {"name": "Peaceful", "waves": 0.0, "health": 1.0, "damage": 0.5, "cash": 1.0, "needs": 0.7, "peaceful": true,
+		"info": "Terraform only: no mutants, no night waves, no nests breeding guards. Quiet nights still pay."},
 }
 
 var world_seed := DEFAULT_SEED
@@ -56,6 +58,11 @@ func _notification(what: int) -> void:
 ## One of the difficulty values ("waves", "health", "damage", "cash", "needs").
 func diff(key: String) -> float:
 	return float(DIFFICULTIES.get(difficulty, DIFFICULTIES.normal)[key])
+
+
+## True in the peaceful terraform-only mode (v1.19): no mutants at all.
+func is_peaceful() -> bool:
+	return bool(DIFFICULTIES.get(difficulty, DIFFICULTIES.normal).get("peaceful", false))
 
 
 func new_game(level := "normal") -> void:

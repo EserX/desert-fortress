@@ -76,6 +76,11 @@ var shots := [
 	{"name": "66_nest_burning", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": -0.25, "hour": 16.5, "oasis": "burning"},
 	{"name": "67_outpost", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": -0.3, "hour": 15.0, "oasis": "outpost"},
 	{"name": "68_oasis_map", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 10.0, "map": true, "oasis": "map"},
+	{"name": "69_weather_station", "pos": Vector3(19, 0, 9), "yaw": PI, "pitch": 0.12, "hour": 11.5, "goals": "station"},
+	{"name": "70_rain", "pos": Vector3(20, 0, 38), "yaw": 0.1, "pitch": -0.15, "hour": 8.0, "goals": "rain"},
+	{"name": "71_goals_map", "pos": Vector3(20, 0, 40), "yaw": 0.9, "pitch": 0.0, "hour": 10.0, "map": true, "goals": "map"},
+	{"name": "72_goals_drone", "pos": Vector3(4, 0, 9), "yaw": 0.6, "pitch": 0.0, "hour": 15.0, "drone_shop": true, "goals": "drone"},
+	{"name": "73_ending", "pos": Vector3(20, 0, 38), "yaw": 0.1, "pitch": -0.15, "hour": 8.0, "goals": "ending"},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -208,6 +213,10 @@ func _process(_d: float) -> bool:
 			_raid_sample()
 		if s.has("oasis"):
 			_oasis_sample(p, s.oasis)
+		if s.has("goals"):
+			_goals_sample(s.goals)
+		elif main.ending_ui.is_open():
+			main.ending_ui.close()
 		if s.get("horde", false):
 			main.building.load_data([])
 			main.building.sites_load_data([])
@@ -893,6 +902,49 @@ func _livable_sample() -> void:
 	main.livable.spread_green()
 	w.redraw()
 	main.livable.refresh(false)
+
+
+## v1.19: a weather station and a dew collector by a farm with the new crops, rain,
+## the goals on the map, locked drone orders and the ending.
+func _goals_sample(kind: String) -> void:
+	var we = main.weather
+	var g = main.goals
+	we.rain_day = -1
+	we._cloud = 0.0
+	if kind == "drone":
+		g.reached = 1
+		g.apply()
+		return
+	_farm_sample(false)
+	var w = main.water
+	var f = main.farming
+	var b = main.building
+	for c in w.cells:
+		w.cells[c].green = 1.0
+	f.load_data({})
+	for i in 3:
+		f.plants[Vector2i(7 + i * 2, 10)] = {"crop": "olive", "grow": 7.0, "hp": 1.0, "dead": false, "fruited": true}
+		f.plants[Vector2i(8 + i * 2, 13)] = {"crop": "prickly_pear", "grow": 4.0, "hp": 1.0, "dead": false, "fruited": false}
+	f.redraw()
+	main.inventory.load_data({})
+	var ws := {"kind": "obj", "cx": 7, "cz": 8, "dir": 0}
+	b.place("weather_station", ws, b.evaluate("weather_station", ws).y)
+	var ds := {"kind": "obj", "cx": 12, "cz": 8, "dir": 0}
+	b.place("dew_collector", ds, b.evaluate("dew_collector", ds).y)
+	w.redraw()
+	main.livable.refresh(false)
+	if kind == "map":
+		g.reached = 2
+		g.apply()
+		return
+	if kind == "rain" or kind == "ending":
+		we.rain_day = main.day_night.day
+		we._cloud = 1.0
+		we._process(0.0)
+		we._rain.restart()
+		main.day_night._apply()
+	if kind == "ending":
+		main.ending_ui.open(main.ending_lines())
 
 
 ## v1.16: gazelles, a jackal and birds on green land, and a gazelle to butcher.

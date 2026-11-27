@@ -30,7 +30,7 @@ const ROOF_SHADE := 2.0       # and for a roof
 const FOOD_PLANT := 2.5       # food points for a living food plant
 const FIRE_FOOD := 3.0        # and for a fire pit to cook on
 const GREEN_PLANTS := 2.0     # plant points for each fully green square in the zone
-const FOOD_CROPS := ["millet", "melon", "date_palm", "dragon_fruit"]
+const FOOD_CROPS := ["millet", "melon", "date_palm", "dragon_fruit", "olive", "prickly_pear"]
 const SHELTER_TYPES := ["wall", "doorway", "window", "slit_wall", "metal_door", "half_wall", "floor", "roof", "trapdoor", "tri_roof"]
 const SPREAD_SOIL := 2.0      # litres towards soil a fully green square gives each square next to it a morning
 const SPREAD_GREEN := 0.05    # and green (less than a dry morning takes, so it needs your water to go green)
@@ -53,6 +53,8 @@ var reached := 0
 ## The latest score, worked out every REFRESH seconds.
 var parts := {}
 var score := 0
+## The next green milestone's % (goals.gd, v1.19), shown on the HUD; -1 for none.
+var next_goal := -1.0
 var _wait := 0.0
 static var _land := 0
 
@@ -193,9 +195,10 @@ func percent_text() -> String:
 	return ("%.2f%%" % p) if p < 1.0 else ("%.1f%%" % p)
 
 
-## For the HUD: "Green 0.4%   Livable 35".
+## For the HUD: "Green 0.4% / 1%   Livable 35" (with the next green milestone).
 func hud_text() -> String:
-	return "Green %s   Livable %d" % [percent_text(), score]
+	var goal := (" / %s%%" % str(next_goal).trim_suffix(".0")) if next_goal > 0.0 else ""
+	return "Green %s%s   Livable %d" % [percent_text(), goal, score]
 
 
 # --- Mornings ---------------------------------------------------------------------

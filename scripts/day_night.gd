@@ -30,6 +30,8 @@ const KEYS := [
 var day := 1
 var hour := 9.0            # 0..24
 var time_scale := 1.0      # for testing / debugging
+## Cloud cover 0..1 (rain, v1.19): a greyer sky and a weaker sun. Set by weather.gd.
+var overcast := 0.0
 var sun: DirectionalLight3D
 var moon: DirectionalLight3D
 var env: Environment
@@ -155,6 +157,13 @@ func _apply() -> void:
 	sun.light_energy = lerpf(a[4], b[4], t)
 	env.ambient_light_energy = lerpf(a[5], b[5], t)
 	env.fog_light_color = (a[6] as Color).lerp(b[6], t)
+	if overcast > 0.0:
+		var grey := Color(0.45, 0.47, 0.5)
+		sky_mat.sky_top_color = sky_mat.sky_top_color.lerp(grey * sky_mat.sky_top_color.get_luminance() * 2.0, overcast * 0.8)
+		sky_mat.sky_horizon_color = sky_mat.sky_horizon_color.lerp(grey, overcast * 0.6)
+		sky_mat.ground_horizon_color = sky_mat.sky_horizon_color
+		sun.light_energy *= 1.0 - overcast * 0.6
+		env.fog_light_color = env.fog_light_color.lerp(grey, overcast * 0.6)
 
 	# Sun arc: rises in the east (+X), peaks at ~70 degrees, sets in the west.
 	var day_frac := (hour - SUNRISE) / (SUNSET - SUNRISE)

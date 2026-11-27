@@ -20,6 +20,9 @@ signal siren
 var mutants  # Mutants
 var size_mult := 1.0        # difficulty: wave size
 var cash_mult := 1.0        # difficulty: pay
+## Peaceful mode (v1.19): no waves, no siren, no horde. Nights still count and pay at dawn.
+var peaceful := false
+var quiet_night := false
 var world_seed := 1337
 var wave := 0               # number of the last wave that started
 var active := false
@@ -108,6 +111,8 @@ static func mix_text(types: Array) -> String:
 
 
 func on_dusk(_day: int) -> void:
+	if peaceful:
+		return
 	update_lure()
 	_siren.play()
 	siren.emit()
@@ -120,6 +125,10 @@ func update_lure() -> void:
 
 
 func start_wave() -> void:
+	if peaceful:
+		wave += 1
+		quiet_night = true
+		return
 	wave += 1
 	active = true
 	called = false
@@ -137,7 +146,7 @@ func start_wave() -> void:
 ## comes for `at` straight away, day or night. It doesn't count as a night.
 ## Returns false if a wave is already out.
 func call_horde(at: Vector3) -> bool:
-	if active:
+	if active or peaceful:
 		return false
 	active = true
 	called = true
@@ -217,6 +226,12 @@ func end_wave(cleared: bool) -> void:
 
 func on_dawn(_day: int) -> void:
 	end_wave(false)
+	if quiet_night:
+		quiet_night = false
+		var s := {"wave": wave, "quiet": true, "cleared": true}
+		s.merge(cash_for(s), true)
+		s.cash = int(round(s.cash * cash_mult))
+		wave_ended.emit(s)
 
 
 func note_kill(m: Node) -> void:
@@ -259,6 +274,11 @@ func note_death() -> void:
 ## Lines for the end-of-wave summary.
 static func summary_lines(s: Dictionary) -> Array:
 	var lines: Array = []
+	if s.get("quiet", false):
+		lines.append("Dawn: a quiet night %d" % int(s.get("wave", 0)))
+		if s.has("cash"):
+			lines.append("Cash earned: $%d" % s.cash)
+		return lines
 	if s.get("called", false):
 		lines.append("Horde wiped out!" if s.get("cleared", false) else "The horde is gone")
 	else:
@@ -280,7 +300,7 @@ static func summary_lines(s: Dictionary) -> Array:
 
 func save_data() -> Dictionary:
 	return {"wave": wave, "active": active, "to_spawn": to_spawn, "queue": queue, "stats": stats,
-		"called": called, "call_at": [call_at.x, call_at.z], "lure": lure, "group": _group}
+		"called": called, "call_at": [call_at.x, call_at.z], "lure": lure, "group": _group, "quiet": quiet_night}
 
 
 func load_data(data: Dictionary) -> void:
@@ -293,6 +313,8 @@ func load_data(data: Dictionary) -> void:
 	while queue.size() < to_spawn:
 		queue.append("walker")  # saves from v0.14
 	called = bool(data.get("called", false))
+	var q = data.get("quiet", false)
+	quiet_night = q is bool and q
 	lure = clampi(int(data.get("lure", 0)), 0, 99) if (data.get("lure", 0) is int or data.get("lure", 0) is float) else 0
 	_group = int(data.get("group", 0)) if (data.get("group", 0) is int or data.get("group", 0) is float) else 0
 	var ca: Array = data.get("call_at", [0.0, 0.0])

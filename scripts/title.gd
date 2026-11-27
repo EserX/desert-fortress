@@ -69,7 +69,7 @@ func show_page(page: String) -> void:
 		"new":
 			UI.title(_col, "NEW GAME", 28)
 			UI.note(_col, "Pick a difficulty. It stays with this game.")
-			for level in ["easy", "normal", "hard"]:
+			for level in ["easy", "normal", "hard", "peaceful"]:
 				var d: Dictionary = Game.DIFFICULTIES[level]
 				var b := UI.button(_col, d.name, Game.new_game.bind(level))
 				b.tooltip_text = d.info

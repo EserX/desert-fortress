@@ -153,13 +153,20 @@ func _draw_livable(font: Font) -> void:
 	var lv = main.livable
 	if lv == null:
 		return
+	_draw_panel(font, "LAND", lv.summary_lines(), 120.0, 362.0)
+	if main.goals:
+		_draw_panel(font, "GOALS (green %)", main.goals.summary_lines(), 496.0, 220.0)
+
+
+## A dark box on the right with a title and lines ("[x] name: text" lines ticked).
+func _draw_panel(font: Font, title: String, lines: Array, top: float, height: float) -> void:
 	var x := _canvas.size.x - 320.0
-	var y := 120.0
-	var box := Rect2(x - 14.0, y - 30.0, 316.0, 362.0)
+	var y := top
+	var box := Rect2(x - 14.0, y - 30.0, 316.0, height)
 	_canvas.draw_rect(box, Color(0.08, 0.05, 0.03, 0.85))
-	_canvas.draw_string(font, Vector2(x, y), "LAND", HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color(1, 0.95, 0.85))
+	_canvas.draw_string(font, Vector2(x, y), title, HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color(1, 0.95, 0.85))
 	y += 28.0
-	for line in lv.summary_lines():
+	for line in lines:
 		var text: String = line
 		var col := Color(1, 0.95, 0.85)
 		if text.begins_with("[x]"):

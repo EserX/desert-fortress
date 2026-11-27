@@ -2491,7 +2491,7 @@ func _test_resources() -> void:
 		for it in e.items:
 			if it.begins_with("kit_"):
 				kits[it] = e.price
-	check(kits.size() == 3, "the drone flies in a sawmill, a rock crusher and a nail press (%s)" % str(kits))
+	check(kits.has("kit_sawmill") and kits.has("kit_crusher") and kits.has("kit_press"), "the drone flies in a sawmill, a rock crusher and a nail press (%s)" % str(kits))
 	# A sawmill next to a fuelled generator, by day.
 	main.day_night.restore(day, 10.0)
 	var gs := {"kind": "obj", "cx": -9, "cz": 9, "dir": 0, "level": 0}
@@ -3037,6 +3037,7 @@ func _process(_delta: float) -> bool:
 			_check_life()
 			_test_livable()
 			_test_oases()
+			_test_goals()
 		4080:
 			for e in catcher.errors:
 				print("  ERROR ", e)
@@ -4106,3 +4107,237 @@ func _test_oases() -> void:
 	b.load_data([])
 	w.load_data({})
 	oa.load_data({"list": []})
+
+
+## Fills `n` squares far from the base fully green (for the green %).
+func _green_squares(w, n: int) -> void:
+	w.cells = {}
+	var i := 0
+	var x := -40
+	while i < n:
+		for z in range(-40, 40):
+			if i >= n:
+				break
+			w.cells[Vector2i(x, z)] = {"wet": 0.0, "total": 24.0, "green": 1.0, "dry": 0}
+			i += 1
+		x += 1
+
+
+## v1.19: green milestones, new seeds and machines, the weather station and rain,
+## the ending, and peaceful mode.
+func _test_goals() -> void:
+	var g = main.goals
+	var w = main.water
+	var b = main.building
+	var sh = main.shop
+	var we = main.weather
+	var fa = main.farming
+	var lv = main.livable
+	var G = load("res://scripts/goals.gd")
+	var W = load("res://scripts/water.gd")
+	var WE = load("res://scripts/weather.gd")
+	var F = load("res://scripts/farming.gd")
+	var I = load("res://scripts/items.gd")
+	var M = load("res://scripts/market.gd")
+	var S = load("res://scripts/survival.gd")
+	var banners: Array = []
+	g.message.connect(func(t): banners.append(t))
+	var ended := [0]
+	g.ended.connect(func(): ended[0] += 1)
+	b.load_data([])
+	fa.load_data({})
+	w.load_data({})
+	we.load_data({})
+	g.load_data({})
+	check(G.level_of(0.99) == 0 and G.level_of(1.0) == 1 and G.level_of(4.0) == 2 and G.level_of(50.0) == G.GOALS.size(), "green milestones at %s" % str(G.GOALS.map(func(e): return e.at)))
+	check(G.at_text(2) == "2.5%" and G.at_text(1) == "1%", "milestone text: %s, %s" % [G.at_text(1), G.at_text(2)])
+	check(g.reached == 0 and sh.goal_level == 0 and lv.next_goal == 1.0, "a dead desert has no milestones")
+	var locked := []
+	for i in sh.DRONE.size():
+		if int(sh.DRONE[i].get("goal", 0)) > 0:
+			locked.append(i)
+	check(locked.size() == 4 and locked.all(func(i): return not sh.order_unlocked(i)), "4 drone orders wait for milestones")
+	sh.cash = 5000
+	check(not sh.can_order(locked[0]), "a locked order can't be bought, cash or not")
+	main.shop_ui.refresh()
+	check(main.shop_ui.drone_buttons[locked[0]].text.contains("Locked: reach 1% green"), "the drone page says so: " + main.shop_ui.drone_buttons[locked[0]].text.replace("\n", " / "))
+	# The first milestone.
+	var land: int = lv.land_squares()
+	_green_squares(w, int(ceil(land * 0.01)) + 1)
+	g.check()
+	check(g.reached == 1 and banners.size() == 1 and banners[0].contains("First green"), "1%% green: the first milestone (%s)" % str(banners))
+	check(sh.goal_level == 1 and sh.order_unlocked(locked[0]) and sh.order_unlocked(locked[1]) and not sh.order_unlocked(locked[2]), "it unlocks the new seeds only")
+	lv.refresh(false)
+	check(lv.hud_text().contains("/ 2.5%"), "the HUD shows the next milestone: " + lv.hud_text())
+	g.check()
+	check(banners.size() == 1, "a milestone is announced once")
+	_green_squares(w, int(ceil(land * 0.05)) + 1)
+	g.check()
+	check(g.reached == 3 and banners.size() == 3 and sh.order_unlocked(locked[3]), "5%%: the dew collector and the weather station (%d banners)" % banners.size())
+	check(ended[0] == 0 and not we.rain_back, "no ending yet")
+	var lines: Array = g.summary_lines()
+	check(lines.size() == G.GOALS.size() and lines[2].begins_with("[x]") and lines[3].begins_with("[ ]"), "the map lists them: " + " | ".join(lines))
+	_green_squares(w, 10)
+	g.check()
+	check(g.reached == 3, "milestones stay reached when the green fades")
+	# New seeds.
+	var ok := true
+	for crop in F.CROPS:
+		ok = ok and I.ITEMS.has(F.seed_of(crop))
+		for y in F.CROPS[crop].yield:
+			ok = ok and I.ITEMS.has(y) and M.GOODS.has(y)
+	check(ok, "every crop has a seed item and its harvest sells at the market")
+	check(F.CROPS.olive.kind == "tree" and F.CROPS.prickly_pear.get("hardy", false) and S.CONSUMABLES.has("olives") and S.CONSUMABLES.has("prickly_pear"), "olive trees (fruit tree) and prickly pears (hardy), both good to eat")
+	fa.plants = {Vector2i(30, 30): {"crop": "olive", "grow": 7.0, "hp": 1.0, "dead": false, "fruited": true}}
+	check(fa.shaded(Vector2i(31, 30)), "a grown olive tree shades the plants next to it")
+	fa.redraw()
+	fa.plants = {}
+	# The dew collector.
+	w.cells = {}
+	var ds := {"kind": "obj", "cx": 6, "cz": -6, "dir": 0}
+	var ev: Dictionary = b.evaluate("dew_collector", ds)
+	check(ev.ok, "a dew collector can be built in the base (%s)" % ev.get("reason", ""))
+	var dk: String = b.place("dew_collector", ds, ev.y)
+	var dp: Vector3 = b.pieces[dk].node.global_position
+	check(we.prompt(dk).begins_with("Dew collector") and main._prompt_for("weather:" + dk) == we.prompt(dk), "its prompt: " + we.prompt(dk).replace("\n", " / "))
+	var n: int = we.dew()
+	var dc: Vector2i = W.cell_of(dp.x, dp.z)
+	check(n >= 9 and is_equal_approx(w.cell_info(dc).wet, WE.DEW_L), "every morning it waters %d squares round it (%.1f L)" % [n, w.cell_info(dc).wet])
+	check(w.cell_info(W.cell_of(dp.x + 14.0, dp.z)).wet == 0.0, "but not further out")
+	b.remove(dk)
+	# The weather station.
+	w.cells = {}
+	check(we.chance() == 0.0, "no rain without a station")
+	var ws := {"kind": "obj", "cx": -6, "cz": 6, "dir": 0}
+	ev = b.evaluate("weather_station", ws)
+	check(ev.ok, "a weather station can be built (%s)" % ev.get("reason", ""))
+	var wk: String = b.place("weather_station", ws, ev.y)
+	var wp: Vector3 = b.pieces[wk].node.global_position
+	check(is_equal_approx(we.chance(), WE.SHOWER_CHANCE), "with one, a %d%% chance of rain each morning" % int(we.chance() * 100))
+	var wet_days := []
+	var dry_days := []
+	for d in range(1, 41):
+		if we.rains_on(d):
+			wet_days.append(d)
+		else:
+			dry_days.append(d)
+	check(wet_days.size() > 15 and wet_days.size() < 35 and wet_days.all(func(d): return we.rains_on(d)), "it rains on %d of 40 mornings, the same ones every time" % wet_days.size())
+	var far: Vector2i = W.cell_of(wp.x + 30.0, wp.z)
+	var out: Vector2i = W.cell_of(wp.x + 50.0, wp.z)
+	var sq: int = we.rain(wet_days[0])
+	check(sq > 250 and w.is_soil(far) and is_equal_approx(w.cell_info(far).wet, WE.RAIN_L), "a shower waters %d squares and turns sand 30 m away to soil" % sq)
+	check(w.cell_info(out).wet == 0.0, "but not 50 m away")
+	check(we.prompt(wk).contains("60% chance"), "station prompt: " + we.prompt(wk).replace("\n", " / "))
+	var dn = main.day_night
+	var day0: int = dn.day
+	var hour0: float = dn.hour
+	dn.day = we.rain_day
+	dn.hour = 8.0
+	main.player.global_position = wp + Vector3(5, 0, 0)
+	we._process(0.1)
+	check(we.is_raining() and we.raining_here() and we._rain.emitting, "it rains in the morning by the station")
+	main.player.global_position = wp + Vector3(120, 0, 0)
+	check(not we.raining_here(), "but not far from it")
+	dn.hour = 11.0
+	check(not we.is_raining(), "and the rain stops at %d:00" % int(WE.RAIN_END))
+	w.cells = {}
+	w.on_morning()
+	we.on_morning(dry_days[0])
+	check(not w.cells.has(far), "a dry morning brings no rain")
+	we.on_morning(wet_days[1])
+	check(w.is_soil(far) and we.rain_day == wet_days[1], "a rainy morning does (day %d)" % wet_days[1])
+	var sd: Dictionary = we.save_data()
+	we.load_data({})
+	check(we.rain_day == -1, "(reset)")
+	we.load_data(JSON.parse_string(JSON.stringify(sd)))
+	check(we.rain_day == wet_days[1], "the last rain is saved")
+	we.load_data({"rain_day": "x", "rain_wide": 3})
+	check(we.rain_day == -1 and not we.rain_wide, "a broken weather save falls back")
+	b.remove(wk)
+	# The ending.
+	_green_squares(w, int(ceil(land * 0.1)) + 1)
+	banners.clear()
+	g.check()
+	check(g.is_over() and ended[0] == 1 and we.rain_back and banners.size() == 1, "10%% green: the rain returns (%s)" % str(banners))
+	check(main.ending_ui.is_open() and main.get_tree().paused, "the ending screen opens")
+	check(we.rain_day == dn.day and we.rain_wide, "and the first rain falls over the whole desert")
+	main.ending_ui.close()
+	check(not main.ending_ui.is_open() and not main.get_tree().paused, "Keep playing goes on")
+	check(we.chance() >= WE.RAIN_BACK_CHANCE and lv.next_goal < 0.0 and not lv.hud_text().contains("/"), "rain comes without a station now, and the HUD has no next goal")
+	var c0: Vector2i = w.cells.keys()[0]
+	w.cells[c0].wet = 0.0
+	we.rain(dn.day)
+	check(is_equal_approx(w.cell_info(c0).wet, WE.RAIN_L), "rain falls on every green square on the map")
+	# Saving.
+	var gsd: Dictionary = g.save_data()
+	w.cells = {}
+	g.load_data({})
+	check(g.reached == 0 and not we.rain_back and sh.goal_level == 0, "(reset)")
+	_green_squares(w, int(ceil(land * 0.1)) + 1)
+	g.load_data(JSON.parse_string(JSON.stringify(gsd)))
+	check(g.reached == G.GOALS.size() and we.rain_back and ended[0] == 1 and not main.ending_ui.is_open(), "goals are saved, and loading doesn't show the ending again")
+	w.cells = {}
+	g.load_data(gsd)
+	check(g.reached == G.GOALS.size(), "reached milestones load even with the green gone")
+	_green_squares(w, int(ceil(land * 0.025)) + 1)
+	banners.clear()
+	g.load_data({})
+	check(g.reached == 2 and banners.is_empty(), "an older save gets the milestones its land reaches, quietly")
+	g.load_data({"reached": "lots"})
+	check(g.reached == 2, "a broken save falls back to what the land reaches")
+	var data: Dictionary = main.collect_save_data()
+	check(data.has("goals") and data.has("weather"), "the game saves goals and weather")
+	main.map_ui.toggle()
+	check(main.map_ui.is_open(), "the map opens with the goals panel")
+	main.map_ui.toggle()
+	# Peaceful mode.
+	check(game.DIFFICULTIES.has("peaceful"), "a peaceful difficulty")
+	game.difficulty = "peaceful"
+	check(game.is_peaceful(), "peaceful mode is on")
+	var wv = main.waves
+	var mu = main.mutants
+	var oa = main.oases
+	wv.peaceful = true
+	mu.peaceful = true
+	oa.peaceful = true
+	mu.clear()
+	check(mu.top_up(dn.day) == 0 and mu.alive().is_empty(), "no mutants roam the desert")
+	var wave0: int = wv.wave
+	var summaries: Array = []
+	wv.wave_ended.connect(func(s): summaries.append(s))
+	wv.on_dusk(dn.day)
+	wv.start_wave()
+	check(not wv.active and wv.wave == wave0 + 1 and mu.alive().is_empty(), "nightfall brings no wave")
+	var cash0: int = sh.cash
+	wv.on_dawn(dn.day + 1)
+	check(summaries.size() == 1 and summaries[0].get("quiet", false) and int(summaries[0].cash) > 0 and sh.cash > cash0, "a quiet night still pays at dawn ($%d)" % (sh.cash - cash0))
+	check(load("res://scripts/waves.gd").summary_lines(summaries[0])[0].begins_with("Dawn: a quiet night"), "the summary says so")
+	check(not wv.call_horde(Vector3.ZERO) and main.horde_prompt().contains("peaceful"), "the horde button does nothing: " + main.horde_prompt())
+	var ni := -1
+	for i in oa.count():
+		if oa.list[i].has_nest:
+			ni = i
+	oa.load_data({})
+	check(oa.wake_guards(0) == 0 and mu.alive().is_empty(), "no oasis guards come out")
+	if ni >= 0:
+		var gg: int = oa.list[ni].guards
+		oa.tick(100.0)
+		check(oa.list[ni].guards == gg, "nests don't breed")
+	main.inventory.add("wood", 6)
+	main.inventory.add("cloth", 2)
+	check(oa.claim_problem(0) == "", "an oasis can be claimed without fighting: '%s'" % oa.claim_problem(0))
+	wv.wave_ended.disconnect(wv.wave_ended.get_connections().back().callable)
+	game.difficulty = "normal"
+	wv.peaceful = false
+	mu.peaceful = false
+	oa.peaceful = false
+	oa.load_data({})
+	main.inventory.load_data({})
+	dn.day = day0
+	dn.hour = hour0
+	g.message.disconnect(g.message.get_connections().back().callable)
+	g.ended.disconnect(g.ended.get_connections().back().callable)
+	w.load_data({})
+	g.load_data({})
+	we.load_data({})
+	b.load_data([])

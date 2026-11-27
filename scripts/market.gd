@@ -21,6 +21,8 @@ const GOODS := {
 	"flowers": {"base": 5, "sat": 20, "swing": 0.4},
 	"dragon_fruit": {"base": 18, "sat": 10, "swing": 0.45},
 	"saffron": {"base": 80, "sat": 4, "swing": 0.5},
+	"olives": {"base": 3, "sat": 40, "swing": 0.3},
+	"prickly_pear": {"base": 5, "sat": 20, "swing": 0.35},
 }
 ## What the market sells: food at BUY_MARKUP times today's price.
 const FOR_SALE := ["millet", "melon", "dates", "dragon_fruit"]

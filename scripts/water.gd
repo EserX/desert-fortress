@@ -483,6 +483,30 @@ func soil_count() -> int:
 	return n
 
 
+## The green of every square added up (a fully green square counts 1).
+## Draws animals by day and mutants by night (v1.16).
+func green_total() -> float:
+	var g := 0.0
+	for c in cells:  # every watered square (a few hundred at most), every few seconds
+		g += float(cells[c].green)
+	return g
+
+
+## Litres taken from the main well since this morning's refill.
+func drawn_today() -> float:
+	return maxf(capacity - store, 0.0)
+
+
+## Breaks one pipe (a mutant tore it up). Returns true if it was there.
+func break_pipe(a: String, b: String) -> bool:
+	var n := pipes.size()
+	pipes = pipes.filter(func(p): return not (a in p and b in p))
+	if pipes.size() == n:
+		return false
+	_rebuild_pipes()
+	return true
+
+
 # --- Pipes and sprinklers ---------------------------------------------------------
 
 func pipes_of(id: String) -> Array:

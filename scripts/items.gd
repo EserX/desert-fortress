@@ -59,6 +59,9 @@ const ITEMS := {
 	"dates": {"name": "Dates", "weight": 0.2, "stack": 30},
 	"saffron": {"name": "Saffron", "weight": 0.01, "stack": 50},
 	"dragon_fruit": {"name": "Dragon fruit", "weight": 0.4, "stack": 20},
+	# v1.16 hunting: animals give raw meat, cooked at a burning fire pit.
+	"raw_meat": {"name": "Raw meat", "weight": 0.5, "stack": 10},
+	"cooked_meat": {"name": "Cooked meat", "weight": 0.4, "stack": 10},
 }
 
 ## What each kind of container can hold: item -> [min, max]. A negative min

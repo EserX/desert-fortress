@@ -38,6 +38,8 @@ const HordeStand = preload("res://scripts/horde_stand.gd")
 const Nav = preload("res://scripts/nav.gd")
 const Water = preload("res://scripts/water.gd")
 const Farming = preload("res://scripts/farming.gd")
+const Animals = preload("res://scripts/animals.gd")
+const Raids = preload("res://scripts/raids.gd")
 
 ## Testing aid (temporary): a green box by the spawn point that holds a full
 ## stack of every item and tops your cash up to $2000 each time you open it.
@@ -98,6 +100,8 @@ var mutants: Mutants
 var nav: Nav
 var water: Water
 var farming: Farming
+var animals: Animals
+var raids: Raids
 var waves: Waves
 var guns: Guns
 var traps: Traps
@@ -453,7 +457,8 @@ func _ready() -> void:
 	hud.shop = shop
 	waves.siren.connect(func():
 		if shop.upgrades.radio > 0:
-			hud.show_banner("Radio: wave %d tonight, %s." % [waves.wave + 1, Waves.mix_text(waves.preview_next())])
+			hud.show_banner("Radio: wave %d tonight, %s.%s" % [waves.wave + 1, Waves.mix_text(waves.preview_next()),
+				" Your water and green land draw %d of them." % waves.lure if waves.lure > 0 else ""])
 		else:
 			hud.show_banner("Siren! Mutants come at nightfall. Get back to the base."))
 	shop.upgraded.connect(func(_id): apply_upgrades())
@@ -478,6 +483,7 @@ func _ready() -> void:
 	farming.pickup.connect(hud.show_pickup)
 	farming.spilled.connect(loot.spawn_drop)
 	day_night.hour_changed.connect(farming.on_hour)
+	_setup_life()
 
 	day_night.day_started.connect(_on_morning)
 	day_night.day_started.connect(water.on_morning)
@@ -544,6 +550,7 @@ func _process(delta: float) -> void:
 		survival.tick(delta, day_night.hour, player.sprinting, in_shade)
 		mutants.night = day_night.is_night()
 		water.tick(delta, not day_night.is_night())
+		animals.tick(delta, day_night.hour)
 	if hud and not get_tree().paused:
 		var text := ""
 		if not inventory_ui.is_open() and not shop_ui.is_open():
@@ -1169,6 +1176,10 @@ func _prompt_for(id: String) -> String:
 		return building.site_prompt(int(id.trim_prefix("site:")), _cost_text, player.global_position)
 	if id.begins_with("pebble:"):
 		return "[E] Pick up stone"
+	if id.begins_with("animal:"):
+		return animals.prompt(id)
+	if id.begins_with("fire:"):
+		return building.prompt(id) + animals.cook_prompt(building.pieces.get(id.trim_prefix("fire:"), {}))
 	if id.begins_with("machine:"):
 		var mk := id.trim_prefix("machine:")
 		var mrec: Dictionary = building.pieces.get(mk, {})
@@ -1307,6 +1318,9 @@ func interact(id: String) -> void:
 	if id.begins_with("pebble:"):
 		pick_pebble(int(id.trim_prefix("pebble:")))
 		return
+	if id.begins_with("animal:"):
+		animals.butcher(id)
+		return
 	if id.begins_with("machine:"):
 		use_machine(id.trim_prefix("machine:"))
 		return
@@ -1353,6 +1367,8 @@ func interact(id: String) -> void:
 			hud.show_banner("No room in your bag" if w.get("water", 0.0) >= 1.0 else "The well is still filling")
 		return
 	if id.begins_with("fire:"):
+		if animals.cook(building.pieces.get(id.trim_prefix("fire:"), {})) > 0:
+			return
 		if not power.add_wood(id.trim_prefix("fire:"), inventory):
 			hud.show_banner("The fire pit is full" if inventory.count_of("wood") > 0 else "You need wood for the fire")
 		return
@@ -1689,6 +1705,47 @@ func _on_died() -> void:
 	death_screen.open(cause)
 
 
+## v1.16: animals drawn in by day (animals.gd) and the night side of water:
+## waves drawn to the main well and the fields (raids.gd).
+func _setup_life() -> void:
+	raids = Raids.new()
+	raids.name = "Raids"
+	raids.water = water
+	raids.farming = farming
+	raids.mutants = mutants
+	raids.waves = waves
+	add_child(raids)
+	mutants.raid = raids.raid_point
+	waves.lure_source = raids.lure
+	waves.night_goal = Raids.well_goal()
+	waves.goal_source = raids.goal_for
+	raids.message.connect(hud.show_banner)
+	day_night.night_started.connect(raids.on_night)
+	animals = Animals.new()
+	animals.name = "Animals"
+	animals.terrain = terrain
+	animals.water = water
+	animals.inventory = inventory
+	animals.player = player
+	animals.player_dead = func(): return survival == null or survival.dead
+	animals.world_seed = world_seed
+	animals.day = day_night.day
+	add_child(animals)
+	animals.pickup.connect(hud.show_pickup)
+	animals.message.connect(hud.show_banner)
+	animals.spilled.connect(loot.spawn_drop)
+	animals.attacked.connect(func(dmg, from, _kind):
+		if survival.dead:
+			return
+		survival.damage(dmg * Game.diff("damage"), "A jackal got you.")
+		var local: Vector3 = player.global_transform.basis.inverse() * (from - player.global_position)
+		hud.show_damage(atan2(local.x, -local.z)))
+	guns.fired.connect(animals.alert)
+	day_night.dusk_started.connect(animals.on_dusk)
+	day_night.night_started.connect(animals.on_night)
+	day_night.day_started.connect(animals.on_morning)
+
+
 ## A mutant clawed you: lose health, red flash on the side it came from.
 func _on_player_hit(dmg: float, from: Vector3, kind := "walker") -> void:
 	if survival.dead:
@@ -1851,6 +1908,7 @@ func collect_save_data() -> Dictionary:
 			"pebbles": taken_pebbles.keys().map(func(k): return [k, taken_pebbles[k]])},
 		"water": water.save_data(),
 		"farming": farming.save_data(),
+		"animals": animals.save_data(),
 	}
 
 
@@ -1910,6 +1968,8 @@ func apply_save_data(data: Dictionary) -> void:
 	water.load_data(wd if wd is Dictionary else {})  # after the sprinklers it pipes to
 	var fd = data.get("farming", {})
 	farming.load_data(fd if fd is Dictionary else {})
+	var ad = data.get("animals", {})
+	animals.load_data(ad if ad is Dictionary else {}, day_night.day)
 	waves.load_data(data.get("waves", {"wave": maxi(day_night.day - 1, 0)}))
 	guns.load_data(data.get("guns", {}))
 	# Older saves: a little starting cash plus pay for the nights already survived.

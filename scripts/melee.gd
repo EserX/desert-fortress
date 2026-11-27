@@ -180,7 +180,7 @@ func strike() -> Dictionary:
 	var cam: Camera3D = player.camera
 	var from := cam.global_position
 	var dir := -cam.global_transform.basis.z
-	var q := PhysicsRayQueryParameters3D.create(from, from + dir * w.reach, 0b1011, [player.get_rid()])
+	var q := PhysicsRayQueryParameters3D.create(from, from + dir * w.reach, 0b101011, [player.get_rid()])  # + animals (layer 6)
 	var hit := get_world_3d().direct_space_state.intersect_ray(q)
 	if hit.is_empty():
 		return {"kind": ""}

@@ -67,6 +67,8 @@ var shots := [
 	{"name": "57_farm", "pos": Vector3(24, 0, 29.5), "yaw": 0.0, "pitch": -0.42, "hour": 10.0, "farm": true},
 	{"name": "58_seeds", "pos": Vector3(19, 0, 25.2), "yaw": 0.0, "pitch": -0.6, "hour": 16.0, "farm": true, "seeds": true},
 	{"name": "59_market", "pos": Vector3(-0.6, 0, 4.2), "yaw": 0.5, "pitch": -0.2, "hour": 10.0, "market": true},
+	{"name": "60_animals", "pos": Vector3(24, 0, 40), "yaw": 0.0, "pitch": -0.5, "hour": 9.5, "animals": true},
+	{"name": "61_raid", "pos": Vector3(24, 0, 31), "yaw": 0.0, "pitch": -0.3, "hour": 17.2, "raid": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -189,6 +191,12 @@ func _process(_d: float) -> bool:
 			_greening_sample(s.get("can", false))
 		if s.get("farm", false):
 			_farm_sample(s.get("seeds", false))
+		if s.get("animals", false):
+			_animals_sample()
+		elif main.animals.all().size() > 0:
+			main.animals.clear()
+		if s.get("raid", false):
+			_raid_sample()
 		if s.get("horde", false):
 			main.building.load_data([])
 			main.building.sites_load_data([])
@@ -860,6 +868,47 @@ func _farm_sample(seeds: bool) -> void:
 		main.inventory.load_data({})
 		main.inventory.add("seed_millet", 6)
 		main.inventory.selected = 0
+
+
+## v1.16: gazelles, a jackal and birds on green land, and a gazelle to butcher.
+func _animals_sample() -> void:
+	_farm_sample(false)
+	var w = main.water
+	var an = main.animals
+	main.farming.load_data({})
+	for c in w.cells:
+		w.cells[c].green = 1.0
+	w.redraw()
+	an.clear()
+	var list := [["gazelle", Vector3(20, 0, 18)], ["gazelle", Vector3(27, 0, 14)], ["gazelle", Vector3(31, 0, 21)],
+		["jackal", Vector3(16, 0, 25)], ["bird", Vector3(23, 0, 27)], ["bird", Vector3(24.5, 0, 27.5)],
+		["bird", Vector3(28, 5.0, 24)], ["gazelle", Vector3(24, 0, 37.6)]]
+	for i in list.size():
+		var pos: Vector3 = list[i][1]
+		var a = an.spawn(list[i][0], pos, pos)
+		a.position.y += pos.y
+		a.rotation.y = 0.7 * i
+		a.set_physics_process(false)
+		if i == list.size() - 1:
+			a.take_hit(500.0, a.global_position, Vector3.RIGHT)
+
+
+## v1.16: a night wave trampling a field.
+func _raid_sample() -> void:
+	_farm_sample(false)
+	main.animals.clear()
+	main.mutants.clear()
+	var spots := [Vector3(17, 0, 21), Vector3(20.5, 0, 23.5), Vector3(25, 0, 20), Vector3(29, 0, 22.5)]
+	for i in spots.size():
+		var m = main.mutants.spawn(["walker", "runner", "walker", "brute"][i], spots[i])
+		m.make_hunter(spots[i], Vector3(3.2, 0, -2.8))
+		m.rotation.y = PI + 0.4 * i
+		m.set_physics_process(false)
+	for sp in [Vector2i(9, 10), Vector2i(10, 12), Vector2i(12, 10), Vector2i(14, 12)]:
+		if main.farming.plants.has(sp):
+			main.farming.plants[sp].dead = true
+	main.farming.redraw()
+	main.hud.show_banner("Mutants are trampling your fields!")
 
 
 func _machines_sample() -> void:

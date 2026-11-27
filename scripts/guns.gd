@@ -224,7 +224,7 @@ func shoot_ray(g: Dictionary) -> Dictionary:
 		var a := _rng.randf() * TAU
 		var r := sqrt(_rng.randf()) * spread
 		dir = dir.rotated(cam.global_transform.basis.x, sin(a) * r).rotated(cam.global_transform.basis.y, cos(a) * r)
-		var q := PhysicsRayQueryParameters3D.create(from, from + dir * g.range, 1 | 8, [player.get_rid()])
+		var q := PhysicsRayQueryParameters3D.create(from, from + dir * g.range, 1 | 8 | 32, [player.get_rid()])  # world, mutants, animals
 		var hit := get_world_3d().direct_space_state.intersect_ray(q)
 		if hit.is_empty():
 			continue

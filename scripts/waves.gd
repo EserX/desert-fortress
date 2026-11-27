@@ -31,6 +31,14 @@ var spawn_timer := 0.0
 var called := false
 var call_at := Vector3.ZERO
 var stats := {}             # this wave: kills, damage, lost, deaths
+## v1.16: extra mutants tonight drawn by the water drawn today and the green
+## land (worked out at dusk, see raids.gd), where night waves head and where
+## each group goes (func(group: int, rng) -> Vector3; some go for fields).
+var lure := 0
+var lure_source := Callable()
+var night_goal := Vector3.ZERO
+var goal_source := Callable()
+var _group := 0
 var _rng := RandomNumberGenerator.new()
 var _siren: AudioStreamPlayer
 
@@ -50,8 +58,9 @@ static func wave_size(n: int) -> int:
 ## The mutant types of night n, in arrival order. Night 1 is all walkers;
 ## runners join on night 2, spitters on night 3 and brutes on night 4,
 ## and their share grows each night.
-static func wave_mix(n: int, rng: RandomNumberGenerator, mult := 1.0) -> Array:
-	var size := maxi(2, int(round(wave_size(n) * mult)))
+## extra: mutants drawn on top by water and green land (v1.16).
+static func wave_mix(n: int, rng: RandomNumberGenerator, mult := 1.0, extra := 0) -> Array:
+	var size := maxi(2, int(round(mini(wave_size(n) + extra, MAX_SIZE) * mult)))
 	var weights := {"walker": 1.0}
 	if n >= 2:
 		weights.runner = minf(0.25 + 0.05 * n, 0.8)
@@ -83,7 +92,7 @@ static func wave_mix(n: int, rng: RandomNumberGenerator, mult := 1.0) -> Array:
 func preview_next() -> Array:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash("wave:%d:%d" % [world_seed, wave + 1])
-	return wave_mix(wave + 1, rng, size_mult)
+	return wave_mix(wave + 1, rng, size_mult, lure)
 
 
 ## "6 walkers, 2 runners, 1 brute"
@@ -99,19 +108,28 @@ static func mix_text(types: Array) -> String:
 
 
 func on_dusk(_day: int) -> void:
+	update_lure()
 	_siren.play()
 	siren.emit()
+
+
+## Works out tonight's lure from the water and the green land.
+func update_lure() -> void:
+	if lure_source.is_valid():
+		lure = int(lure_source.call())
 
 
 func start_wave() -> void:
 	wave += 1
 	active = true
 	called = false
+	_group = 0
+	update_lure()
 	_rng.seed = hash("wave:%d:%d" % [world_seed, wave])
-	queue = wave_mix(wave, _rng, size_mult)
+	queue = wave_mix(wave, _rng, size_mult, lure)
 	to_spawn = queue.size()
 	spawn_timer = 1.0
-	stats = {"kills": 0, "damage": 0.0, "lost": 0, "deaths": 0, "size": to_spawn, "bounty": 0, "pieces": 0}
+	stats = {"kills": 0, "damage": 0.0, "lost": 0, "deaths": 0, "size": to_spawn, "bounty": 0, "pieces": 0, "lure": lure}
 	wave_started.emit(wave, to_spawn)
 
 
@@ -165,12 +183,17 @@ func _spawn_group() -> void:
 	var side := out.cross(Vector3.UP)
 	var center := call_at if called else Vector3.ZERO
 	var radius := CALL_RADIUS if called else SPAWN_RADIUS
+	var base := call_at if called else night_goal
+	var goal := base
+	if not called and goal_source.is_valid():
+		goal = goal_source.call(_group, _rng)
+	_group += 1
 	for i in n:
 		var p := center + out * (radius + _rng.randf_range(-4, 4)) + side * (i - (n - 1) * 0.5) * 2.5
 		p = p.limit_length(SPAWN_RADIUS)
 		var kind: String = queue.pop_front() if not queue.is_empty() else "walker"
 		var m = mutants.spawn(kind, p)
-		m.make_hunter(center)
+		m.make_hunter(goal, base)
 	to_spawn -= n
 
 
@@ -246,6 +269,10 @@ static func summary_lines(s: Dictionary) -> Array:
 		lines.append("Building pieces lost: %d" % int(s.lost))
 	if int(s.get("deaths", 0)) > 0:
 		lines.append("Times you died: %d" % int(s.deaths))
+	if int(s.get("trampled", 0)) > 0:
+		lines.append("Plants trampled: %d" % int(s.trampled))
+	if int(s.get("pipes", 0)) > 0:
+		lines.append("Water pipes torn up: %d" % int(s.pipes))
 	if s.has("cash"):
 		lines.append("Cash earned: $%d" % s.cash)
 	return lines
@@ -253,7 +280,7 @@ static func summary_lines(s: Dictionary) -> Array:
 
 func save_data() -> Dictionary:
 	return {"wave": wave, "active": active, "to_spawn": to_spawn, "queue": queue, "stats": stats,
-		"called": called, "call_at": [call_at.x, call_at.z]}
+		"called": called, "call_at": [call_at.x, call_at.z], "lure": lure, "group": _group}
 
 
 func load_data(data: Dictionary) -> void:
@@ -266,10 +293,12 @@ func load_data(data: Dictionary) -> void:
 	while queue.size() < to_spawn:
 		queue.append("walker")  # saves from v0.14
 	called = bool(data.get("called", false))
+	lure = clampi(int(data.get("lure", 0)), 0, 99) if (data.get("lure", 0) is int or data.get("lure", 0) is float) else 0
+	_group = int(data.get("group", 0)) if (data.get("group", 0) is int or data.get("group", 0) is float) else 0
 	var ca: Array = data.get("call_at", [0.0, 0.0])
 	call_at = Vector3(float(ca[0]), 0, float(ca[1])) if ca.size() == 2 else Vector3.ZERO
 	stats = data.get("stats", {})
-	for k in ["kills", "lost", "deaths", "size", "bounty", "pieces"]:
+	for k in ["kills", "lost", "deaths", "size", "bounty", "pieces", "lure", "trampled", "pipes"]:
 		stats[k] = int(stats.get(k, 0))
 	stats.damage = float(stats.get("damage", 0.0))
 	spawn_timer = 2.0

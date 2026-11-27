@@ -12,7 +12,28 @@ var title: Node
 var game: Node
 
 
+## Collects every error Godot reports while the tests run (script errors
+## included), so a script that fails to compile or crashes fails the run even
+## when the checks after it still pass.
+class ErrorCatcher extends Logger:
+	var errors: Array[String] = []
+	var _lock := Mutex.new()
+
+	func _log_error(function: String, file: String, line: int, code: String, rationale: String,
+			_editor_notify: bool, error_type: int, _script_backtraces: Array[ScriptBacktrace]) -> void:
+		_lock.lock()
+		errors.append("[%d] %s (%s:%d in %s)" % [error_type, rationale if rationale != "" else code, file, line, function])
+		_lock.unlock()
+
+	func _log_message(_message: String, _error: bool) -> void:
+		pass
+
+
+var catcher := ErrorCatcher.new()
+
+
 func _initialize() -> void:
+	OS.add_logger(catcher)
 	print("== Desert Fortress tests ==")
 	game = root.get_node("Game")
 	main = load("res://scenes/main.tscn").instantiate()
@@ -3010,7 +3031,14 @@ func _process(_delta: float) -> bool:
 			_check_knockback()
 		4010:
 			_check_physics()
-		4020:
+			_test_life()
+			_start_life()
+		4070:
+			_check_life()
+		4080:
+			for e in catcher.errors:
+				print("  ERROR ", e)
+			check(catcher.errors.is_empty(), "Godot reported no errors while the tests ran (%d)" % catcher.errors.size())
 			if failures.is_empty():
 				print("== ALL TESTS PASSED ==")
 				quit(0)
@@ -3424,3 +3452,286 @@ func _test_market() -> void:
 	ui.close()
 	inv.load_data({})
 	m.load_data({}, main.day_night.day)
+
+
+## v1.16: animals drawn by green land and water, hunting, cooking, and mutants
+## drawn to the main well and the fields.
+func _test_life() -> void:
+	var an = main.animals
+	var rd = main.raids
+	var w = main.water
+	var f = main.farming
+	var inv = main.inventory
+	var player = main.player
+	var A = load("res://scripts/animals.gd")
+	var Animal = load("res://scripts/animal.gd")
+	var R = load("res://scripts/raids.gd")
+	var W = load("res://scripts/water.gd")
+	var F = load("res://scripts/farming.gd")
+	var Waves = load("res://scripts/waves.gd")
+	var Items = load("res://scripts/items.gd")
+	main.building.load_data([])
+	main.mutants.clear()
+	an.clear()
+	inv.load_data({})
+	w.load_data({})
+	f.load_data({})
+	main.day_night.restore(main.day_night.day, 10.0)
+	player.position = Vector3(0, main.terrain.surface_height(0, 60) + 0.1, 60)
+	# How many animals the land draws.
+	check(A.wanted(0.0).values().all(func(n): return n == 0), "dead sand draws no animals")
+	var wd: Dictionary = A.wanted(12.0)
+	check(wd.gazelle == 3 and wd.jackal == 1 and wd.bird == 6, "12 green draws 3 gazelles, a jackal and 6 birds (%s)" % str(wd))
+	var big: Dictionary = A.wanted(500.0)
+	check(big.gazelle + big.jackal == A.MAX_GROUND and big.bird == A.MAX_BIRDS, "and no more than %d grazers and %d birds" % [A.MAX_GROUND, A.MAX_BIRDS])
+	check(an.try_spawn(10.0) == "" and an.alive().is_empty(), "no green, no animals")
+	# Green some land by the base.
+	for x in range(2, 6):
+		for z in range(2, 5):
+			var c := Vector2i(x, z)
+			w.water_cell(c, W.SOIL_NEED)
+			w.cells[c].green = 1.0
+	check(is_equal_approx(w.green_total(), 12.0) and an.life_score() >= 12.0, "12 green squares give a life score of %.1f" % an.life_score())
+	check(an.try_spawn(20.0) == "", "no animals come in at night")
+	an.day = 4
+	an.spawned_today = 0
+	check(an.try_spawn(10.0) == "gazelle" and an.count_of("gazelle") == 1, "by day a gazelle comes in")
+	var g = an.alive()[0]
+	var first: Vector3 = g.position
+	var first_goal: Vector3 = g.goal
+	check(Vector2(g.position.x, g.position.z).length() > A.SPAWN_MIN - 5.0, "from out in the desert (%.0f m)" % Vector2(g.position.x, g.position.z).length())
+	var well: Vector3 = R.well_goal()
+	var on_green: bool = w.cells.keys().any(func(c): return W.cell_center(c).distance_to(Vector2(g.goal.x, g.goal.z)) < 4.5)
+	check(on_green or Vector2(g.goal.x - well.x, g.goal.z - well.z).length() < 6.0, "heading for the green land or the main well")
+	an.clear()
+	an.spawned_today = 0
+	an.try_spawn(10.0)
+	check(an.alive()[0].position.is_equal_approx(first) and an.alive()[0].goal.is_equal_approx(first_goal), "the same world and day bring the same animal")
+	var kinds := []
+	for i in 12:
+		var k: String = an.try_spawn(10.0)
+		if k != "":
+			kinds.append(k)
+	var want: Dictionary = A.wanted(an.life_score())
+	check(an.count_of("gazelle") == want.gazelle and an.count_of("jackal") == want.jackal and an.count_of("bird") == want.bird and want.bird % A.FLOCK == 0,
+		"then the rest come in (%s), birds in flocks of %d" % [", ".join(kinds), A.FLOCK])
+	check(an.try_spawn(10.0) == "", "until the land is full")
+	# Shy gazelles, bold jackals.
+	an.clear()
+	var ga = an.spawn("gazelle", Vector3(30, 0, 60), Vector3(30, 0, 40))
+	ga.set_physics_process(false)
+	player.position = Vector3(30, ga.position.y, 50)
+	player.crouching = true
+	ga._decide()
+	check(ga.state != Animal.State.FLEE, "crouching, you can creep 10 m from a gazelle")
+	player.crouching = false
+	ga._decide()
+	check(ga.state == Animal.State.FLEE, "standing up, it bolts")
+	var ja = an.spawn("jackal", Vector3(34, 0, 50), Vector3(30, 0, 40))
+	ja.set_physics_process(false)
+	ja._decide()
+	check(ja.state == Animal.State.ATTACK, "a jackal comes for you when you're close")
+	main.survival.health = 100.0
+	ja.global_position = player.global_position + Vector3(1.0, 0, 0)
+	ja._physics_process(0.05)
+	check(main.survival.health < 100.0, "and bites (health %d)" % int(main.survival.health))
+	ja.take_hit(25.0, ja.global_position, Vector3.FORWARD)
+	ja._decide()
+	check(ja.state == Animal.State.FLEE, "hurt badly, it runs off")
+	var bird = an.spawn("bird", Vector3(36, 0, 70), Vector3(30, 0, 40))
+	bird.set_physics_process(false)
+	check(an.alert(Vector3(36, 0, 72), 30.0) >= 1 and bird.state == Animal.State.FLEE, "a gunshot scares the birds off")
+	# Hunting: a body to butcher.
+	ga.take_hit(200.0, ga.global_position, Vector3.FORWARD)
+	check(ga.is_dead() and ga.collision_layer == Animal.DEAD_LAYER, "a shot gazelle falls over")
+	check(an.prompt("animal:" + ga.name) == "[E] Butcher the gazelle (3 raw meat)", "its prompt: " + an.prompt("animal:" + ga.name))
+	check(main._prompt_for("animal:" + ga.name).begins_with("[E] Butcher"), "the crosshair prompt shows it")
+	main.interact("animal:" + ga.name)
+	check(inv.count_of("raw_meat") == 3 and an.find(ga.name) == null, "butchering gives 3 raw meat and the body is gone")
+	check(not main.survival.can_consume("raw_meat") and main.survival.can_consume("cooked_meat"), "raw meat must be cooked before you can eat it")
+	check(Items.ITEMS.has("raw_meat") and main.test_items().has("cooked_meat"), "meat is in the test boxes")
+	# Cooking at a fire pit.
+	var b = main.building
+	var ev: Dictionary = b.evaluate("fire_pit", {"kind": "obj", "cx": -3, "cz": 6, "dir": 0, "level": 0})
+	var pk: String = b.place("fire_pit", {"kind": "obj", "cx": -3, "cz": 6, "dir": 0, "level": 0}, ev.y)
+	var rec: Dictionary = b.pieces[pk]
+	check(main._prompt_for("fire:" + pk).contains("Light the fire to cook"), "a cold fire can't cook: " + main._prompt_for("fire:" + pk).replace("\n", " / "))
+	inv.add("wood", 1)
+	main.interact("fire:" + pk)
+	check(rec.burn > 0.0 and inv.count_of("raw_meat") == 3, "E with wood lights it (the meat waits)")
+	var burn: float = rec.burn
+	check(main._prompt_for("fire:" + pk).contains("[E] Cook 3 raw meat"), "then: " + main._prompt_for("fire:" + pk).replace("\n", " / "))
+	main.interact("fire:" + pk)
+	check(inv.count_of("raw_meat") == 0 and inv.count_of("cooked_meat") == 3, "E cooks the meat")
+	check(is_equal_approx(rec.burn, burn - 3 * A.COOK_EACH), "cooking burns the fire down")
+	main.survival.food = 20.0
+	main.survival.consume("cooked_meat")
+	check(main.survival.food > 55.0, "cooked meat is a good meal (food %d)" % int(main.survival.food))
+	# Dusk and night.
+	var gz = an.spawn("gazelle", Vector3(20, 0, 20), Vector3(10, 0, 10))
+	var dead = an.spawn("gazelle", Vector3(22, 0, 20), Vector3(10, 0, 10))
+	dead.take_hit(500.0, dead.global_position, Vector3.FORWARD)
+	an.on_dusk()
+	check(gz.state == Animal.State.LEAVE, "at dusk the animals head back out")
+	# Saving.
+	var data: Dictionary = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	var n_all: int = an.all().size()
+	an.clear()
+	main.apply_save_data(data)
+	main.day_night.restore(main.day_night.day, 10.0)
+	check(an.all().size() == n_all and an.all().filter(func(a): return a.is_dead()).size() == 1, "animals and bodies are saved (%d)" % an.all().size())
+	check(an.alive().any(func(a): return a.state == Animal.State.LEAVE), "and still leaving")
+	an.load_data({"list": [{"type": "unicorn", "pos": [0, 0, 0], "goal": [0, 0]}, {"type": "gazelle", "pos": "x"}, 7,
+		{"type": "jackal", "pos": [1, 0, 1], "goal": [0, 0], "hp": "lots"}], "spawned": "many"}, main.day_night.day)
+	check(an.all().size() == 1 and is_equal_approx(an.all()[0].health, 40.0), "broken animal entries are skipped or fixed")
+	data.erase("animals")
+	main.apply_save_data(data)
+	main.day_night.restore(main.day_night.day, 10.0)
+	check(an.all().is_empty(), "older saves load with no animals")
+	an.on_dusk()
+	an.spawn("gazelle", Vector3(20, 0, 20), Vector3(10, 0, 10))
+	an.on_night()
+	check(an.alive().is_empty(), "by nightfall they're gone")
+	an.clear()
+	# --- The night side: the lure, the well, the fields and pipes ---
+	check(R.lure_for(0.0, 0.0) == 0 and R.lure_for(80.0, 8.5) == 4 and R.lure_for(5000.0, 0.0) == R.LURE_MAX,
+		"water drawn and green land draw extra mutants (80 L + 8.5 green = 4, at most %d)" % R.LURE_MAX)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 5
+	check(Waves.wave_mix(1, rng, 1.0, 3).size() == Waves.wave_size(1) + 3, "the lure adds to the wave")
+	w.store = w.capacity - 80.0
+	check(rd.lure() == 2 + 3, "today: 80 L drawn and 12 green squares draw 5 (%d)" % rd.lure())
+	var wv = main.waves
+	wv.on_dusk(main.day_night.day)
+	check(wv.lure == 5 and wv.preview_next().size() == Waves.wave_size(wv.wave + 1) + 5, "the siren works out tonight's lure")
+	main.hud.banner.text = ""
+	main.shop.upgrades.radio = 1
+	wv.siren.emit()
+	check(main.hud.banner.text.contains("draw 5 of them"), "the radio says so: " + main.hud.banner.text)
+	main.shop.upgrades.radio = 0
+	# Plants for the raiders.
+	inv.add("seed_millet", 10)
+	var spots: Array = []
+	for x in [9.0, 11.0, 13.0]:
+		var p := Vector3(x, 0, 9.0)
+		p.y = main.terrain.surface_height(p.x, p.z)
+		check(f.plant(p, "millet") == "", "millet planted at %.0f, 9" % x)
+		spots.append(F.spot_of(p.x, p.z))
+	main.mutants.clear()
+	main.day_night.restore(main.day_night.day, 21.0)
+	wv.start_wave()
+	check(wv.remaining() == Waves.wave_size(wv.wave) + 5, "the night wave is %d bigger (%d)" % [5, wv.remaining()])
+	check(wv.stats.lure == 5, "and the wave remembers why")
+	for i in 30:
+		wv._process(1.0)
+	var homes := {}
+	for m in wv.hunters():
+		var to_well: bool = Vector2(m.home.x - well.x, m.home.z - well.z).length() < 0.1
+		var to_field: bool = spots.any(func(s): return F.spot_center(s).distance_to(Vector2(m.home.x, m.home.z)) < 0.1)
+		homes["well" if to_well else ("field" if to_field else "other")] = true
+		if not m.base_goal.is_equal_approx(well):
+			homes.bad_base = true
+	check(homes.has("well") and homes.has("field") and not homes.has("other") and not homes.has("bad_base"),
+		"night waves march on the main well, and some groups go for the fields (%s)" % str(homes.keys()))
+	var saved: Dictionary = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	var raider = wv.hunters()[0]
+	# Wrecking: a wave mutant at the base picks the nearest plant.
+	raider.global_position = Vector3(10.0, main.terrain.surface_height(10, 12), 12.0)
+	raider.home = raider.global_position
+	raider._wreck_t = 0.0
+	check(raider._wreck_target(0.1) and raider._wreck_key == raider.RAID_KEY, "a wave mutant goes for the nearest plant")
+	var c0: Vector2 = F.spot_center(spots[0])
+	check(Vector2(raider._wander_to.x, raider._wander_to.z).distance_to(F.spot_center(spots[0])) < 0.1 \
+			or Vector2(raider._wander_to.x, raider._wander_to.z).distance_to(F.spot_center(spots[1])) < 0.1, "the closest one")
+	# Trampling.
+	for m in wv.hunters():
+		if m != raider:
+			m.global_position = Vector3(-60, 0, -60)
+	raider.global_position = Vector3(c0.x, raider.global_position.y, c0.y)
+	rd.trampled = 0
+	rd.tick(0.5)
+	check(not f.plants[spots[0]].dead, "a moment on a plant doesn't kill it")
+	rd.tick(0.5)
+	check(f.plants[spots[0]].dead and rd.trampled == 1 and int(wv.stats.trampled) == 1, "standing on it tramples it dead")
+	check(not f.plants[spots[1]].dead, "the plant next to it is fine")
+	# Pipes.
+	main.shop.cash = 2000
+	main.shop.buy_upgrade("pump")
+	var ss := {"kind": "obj", "cx": -4, "cz": 4, "dir": 0}
+	var sev: Dictionary = b.evaluate("sprinkler", ss)
+	var sk: String = b.place("sprinkler", ss, sev.y)
+	check(w.connect_pipe("main", sk), "a pipe from the well to a sprinkler")
+	var mid: Vector3 = (w.pipe_anchor("main") + w.pipe_anchor(sk)) * 0.5
+	raider.global_position = Vector3(mid.x, raider.global_position.y, mid.z)
+	check(rd.raid_point(raider.global_position).distance_to(Vector3(mid.x, 0, mid.z)) < 0.2, "pipes are raid targets too")
+	rd.tick(1.0)
+	check(w.pipes.size() == 1, "a moment on a pipe doesn't break it")
+	rd.tick(1.0)
+	check(w.pipes.is_empty() and rd.pipes_broken == 1 and int(wv.stats.pipes) == 1, "a mutant on a pipe tears it up")
+	wv.stats.size = 1
+	check("Plants trampled: 1" in Waves.summary_lines(wv.stats) and "Water pipes torn up: 1" in Waves.summary_lines(wv.stats), "the summary counts them")
+	# Nothing left to wreck: on to the well.
+	for s in f.plants.keys():
+		f.plants[s].dead = true
+	raider.home = Vector3(40, 0, 40)
+	raider.global_position = Vector3(40, raider.global_position.y, 40)
+	raider._wreck_t = 0.0
+	check(not raider._wreck_target(0.1) and raider.home.is_equal_approx(well), "a field wrecked, they move on to the main well")
+	# Saving a wave with its lure and raiders.
+	main.apply_save_data(saved)
+	check(wv.active and wv.lure == 5 and wv.hunters().all(func(m): return m.base_goal.is_equal_approx(well)), "the lure and where they're headed are saved")
+	var old: Dictionary = saved.duplicate(true)
+	old.waves.erase("lure")
+	for e in old.mutants.list:
+		e.erase("base")
+	main.apply_save_data(old)
+	check(wv.lure == 0 and wv.hunters().all(func(m): return m.base_goal.is_equal_approx(m.home)), "older saves load with no lure")
+	wv.end_wave(false)
+	main.mutants.clear()
+	f.load_data({})
+	w.load_data({})
+	b.load_data([])
+	main.day_night.restore(main.day_night.day, 10.0)
+
+
+var life := {}
+
+## Animals moving in real frames, and the weapons hitting them.
+func _start_life() -> void:
+	var an = main.animals
+	var player = main.player
+	an.clear()
+	main.day_night.restore(main.day_night.day, 10.0)
+	player.position = Vector3(-60, main.terrain.surface_height(-60, 60) + 0.1, 60)
+	player.rotation.y = 0.0
+	player.head.rotation.x = 0.0
+	life.walker = an.spawn("gazelle", Vector3(40, 0, 60), Vector3(40, 0, 20))
+	life.walker_d = life.walker.position.distance_to(Vector3(40, life.walker.position.y, 20))
+	life.bird = an.spawn("bird", Vector3(50, 0, 60), Vector3(50, 0, 0))
+	# A gazelle right in front of you (held still), for the gun.
+	var eye: Vector3 = player.camera.global_position
+	life.target = an.spawn("gazelle", Vector3(eye.x, 0, eye.z - 6.0), Vector3(eye.x, 0, eye.z - 6.0))
+	life.target.set_physics_process(false)
+	life.target.position.y = eye.y - 1.0
+
+
+func _check_life() -> void:
+	var player = main.player
+	var w = life.walker
+	var d: float = w.position.distance_to(Vector3(40, w.position.y, 20))
+	check(d < life.walker_d - 1.5, "a gazelle walks in towards the green (%.1f m nearer)" % (life.walker_d - d))
+	var g: float = main.terrain.surface_height(life.bird.position.x, life.bird.position.z)
+	check(life.bird.position.y > g + 2.0, "birds fly in (%.1f m up)" % (life.bird.position.y - g))
+	var t = life.target
+	var hp: float = t.health
+	var gun = main.guns
+	main.inventory.add("rifle", 1)
+	gun.set_item("rifle")
+	gun.mag.rifle = 5
+	gun.raise_t = 0.0
+	gun._cooldown = 0.0
+	gun.ads_amount = 1.0
+	var res: Dictionary = gun.try_fire()
+	check(res.get("node") == t and t.health < hp, "a rifle shot hits the gazelle (%s)" % str(res.get("kind", "")))
+	gun.set_item("")
+	main.animals.clear()

@@ -1,8 +1,8 @@
 # Desert Fortress
 
-A 3D low-poly survival and fortress-defence game for Linux, made with Godot 4.5. Scavenge the desert by day, build and arm a fortress around the flag, and survive a bigger mutant wave every night. Each night pays cash you spend at the shop terminal on supplies, weapons, drone deliveries and base upgrades. Now also: turning the desert green from a main well at the centre, farming it and selling the harvest at the market; animals, oases and more are coming (see the roadmap).
+A 3D low-poly survival and fortress-defence game for Linux, made with Godot 4.5. Scavenge the desert by day, build and arm a fortress around the flag, and survive a bigger mutant wave every night. Each night pays cash you spend at the shop terminal on supplies, weapons, drone deliveries and base upgrades. Now also: turning the desert green from a main well at the centre, farming it and selling the harvest at the market, and hunting the animals the green land draws in (by night the water draws the mutants); oases and more are coming (see the roadmap).
 
-**Current version: v1.15.0.** See [ROADMAP.md](ROADMAP.md) for the plan and [DEVLOG.md](DEVLOG.md) for what changed in each update.
+**Current version: v1.16.0.** See [ROADMAP.md](ROADMAP.md) for the plan and [DEVLOG.md](DEVLOG.md) for what changed in each update.
 
 ## Play (Linux Mint)
 
@@ -76,7 +76,9 @@ If `git pull` complains about untracked `.uid` files, they are safe to delete.
 
 Eat millet, melons, dates and dragon fruit with **F**. Sell the harvest at the market (shop terminal, Market page): exotic crops and flowers bring the most. Digging up a bed uproots its plant.
 
-**Nights.** At 18:30 a siren warns you. At 20:00 a wave of mutants comes in from the edge of the map and marches on the base. Close to you they know where you are, walls or not. They find their way round your walls: through an open gate if there is one, otherwise they all go for the weakest wall or gate (a damaged or wooden one before stone), and they walk round deep trenches and, if it's short, round barbed wire and spikes. Brutes don't bother and come straight through. The wave ends when all are dead or at dawn. A summary shows your kills and your pay.
+**Animals and hunting.** Water brings life. Between 07:00 and 17:00 animals come in from the desert to graze on your green land and drink at the main well: the greener the land round the base, the more come (about one gazelle for every 3 fully green squares, a jackal for every four grazers, birds in flocks of three). **Gazelles** bolt when you get within 20 m (10 m crouching), so creep up or use the rifle. **Jackals** come for you and bite when you get close, and run when badly hurt. **Birds** peck on the green and fly off when disturbed. Gunshots scare everything nearby. Look at a dead animal and press **E** to butcher it for **raw meat** (a gazelle gives 3). Raw meat has to be cooked: light a **fire pit** with wood, then **E** with raw meat cooks up to 5 pieces at once (each burns 10 seconds of the fire). **Cooked meat** is a big meal (F). At dusk the animals head back out into the desert.
+
+**Nights.** At 18:30 a siren warns you. At 20:00 a wave of mutants comes in from the edge of the map and marches on the **main well**. The water draws them: on top of the night's usual number comes one more mutant for every 40 L you drew from the main well that day and for every 4 fully green squares (12 more at most; the radio says how many). Every third group goes for your **fields** instead, and any wave mutant at the base goes for the nearest plant or water pipe as well as your walls: a mutant standing on a plant tramples it, and one on a pipe tears it up in a couple of seconds. The night's summary counts what they wrecked. Close to you they know where you are, walls or not. They find their way round your walls: through an open gate if there is one, otherwise they all go for the weakest wall or gate (a damaged or wooden one before stone), and they walk round deep trenches and, if it's short, round barbed wire and spikes. Brutes don't bother and come straight through. The wave ends when all are dead or at dawn. A summary shows your kills and your pay.
 
 | Mutant | What to know |
 |---|---|

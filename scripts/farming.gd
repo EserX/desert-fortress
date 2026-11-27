@@ -425,6 +425,20 @@ func on_tally() -> void:
 	_dirty = true
 
 
+## A mutant walks over the plant at s (v1.16): it loses `amount` health.
+## Returns true if that killed it.
+func trample(s: Vector2i, amount: float) -> bool:
+	if not plants.has(s) or plants[s].dead:
+		return false
+	var e: Dictionary = plants[s]
+	e.hp -= amount
+	if e.hp > 0.001:
+		return false
+	e.dead = true
+	_dirty = true
+	return true
+
+
 ## Dug or filled ground uproots the plants on it.
 func on_ground_changed(area: Rect2) -> void:
 	var grown := area.grow(0.4)

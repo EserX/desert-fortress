@@ -24,6 +24,7 @@ const CONSUMABLES := {
 	"melon": {"food": 15.0, "water": 25.0},
 	"dates": {"food": 20.0, "water": 2.0},
 	"dragon_fruit": {"food": 12.0, "water": 12.0},
+	"cooked_meat": {"food": 40.0},
 	"bandage": {"health": 30.0},
 	"medkit": {"health": 70.0},
 }

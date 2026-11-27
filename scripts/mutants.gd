@@ -23,6 +23,8 @@ var world_seed := 1337
 var night := false
 var kills := 0
 var health_mult := 1.0  # difficulty
+## Raids' raid_point (plants and pipes for wave mutants to wreck), given to each mutant.
+var raid := Callable()
 var _sounds := {}
 var _count := 0
 var _rng := RandomNumberGenerator.new()
@@ -55,6 +57,7 @@ func spawn(kind: String, pos: Vector3, hp := -1.0) -> Mutant:
 	m.building = building
 	m.terrain = terrain
 	m.nav = nav
+	m.raid = raid
 	m.piece_hit.connect(func(k): piece_hit.emit(k))
 	m.sounds = _sounds
 	m.rotation.y = _rng.randf() * TAU
@@ -147,7 +150,8 @@ func load_data(data: Dictionary) -> void:
 		if h.size() == 3:
 			m.home = Vector3(h[0], h[1], h[2])
 		if d.get("hunter", false):
-			m.make_hunter(m.home)
+			var b = d.get("base", [])
+			m.make_hunter(m.home, Vector3(float(b[0]), float(b[1]), float(b[2])) if b is Array and b.size() == 3 else Vector3.INF)
 
 
 ## Generated voices: a low groan, a snarl when it lunges, a grunt when hit,

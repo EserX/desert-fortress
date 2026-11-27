@@ -67,6 +67,8 @@ const STAGGER_MAX := 1.5
 ## Falls higher than this hurt, by FALL_DAMAGE per metre more.
 const FALL_SAFE := 2.5
 const FALL_DAMAGE := 22.0
+## _wreck_key while it goes for a plant or pipe rather than a piece.
+const RAID_KEY := "#raid"
 
 signal attacked(damage: float, from: Vector3, kind: String)
 ## Lobbed a glob of acid (the manager adds it to the world).
@@ -83,6 +85,12 @@ var state := State.WANDER
 var home := Vector3.ZERO
 ## Part of a night wave: marches to the base instead of idling, sees further.
 var hunter := false
+## Where a wave mutant ends up when there is nothing left to wreck where it
+## was sent (the main well; v1.16 raiders are sent to a field first).
+var base_goal := Vector3.ZERO
+## func(from: Vector3) -> Vector3: the nearest plant or pipe to wreck
+## (Vector3.INF if none). Set by the manager from raids.gd.
+var raid := Callable()
 var target: Node3D            # the player
 var target_dead := func(): return false
 var building  # Building
@@ -237,10 +245,12 @@ func _box(parent: Node3D, size: Vector3, pos: Vector3, mat: Material) -> void:
 	parent.add_child(mi)
 
 
-## Joins a night wave heading for the base at goal.
-func make_hunter(goal: Vector3) -> void:
+## Joins a night wave heading for goal; base is where it goes once there is
+## nothing left to wreck there (the goal itself when not given).
+func make_hunter(goal: Vector3, base := Vector3.INF) -> void:
 	hunter = true
 	home = goal
+	base_goal = goal if base == Vector3.INF else base
 	_wander_to = goal
 
 
@@ -440,7 +450,7 @@ func _physics_process(delta: float) -> void:
 				speed = stats.march
 				_wander_to = home
 				want = to.normalized()
-				if Vector2(home.x, home.z).length() < 4.0:
+				if Vector2(home.x, home.z).length() < 6.0:  # the flag or the main well beside it
 					want = _nav_want("base", want)
 			elif hunter and _wreck_target(delta):
 				# At the base with nobody about: go and wreck the nearest building.
@@ -645,26 +655,35 @@ func _step_up(want: Vector3) -> bool:
 	return true
 
 
-## A wave mutant at the base picks the nearest building piece (not a trap)
-## to tear down and heads for it. Returns false when there is none.
+## A wave mutant at the base picks the nearest building piece (not a trap),
+## plant or water pipe to tear down and heads for it. Returns false when there
+## is none (then it heads on to base_goal, the main well).
 func _wreck_target(delta: float) -> bool:
-	if building == null:
-		return false
 	_wreck_t -= delta
-	if _wreck_t > 0.0 and _wreck_key != "" and building.pieces.has(_wreck_key):
+	if _wreck_t > 0.0 and (_wreck_key == RAID_KEY or (_wreck_key != "" and building and building.pieces.has(_wreck_key))):
 		return true
 	_wreck_t = 2.0
 	_wreck_key = ""
 	var best := 30.0
-	for key in building.pieces:
-		var rec: Dictionary = building.pieces[key]
-		if building.PIECES[rec.type].get("trap", false) or rec.slot.level > 0:
-			continue
-		var d: float = rec.node.global_position.distance_to(global_position)
-		if d < best:
-			best = d
-			_wreck_key = key
+	if building:
+		for key in building.pieces:  # every piece (a few hundred), every 2 s per wave mutant at the base
+			var rec: Dictionary = building.pieces[key]
+			if building.PIECES[rec.type].get("trap", false) or rec.slot.level > 0:
+				continue
+			var d: float = rec.node.global_position.distance_to(global_position)
+			if d < best:
+				best = d
+				_wreck_key = key
+	if raid.is_valid():
+		var p: Vector3 = raid.call(global_position)
+		if p != Vector3.INF and Vector2(p.x - global_position.x, p.z - global_position.z).length() < best:
+			_wreck_key = RAID_KEY
+			_wander_to = p
+			return true
 	if _wreck_key == "":
+		if Vector2(home.x - base_goal.x, home.z - base_goal.z).length() > 1.0:
+			home = base_goal  # the field is gone: on to the well
+			_wander_to = home
 		return false
 	_wander_to = building.pieces[_wreck_key].node.global_position
 	return true
@@ -800,4 +819,5 @@ func _play(name: String, pitch: float) -> void:
 
 
 func save_data() -> Dictionary:
-	return {"type": type, "pos": [position.x, position.y, position.z], "home": [home.x, home.y, home.z], "hp": health, "hunter": hunter}
+	return {"type": type, "pos": [position.x, position.y, position.z], "home": [home.x, home.y, home.z], "hp": health, "hunter": hunter,
+		"base": [base_goal.x, base_goal.y, base_goal.z]}

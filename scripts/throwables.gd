@@ -195,15 +195,52 @@ func _on_body(other: Node, rec: Dictionary) -> void:
 		return
 	match rec.item:
 		"stone":
-			var t := _target_of(other)
-			if t and not rec.hit.has(t.get_instance_id()) and rec.speed >= STONE_HIT_SPEED:
-				rec.hit[t.get_instance_id()] = true
-				var f := clampf(rec.speed / float(KINDS.stone.speed), 0.0, 1.0)
-				var dir: Vector3 = rec.node.linear_velocity if rec.node.linear_velocity.length() > 0.1 else t.global_position - rec.node.global_position
-				t.take_hit(KINDS.stone.damage * f, rec.node.global_position, dir, KINDS.stone.knock * f, KINDS.stone.stagger * f)
-				hit_landed.emit("target")
+			_stone_hit(rec, _target_of(other))
 		"molotov":
 			shatter(rec)
+
+
+## A flying stone meets a living thing `t` (or null): it hurts it once, if the
+## stone was going fast enough. Called from the contact report and the sweep.
+func _stone_hit(rec: Dictionary, t: Node3D) -> void:
+	if t == null or rec.hit.has(t.get_instance_id()) or rec.speed < STONE_HIT_SPEED:
+		return
+	rec.hit[t.get_instance_id()] = true
+	var f := clampf(rec.speed / float(KINDS.stone.speed), 0.0, 1.0)
+	var dir: Vector3 = rec.node.linear_velocity if rec.node.linear_velocity.length() > 0.1 else t.global_position - rec.node.global_position
+	t.take_hit(KINDS.stone.damage * f, rec.node.global_position, dir, KINDS.stone.knock * f, KINDS.stone.stagger * f)
+	hit_landed.emit("target")
+
+
+## Before the physics step, sweeps a fast stone's shape along the way it is
+## about to move and hits the living thing in its path. The contact report
+## alone missed about one full-speed throw in a few hundred: continuous
+## collision can turn a stone aside off a mutant without reporting the touch.
+func _sweep_stone(rec: Dictionary, delta: float) -> void:
+	var body: RigidBody3D = rec.node
+	var v := body.linear_velocity
+	if rec.speed < STONE_HIT_SPEED or v.length() < STONE_HIT_SPEED or body.get_child_count() == 0:
+		return
+	var col := body.get_child(0) as CollisionShape3D
+	if col == null or col.shape == null:
+		return
+	var q := PhysicsShapeQueryParameters3D.new()
+	q.shape = col.shape
+	q.transform = col.global_transform
+	q.motion = v * delta
+	q.collision_mask = 8 | 32  # mutants and animals only: the ground is left to the contacts
+	var ex: Array[RID] = [body.get_rid()]
+	if player is PhysicsBody3D:
+		ex.append(player.get_rid())
+	q.exclude = ex
+	var space := body.get_world_3d().direct_space_state
+	var frac: PackedFloat32Array = space.cast_motion(q)
+	if frac.size() < 2 or frac[1] >= 1.0:
+		return
+	q.transform.origin += q.motion * frac[1]
+	q.motion = Vector3.ZERO
+	for r in space.intersect_shape(q, 4):  # at most 4 results
+		_stone_hit(rec, _target_of(r.collider))
 
 
 ## The living thing (mutant, animal, the dummy) a body belongs to, or null.
@@ -232,6 +269,7 @@ func _physics_process(delta: float) -> void:
 				if (rec.age > 0.5 and body.linear_velocity.length() < STONE_SETTLE) or rec.age > MAX_FLIGHT:
 					land_stone(rec)
 					continue
+				_sweep_stone(rec, delta)
 			"molotov":
 				if rec.age > MAX_FLIGHT:
 					shatter(rec)

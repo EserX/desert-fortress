@@ -3,7 +3,6 @@
 ## Player feedback
 <!-- Write bugs, feelings and ideas here. Each run handles these BEFORE roadmap items. -->
 <!-- Example: - Sprint feels too slow. - Fell through the ground near a big rock. -->
-- (Found by the v2.9 run, not the owner) Flaky test: "every one of 16 full-speed stones hurts the walker it hits (1 did no harm)" failed about 1 run in 10 on unchanged v2.8.9 code; the v2.0-era fix for stones slowing before they report the touch doesn't catch every case. Also "ObjectDB instances leaked at exit" (AudioStreamWAV / playbacks) shows after most test runs, before and after v2.9: sounds still playing when the test quits.
 
 ## Milestones
 One version per development run, in this order. The full plan with reasons is in the "Desert Fortress: Version Plan" doc. Player feedback above always comes first.

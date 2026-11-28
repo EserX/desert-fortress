@@ -5,7 +5,7 @@ extends SceneTree
 ## Prints one line per batch and the total.
 
 const BATCH := 24
-const ROUNDS := 8
+const ROUNDS := 30
 
 var main: Node
 var frame := 0

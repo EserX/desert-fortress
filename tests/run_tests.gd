@@ -3470,16 +3470,33 @@ func _process(_delta: float) -> bool:
 		4280:
 			_check_shelter()
 		4290:
+			_test_quiet_quit()
 			for e in catcher.errors:
 				print("  ERROR ", e)
 			check(catcher.errors.is_empty(), "Godot reported no errors while the tests ran (%d)" % catcher.errors.size())
 			if failures.is_empty():
 				print("== ALL TESTS PASSED ==")
-				quit(0)
 			else:
 				print("== %d TEST(S) FAILED ==" % failures.size())
-				quit(1)
+			# Sounds still playing at quit were reported as leaked objects.
+			game.quiet_then_quit(self, 0 if failures.is_empty() else 1)
 	return false
+
+## v2.9.1: quitting stops every sound first, so none is left held at exit.
+func _test_quiet_quit() -> void:
+	var ap := AudioStreamPlayer3D.new()
+	var wav := AudioStreamWAV.new()
+	var data := PackedByteArray()
+	data.resize(22050 * 2)
+	wav.data = data
+	wav.format = AudioStreamWAV.FORMAT_16_BITS
+	ap.stream = wav
+	main.add_child(ap)
+	ap.play()
+	check(ap.playing, "a test sound plays")
+	check(game.stop_all_sounds(root) >= 1 and not ap.playing, "stopping all sounds before quitting stops it")
+	ap.queue_free()
+
 
 ## v2.9: the base status page lists the machines and why they're idle.
 func _test_base_status() -> void:
@@ -5005,6 +5022,13 @@ func _start_throws() -> void:
 		rw.set_physics_process(false)
 		throw.row.append(rw)
 		th.throw("stone", rw.global_position + Vector3(0, 1.3, -4.0), Vector3(0, 0, 18))
+	# v2.9.1: a stone whose touch is never reported (as continuous collision
+	# sometimes does) still hurts, as the stone sweeps ahead of itself.
+	throw.quiet_w = ms.spawn("walker", Vector3(-75, 0, 4))
+	throw.quiet_w.set_physics_process(false)
+	var qs: RigidBody3D = th.throw("stone", throw.quiet_w.global_position + Vector3(0, 1.3, -4.0), Vector3(0, 0, 18))
+	for cn in qs.body_entered.get_connections():
+		qs.body_entered.disconnect(cn.callable)
 	throw.fire_in = ms.spawn("walker", c + Vector3(0.8, 0, 0))
 	throw.fire_out = ms.spawn("walker", c + Vector3(6, 0, 0))
 	for w in [throw.fire_in, throw.fire_out]:
@@ -5028,6 +5052,7 @@ func _check_throws() -> void:
 	check(sw.health < 100.0, "a thrown stone hits a walker (%.0f health left)" % sw.health)
 	var missed: Array = throw.row.filter(func(w): return w.health >= 100.0)
 	check(missed.is_empty(), "every one of %d full-speed stones hurts the walker it hits (%d did no harm)" % [throw.row.size(), missed.size()])
+	check(throw.quiet_w.health < 100.0, "a stone hurts a walker even when its touch isn't reported (%.0f left)" % throw.quiet_w.health)
 	check(not th.flying.any(func(r): return r.node == throw.stone) and main.loot.drops.values().any(func(d): return d.items.has("stone")), "and then lies on the sand as a stone")
 	check(throw.fire_in.health < 40.0, "a molotov's fire burns a walker standing in it (%.0f left)" % throw.fire_in.health)
 	check(is_equal_approx(throw.fire_out.health, 100.0), "but not one 6 m away")

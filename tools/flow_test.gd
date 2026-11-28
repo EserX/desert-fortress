@@ -61,5 +61,5 @@ func _process(_d: float) -> bool:
 			for s in game.SLOTS:
 				game.delete_slot(s)
 			print("== FLOW %s ==" % ("PASSED" if failures == 0 else "FAILED"))
-			quit(1 if failures else 0)
+			game.quiet_then_quit(self, 1 if failures else 0)
 	return false

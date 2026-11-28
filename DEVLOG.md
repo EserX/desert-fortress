@@ -2,6 +2,20 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v2.9.1 (2026-11-28): Every hard-thrown stone lands its hit; clean quits
+This run handled the two items under Player feedback (both found by the v2.9 run).
+- **Checked first:** `tools/throw_probe.gd` (now 30 rounds of 24 throws) missed 1 of 720 full-speed stones on the old code: the stone touched the walker, bounced up off it, and Godot only reported the touch later, when it was lying on the walker's head at 0.6 m/s, too slow to hurt. A new test with the touch report switched off failed on the old code (and the old flaky test failed in that same run).
+- **Fixed: a stone thrown hard always hurts what it hits.** Each physics frame, before the stone moves, it now sweeps its own shape along the way it's about to go; a mutant or animal in its path takes the hit right then, at the stone's real speed. The touch report still works as before, and a target is still only hit once per throw. Probe after the fix: 2160 of 2160 hit over three runs.
+- **Fixed: no more "ObjectDB instances leaked at exit".** Quitting while sounds were still playing left them held by the audio server. Quit to desktop (and closing the window) now stops every sound, waits 150 ms of real time for the audio to let go, then closes (after the autosave, as before). The tests and the flow test quit the same way. 10 test runs in a row: no leaks (before: about two runs in three).
+- **Decisions:**
+  - The sweep only looks at mutants and animals (layers 8 and 32), so stones still bounce off the ground and walls as before, and only runs while a stone is faster than the 5 m/s it needs to hurt (a handful of stones at most).
+  - `Game.quiet_then_quit()` / `Game.stop_all_sounds()` live in game.gd, the one place the program quits. Real time, not frames: with `--fixed-fps` the tests run frames far faster than the audio thread works.
+  - No save changes. main.gd untouched.
+- **Tests (3 new):** a stone whose touch is never reported still hurts the walker; a playing sound stops when all sounds are stopped before quitting. All tests passed on every run; flow test passed.
+
+**Try:** throw stones at walkers from close range: every hard throw should now stagger them. Quitting to desktop takes a blink longer (150 ms).
+**Next:** no player feedback left and the roadmap is done. Ideas for the owner to pick from (write one under Player feedback to ask for it): turrets, lights and fences on the base status page (with ammo left); outposts' pipes on a zoomed map round the outpost; a map layer marking spare sprinklers.
+
 ## v2.9.0 (2026-11-28): Base status page (J)
 No player feedback was waiting and every roadmap item is done, so this run took the idea that has been on the "next" list since v2.8.5: a page listing machines that are idle and why.
 - **Checked first:** all tests passed with no Godot errors before any change.

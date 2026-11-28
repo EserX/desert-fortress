@@ -34,6 +34,8 @@ var pending_load: Dictionary = {}  # save data to apply when the world is built
 var in_game := false
 var world: Node = null             # the running main.gd, set by it
 var _loading: CanvasLayer
+## Milliseconds the sounds get to stop before the program closes.
+const QUIET_MS := 150
 
 
 func _ready() -> void:
@@ -108,7 +110,37 @@ func go_to_title() -> void:
 func quit_to_desktop() -> void:
 	if in_game:
 		save_game("auto", _world_thumbnail())
-	get_tree().quit()
+	await quiet_then_quit(get_tree())
+
+
+## Stops every sound in the tree, gives the audio thread QUIET_MS of real time
+## (at least two frames) to let go of them, then quits with `code`. Quitting
+## while sounds still play leaves their streams held by the audio server
+## ("ObjectDB instances leaked at exit"). Wall-clock time, not frames: with
+## --fixed-fps the tests run frames far faster than the audio thread mixes.
+static func quiet_then_quit(tree: SceneTree, code := 0) -> void:
+	stop_all_sounds(tree.root)
+	var until := Time.get_ticks_msec() + QUIET_MS
+	var frames := 0
+	while frames < 2 or Time.get_ticks_msec() < until:
+		await tree.process_frame
+		frames += 1
+	tree.quit(code)
+
+
+## Stops every AudioStreamPlayer (plain, 2D and 3D) under `node`. Runs once,
+## at quit: a walk over the whole tree (a few thousand nodes).
+static func stop_all_sounds(node: Node) -> int:
+	var n := 0
+	var queue: Array[Node] = [node]
+	while not queue.is_empty():
+		var c: Node = queue.pop_back()
+		if c is AudioStreamPlayer or c is AudioStreamPlayer2D or c is AudioStreamPlayer3D:
+			if c.playing:
+				n += 1
+			c.stop()
+		queue.append_array(c.get_children())
+	return n
 
 
 func _world_thumbnail() -> Image:

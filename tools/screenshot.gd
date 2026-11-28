@@ -99,6 +99,7 @@ var shots := [
 	{"name": "89_purifier_pipe", "pos": Vector3(5, 0, 2), "yaw": 0.0, "pitch": -0.3, "hour": 14.0, "purifier_pipe": true},
 	{"name": "90_water_map", "pos": Vector3(20, 0, 40), "yaw": 0.9, "pitch": 0.0, "hour": 10.0, "map": true, "water_map": true, "zoom": 4.0},
 	{"name": "91_reach_ring", "pos": Vector3(8, 0, 5), "yaw": -0.1, "pitch": -0.32, "hour": 15.0, "ring": "dew_collector"},
+	{"name": "93_kin_rings", "pos": Vector3(13, 0, 12), "yaw": 0.35, "pitch": -0.5, "hour": 15.0, "ring": "sprinkler", "kin": true},
 	{"name": "92_hammer_reach", "pos": Vector3(8, 0, 5), "yaw": 0.0, "pitch": 0.0, "hour": 15.0, "hammer_ring": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
@@ -344,7 +345,7 @@ func _process(_d: float) -> bool:
 		if s.get("turret", false):
 			_turret_sample()
 		elif s.has("ring"):
-			_ring_sample(s.ring)
+			_ring_sample(s.ring, s.get("kin", false))
 		elif main.build_mode.range_ring.visible and not s.get("build", false):
 			main.build_mode.range_ring.visible = false
 		if s.get("hammer_ring", false):
@@ -740,12 +741,17 @@ func _turret_sample() -> void:
 
 
 ## Placing a piece with a reach circle (v2.8.5), next to a sprinkler already built.
-func _ring_sample(type: String) -> void:
+func _ring_sample(type: String, kin := false) -> void:
 	var b = main.building
 	b.load_data([])
 	main.mutants.clear()
 	var slot := {"kind": "obj", "cx": 5, "cz": -1, "dir": 0, "level": 0}
 	b.place("sprinkler", slot, b.evaluate("sprinkler", slot).y)
+	if kin:  # v2.8.7: more built sprinklers and a dew collector, whose circles show too
+		for c in [Vector2i(2, -2), Vector2i(8, -2), Vector2i(1, 2)]:
+			var ks := {"kind": "obj", "cx": c.x, "cz": c.y, "dir": 0, "level": 0}
+			var kt := "sprinkler" if c.y != 2 else "dew_collector"
+			b.place(kt, ks, b.evaluate(kt, ks).y)
 	main.inventory.load_data({})
 	main.inventory.add_all({"scrap": 40, "nails": 20, "wood": 10, "kit_dew": 1})
 	main.shop.unlocked[type] = true

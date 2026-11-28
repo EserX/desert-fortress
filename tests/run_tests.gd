@@ -1142,6 +1142,53 @@ func _start_turret() -> void:
 	bm.show_reach_of(skey)
 	check(not bm.range_ring.visible, "a circle goes when its piece is taken down")
 	b.remove(wkey)
+	# v2.8.7: placing a sprinkler shows the built sprinklers' and dew collectors' circles.
+	var near_keys: Array = []
+	for pos in [Vector3(4, 0, -18), Vector3(-10, 0, -20), Vector3(12, 0, -6)]:
+		var ns: Dictionary = b.slot_for("sprinkler", pos, 0)
+		near_keys.append(b.place("sprinkler", ns, b.evaluate("sprinkler", ns).y))
+	var dws: Dictionary = b.slot_for("dew_collector", Vector3(-12, 0, -4), 0)
+	var dkey: String = b.place("dew_collector", dws, b.evaluate("dew_collector", dws).y)
+	var fs: Dictionary = b.slot_for("sprinkler", Vector3(-3, 0, -110), 0)
+	var fkey: String = b.place("sprinkler", fs, b.evaluate("sprinkler", fs).y)
+	check(near_keys.all(func(k): return k != "") and dkey != "" and fkey != "", "built three sprinklers, a dew collector and a far sprinkler")
+	bm.toggle()
+	bm.select(b.ORDER.find("sprinkler"))
+	bm.update_preview()
+	var oc_types := {}
+	for oc in bm.other_centres:
+		oc_types[oc[1]] = int(oc_types.get(oc[1], 0)) + 1
+	check(bm.other_rings.visible and oc_types.get("sprinkler", 0) == 3 and oc_types.get("dew_collector", 0) == 1, "placing a sprinkler shows the 3 built sprinklers' and the dew collector's circles: %s" % str(oc_types))
+	check(not oc_types.has("turret"), "but not the turret's")
+	var far_shown: bool = bm.other_centres.any(func(oc): return (oc[0] as Vector3).distance_to(b.pieces[fkey].node.global_position) < 0.1)
+	check(not far_shown, "a sprinkler 100 m off gets no circle")
+	check(bm.other_rings.multimesh.visible_instance_count == 4 * bm.OTHER_DASHES, "%d dashes for 4 circles" % bm.other_rings.multimesh.visible_instance_count)
+	var dew_i := 0
+	for i in bm.other_centres.size():
+		if bm.other_centres[i][1] == "dew_collector":
+			dew_i = i
+	var dc: Vector3 = b.pieces[dkey].node.global_position
+	var dp: Vector3 = bm.other_centres[dew_i][2]
+	check(absf(Vector2(dp.x - dc.x, dp.z - dc.z).length() - 8.0) < 0.1, "the dew collector's circle is 8 m round it")
+	check((bm.other_centres[dew_i][3] as Color).g > (bm.other_centres[1 if dew_i == 0 else 0][3] as Color).g, "in a teal, not the sprinkler's blue")
+	b.remove(near_keys[2])
+	bm.update_preview()
+	check(bm.other_centres.size() == 3, "a sprinkler taken down loses its circle at once (%d)" % bm.other_centres.size())
+	bm.select(b.ORDER.find("dew_collector"))
+	bm.update_preview()
+	check(bm.other_centres.size() == 3, "placing a dew collector shows the sprinklers' and dew collector's circles too")
+	bm.select(b.ORDER.find("turret"))
+	bm.update_preview()
+	check(bm.other_centres.size() == 1 and bm.other_centres[0][1] == "turret", "placing a turret shows only the built turret's circle")
+	bm.select(b.ORDER.find("wall"))
+	bm.update_preview()
+	check(not bm.other_rings.visible, "a wall shows no built circles")
+	bm.select(b.ORDER.find("sprinkler"))
+	bm.update_preview()
+	bm.toggle()
+	check(not bm.other_rings.visible, "and they hide when you stop building")
+	for k in near_keys.slice(0, 2) + [dkey, fkey]:
+		b.remove(k)
 	check(main._prompt_for("turret:" + turret_key).contains("0/%d rounds, EMPTY" % b.TURRET_AMMO), "turret prompt: " + main._prompt_for("turret:" + turret_key))
 	main.interact("turret:" + turret_key)
 	check(b.pieces[turret_key].ammo == 30 and inv.count_of("ammo_9mm") == 0, "E loads your 9mm rounds into it")

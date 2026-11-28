@@ -2,6 +2,21 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v2.8.7 (2026-11-28): Every circle at once while placing
+No player feedback was waiting and every roadmap item is done, so this run took one of the ideas from v2.8.6's list: showing the built pieces' circles while placing a new one.
+- **Checked first:** all tests passed with no Godot errors before any change.
+- **New: built circles show while placing.** In build mode, with a sprinkler, dew collector, weather station or turret picked, the circles of the ones already built nearby show too, thinner and paler than the preview's, each in its kind's colour. **Sprinklers and dew collectors show each other's** (both water the ground), turrets show turrets, weather stations show weather stations. So you can set a new sprinkler right where the circles leave a gap, or space turrets so their ranges meet.
+- **Decisions:**
+  - All in build_mode.gd (`RING_KIN`, `_draw_others()`): one extra MultiMesh, 48 dashes per circle, the 24 nearest pieces within 70 m of the preview at most (1,152 dashes, one draw call). The loop over the pieces only runs when the piece type, the base (`building.revision`, which goes up when a piece is built or taken down) or the preview's 8 m square changes, not every frame.
+  - The piece you are moving (G) is out of the world while carried, so it shows only the preview circle.
+  - Hidden with the preview: looking at the sky, ready-made buildings (T), leaving build mode, a piece with no reach.
+  - main.gd untouched. No save changes.
+- **Tests (12 new):** placing a sprinkler shows the 3 built sprinklers' and the dew collector's circles but not the turret's, nor a sprinkler 100 m off; the dash count; the dew collector's circle is 8 m round it and teal; a sprinkler taken down loses its circle at once; a dew collector shows the same; a turret shows only turrets; a wall shows none; they hide when you stop building.
+- New screenshot view `93_kin_rings` (placing a sprinkler near three built sprinklers and a dew collector). `91_reach_ring` now shows the built sprinkler's circle too.
+
+**Try:** press B, pick the sprinkler and walk round your farm: the pale circles show what's already watered, so drop the new one into a gap.
+**Next:** more bug hunting and rough edges. Ideas for the owner to pick from (write them under Player feedback to ask for one): a "base status" page listing machines that are idle and why; outposts' pipes on a zoomed map round the outpost; a count of the squares a new sprinkler would add (not already watered).
+
 ## v2.8.6 (2026-11-28): Reach circles with the hammer
 No player feedback was waiting and every roadmap item is done, so this run took one of the ideas from v2.8.5's list: the reach circle for pieces already built.
 - **Checked first:** all tests passed with no Godot errors before any change.

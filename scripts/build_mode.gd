@@ -79,6 +79,21 @@ const REACH_RINGS := {
 }
 var ring_points := PackedVector3Array()  # where the dashes are (kept here, headless can't read a MultiMesh back)
 const RING_DASHES := 90
+## v2.8.7: while placing a piece with a reach, the circles of the ones already
+## built that do the same job show too (fainter), so gaps and overlaps show.
+## Sprinklers and dew collectors both water, so each shows the other's.
+const RING_KIN := {
+	"turret": ["turret"],
+	"sprinkler": ["sprinkler", "dew_collector"],
+	"dew_collector": ["sprinkler", "dew_collector"],
+	"weather_station": ["weather_station"],
+}
+const OTHER_DASHES := 48  # per built circle (fewer than the preview's)
+const OTHER_MAX := 24  # the nearest this many built pieces get a circle
+const OTHER_RANGE := 70.0  # m from the preview
+var other_rings: MultiMeshInstance3D
+var other_centres: Array = []  # [centre, type, first dash, colour] of each circle drawn (headless can't read a MultiMesh back)
+var _others_key := ""  # what the circles were drawn for; redraw when it changes
 
 
 func _ready() -> void:
@@ -104,6 +119,23 @@ func _ready() -> void:
 	range_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	range_ring.visible = false
 	add_child(range_ring)
+	var omm := MultiMesh.new()
+	omm.transform_format = MultiMesh.TRANSFORM_3D
+	omm.use_colors = true
+	var odash := BoxMesh.new()
+	odash.size = Vector3(0.08, 0.04, 0.8)
+	omm.mesh = odash
+	omm.instance_count = OTHER_DASHES * OTHER_MAX
+	omm.visible_instance_count = 0
+	other_rings = MultiMeshInstance3D.new()
+	other_rings.multimesh = omm
+	var om := StandardMaterial3D.new()
+	om.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	om.vertex_color_use_as_albedo = true
+	other_rings.material_override = om
+	other_rings.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	other_rings.visible = false
+	add_child(other_rings)
 
 
 func _ghost_mat(c: Color) -> StandardMaterial3D:
@@ -128,6 +160,7 @@ func toggle() -> void:
 	active = not active
 	_ghost.visible = false
 	range_ring.visible = false
+	hide_others()
 
 
 func select(i: int) -> void:
@@ -210,6 +243,7 @@ func update_preview(delta := 1.0) -> void:
 	if hit.is_empty():
 		_ghost.visible = false
 		range_ring.visible = false
+		hide_others()
 		can_build = false
 		reason = "Look at the ground nearby"
 		slot = {}
@@ -265,6 +299,7 @@ func ghost_material() -> StandardMaterial3D:
 func _update_prefab_preview(delta: float) -> void:
 	var id := current_prefab()
 	range_ring.visible = false
+	hide_others()
 	if _ghost_prefab != id + str(dir):
 		_rebuild_prefab_ghost(id)
 	var cam: Camera3D = player.camera
@@ -370,6 +405,62 @@ static func ring_radius(type: String) -> float:
 ## the preview moved or the piece changed.
 func _update_ring(type: String) -> void:
 	_draw_ring(type, _ghost.global_position, _ghost.visible)
+	_draw_others(type, _ghost.global_position, _ghost.visible)
+
+
+## v2.8.7: the fainter circles of the built pieces that do the same job as the
+## one being placed (RING_KIN), the OTHER_MAX nearest within OTHER_RANGE.
+## Runs every frame in build mode; the loop over all pieces (a few hundred at
+## most) only runs when the piece type, the base (building.revision) or the
+## preview's 8 m square changes.
+func _draw_others(type: String, c: Vector3, show: bool) -> void:
+	if not show or not RING_KIN.has(type):
+		hide_others()
+		return
+	var key := "%s|%d|%d|%d|%s" % [type, building.revision, floori(c.x / 8.0), floori(c.z / 8.0), carrying.get("key", "")]
+	other_rings.visible = true
+	if key == _others_key:
+		return
+	_others_key = key
+	var kin: Array = RING_KIN[type]
+	var found: Array = []  # [distance, centre, type]
+	for k in building.pieces.keys():
+		var rec: Dictionary = building.pieces[k]
+		if not kin.has(rec.type) or not is_instance_valid(rec.node):
+			continue
+		var pc: Vector3 = (rec.node as Node3D).global_position
+		var d := Vector2(pc.x - c.x, pc.z - c.z).length()
+		if d <= OTHER_RANGE + ring_radius(rec.type):
+			found.append([d, pc, rec.type])
+	found.sort_custom(func(a, b): return a[0] < b[0])
+	found.resize(mini(found.size(), OTHER_MAX))
+	other_centres.clear()
+	var mm := other_rings.multimesh
+	var n := 0
+	for f in found:
+		var pc: Vector3 = f[1]
+		var r := ring_radius(f[2])
+		var col: Color = (REACH_RINGS[f[2]][1] as Color).lerp(Color(0.85, 0.85, 0.85), 0.35)
+		var dash_len := clampf(TAU * r / OTHER_DASHES * 0.45, 0.1, 1.2)
+		var sc := Basis.from_scale(Vector3(1, 1, dash_len / 0.8))
+		for i in OTHER_DASHES:
+			var a := i * TAU / OTHER_DASHES
+			var p := pc + Vector3(cos(a) * r, 0, sin(a) * r)
+			p.y = maxf(building.terrain.surface_height(p.x, p.z), pc.y) + 0.05
+			if i == 0:
+				other_centres.append([pc, f[2], p, col])
+			mm.set_instance_transform(n, Transform3D(Basis(Vector3.UP, -a) * sc, p))
+			mm.set_instance_color(n, col)
+			n += 1
+	mm.visible_instance_count = n
+	other_rings.visible = n > 0
+
+
+## Hides the built pieces' circles (and forgets them, so they redraw next time).
+func hide_others() -> void:
+	other_rings.visible = false
+	other_centres.clear()
+	_others_key = ""
 
 
 ## v2.8.6: outside build mode, the hammer pointed at a built sprinkler, dew

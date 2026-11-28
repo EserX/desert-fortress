@@ -110,7 +110,7 @@ const RECIPES := {
 	"wood": {"count": 2, "cost": {"log": 1}, "info": "split a log by hand (a sawmill gets 5)"},
 	"cable": {"count": 6, "cost": {"scrap": 1, "cloth": 1}, "info": "hold it: click a generator, then a light, fence, switch or turret"},
 	"watering_can": {"count": 1, "cost": {"scrap": 2, "nails": 2}, "info": "fill it at the main well, LMB pours water on the sand"},
-	"water_pipe": {"count": 4, "cost": {"scrap": 2, "nails": 1}, "info": "hold it: click the main well, then a sprinkler (needs the hand pump)"},
+	"water_pipe": {"count": 4, "cost": {"scrap": 2, "nails": 1}, "info": "hold it: click the main well, then a sprinkler or water purifier (needs the hand pump)"},
 	"cloth": {"count": 2, "cost": {"cotton": 3}, "info": "spin cotton from your fields into cloth"},
 	"fibre": {"count": 2, "cost": {"reeds": 3}, "info": "strip oasis reeds for fibre"},
 	"rope": {"count": 1, "cost": {"fibre": 3}, "info": "twist agave fibre into rope (sells well at the market)"},

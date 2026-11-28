@@ -59,7 +59,9 @@ var pump := false
 var can := 0.0
 ## Vector2i square -> {"wet": litres today, "total": litres ever, "green": 0..1, "dry": dry mornings}
 var cells := {}
-## Pipes: [id, id] pairs; "main" is the main well, anything else a sprinkler's piece key.
+## Pipes: [id, id] pairs; "main" is the main well, anything else a sprinkler's
+## or (v2.8.3) a water purifier's piece key. A purifier is an end: it takes water
+## but doesn't pass it on.
 var pipes: Array = []
 var well: StaticBody3D
 var _water_surface: MeshInstance3D
@@ -297,13 +299,14 @@ func pour_point() -> Variant:
 	return hit.position
 
 
-## The pipe end under the crosshair: "main" (the main well), a sprinkler's key, or "".
+## The pipe end under the crosshair: "main" (the main well), a sprinkler's or
+## purifier's key, or "".
 func pipe_target() -> String:
 	var hit: Dictionary = player.look_hit(4.5)
 	if not hit.is_empty() and hit.collider == well:
 		return "main"
 	var key: String = piece_at_crosshair.call()
-	if key != "" and building.pieces.get(key, {}).get("type", "") == "sprinkler":
+	if key != "" and key != "main" and _valid_end(key):
 		return key
 	return ""
 
@@ -349,8 +352,8 @@ func handle_input(event: InputEvent, item: String) -> bool:
 ## What the water pipe does at this end (like the cable).
 func pipe_prompt(id: String) -> String:
 	if id == "":
-		return "Water pipe: look at the main well or a sprinkler" if pipe_from != "" else ""
-	var name := "Main well" if id == "main" else "Sprinkler"
+		return "Water pipe: look at the main well, a sprinkler or a water purifier" if pipe_from != "" else ""
+	var name := "Main well" if id == "main" else ("Water purifier" if building.pieces.get(id, {}).get("type", "") == "purifier" else "Sprinkler")
 	var n := pipes_of(id).size()
 	var have: int = inventory.count_of("water_pipe")
 	var take := ("   [RMB] Take up its %d pipe%s" % [n, "" if n == 1 else "s"]) if n > 0 else ""
@@ -369,7 +372,7 @@ func pipe_prompt(id: String) -> String:
 ## pipe); right click takes up an end's pipes. Returns "" or why not.
 func pipe_click(id: String, take_up_pipes := false) -> String:
 	if id == "" or not _valid_end(id):
-		return "Water pipes join the main well and sprinklers"
+		return "Water pipes join the main well, sprinklers and water purifiers"
 	if take_up_pipes:
 		inventory.add("water_pipe", take_up(id))
 		return ""
@@ -548,13 +551,21 @@ func pipe_cost(a: String, b: String) -> int:
 
 
 func _valid_end(id: String) -> bool:
+	return id == "main" or building.pieces.get(id, {}).get("type", "") in ["sprinkler", "purifier"]
+
+
+## True for ends that pass water on down a pipe: the main well and sprinklers
+## (a purifier keeps what it gets).
+func _passes_on(id: String) -> bool:
 	return id == "main" or building.pieces.get(id, {}).get("type", "") == "sprinkler"
 
 
 ## Why two ends can't be joined by a pipe ("" if they can).
 func pipe_problem(a: String, b: String) -> String:
 	if a == b or not _valid_end(a) or not _valid_end(b):
-		return "Pipes join the main well and sprinklers"
+		return "Pipes join the main well, sprinklers and water purifiers"
+	if not _passes_on(a) and not _passes_on(b):
+		return "Two purifiers can't feed each other: pipe one from the main well or a sprinkler"
 	for p in pipes:
 		if a in p and b in p:
 			return "Already piped together"
@@ -593,7 +604,18 @@ func prune_pipes() -> bool:
 
 ## Every sprinkler joined to the main well by pipes (through other sprinklers).
 func fed_sprinklers() -> Dictionary:
-	# A queue with a visited set over the pipes (a few dozen at most).
+	return _only(_from_main(), "sprinkler")
+
+
+## v2.8.3: every water purifier piped to the main well (through sprinklers).
+## They draw from its store only with the hand pump on (like sprinklers).
+func fed_purifiers() -> Dictionary:
+	return _only(_from_main(), "purifier") if pump else {}
+
+
+## Every end joined to the main well by pipes, passing on through sprinklers only.
+func _from_main() -> Dictionary:
+	# A queue with a visited set over the pipes (a few dozen at most), a few times a second.
 	var seen := {"main": true}
 	var todo: Array = ["main"]
 	while not todo.is_empty():
@@ -603,9 +625,19 @@ func fed_sprinklers() -> Dictionary:
 				var other: String = p[1] if p[0] == at else p[0]
 				if not seen.has(other) and _valid_end(other):
 					seen[other] = true
-					todo.append(other)
+					if _passes_on(other):
+						todo.append(other)
 	seen.erase("main")
 	return seen
+
+
+## The keys in `ends` that are pieces of `type`.
+func _only(ends: Dictionary, type: String) -> Dictionary:
+	var out := {}
+	for k in ends:
+		if building.pieces.get(k, {}).get("type", "") == type:
+			out[k] = true
+	return out
 
 
 ## v2.8.2: sprinklers fed by a claimed outpost's spring: those within SPRING_REACH of
@@ -614,6 +646,15 @@ func fed_sprinklers() -> Dictionary:
 ## dry, needs no hand pump and isn't the main well, so these take nothing from
 ## the store and don't add to the night's lure.
 func spring_sprinklers() -> Dictionary:
+	return _only(_from_springs(), "sprinkler")
+
+
+## v2.8.3: water purifiers piped to a spring's sprinklers inside an outpost's zone.
+func spring_purifiers() -> Dictionary:
+	return _only(_from_springs(), "purifier")
+
+
+func _from_springs() -> Dictionary:
 	var seen := {}
 	var list: Variant = springs.call() if springs.is_valid() else []
 	if not (list is Array) or (list as Array).is_empty():
@@ -638,7 +679,8 @@ func spring_sprinklers() -> Dictionary:
 				var other: String = pp[1] if pp[0] == at else pp[0]
 				if other != "main" and not seen.has(other) and _valid_end(other) and _in_outpost(other):
 					seen[other] = true
-					todo.append(other)
+					if _passes_on(other):
+						todo.append(other)
 	return seen
 
 

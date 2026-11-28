@@ -93,7 +93,7 @@ func tick(dt: float) -> void:
 					break
 		if building.MACHINES.has(rec.type):
 			if rec.type == "purifier":
-				Purifier.draw(building, water, rec, springs.call() if springs.is_valid() else [])  # tops its tank up from the main well or a spring
+				Purifier.draw(building, water, rec, springs.call() if springs.is_valid() else [], key)  # tops its tank up from the main well or a spring
 			building.set_powered(rec, on)
 			rec.working = building.run_machine(rec, dt)
 			ChestFeed.feed(building, rec)  # v2.7: into a chest next to it

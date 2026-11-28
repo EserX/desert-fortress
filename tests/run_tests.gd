@@ -3316,6 +3316,7 @@ func _process(_delta: float) -> bool:
 			_test_chest_feed()
 			_test_purifier()
 			_test_spring_sprinklers()
+			_test_piped_purifier()
 			_test_events()
 			_start_shelter()
 		4280:
@@ -5246,6 +5247,105 @@ func _test_spring_sprinklers() -> void:
 	w.springs = func(): return 5
 	check(w.spring_sprinklers().is_empty(), "and so is a spring list that isn't a list")
 	w.springs = keep
+	oa.list[0].claimed = was_claimed
+	oa._apply_zones()
+	w.pipes = []
+	b.load_data([])
+	w.store = old_store
+	w.set_pump(old_pump)
+
+
+## v2.8.3: a water pipe from the main well (or a spring's sprinkler) feeds a purifier anywhere.
+func _test_piped_purifier() -> void:
+	var Purifier = load("res://scripts/purifier.gd")
+	var b = main.building
+	var w = main.water
+	var oa = main.oases
+	b.load_data([])
+	w.pipes = []
+	var old_store: float = w.store
+	var old_pump: bool = w.pump
+	w.set_pump(false)
+	w.store = 50.0
+	var put := func(type: String, cx: int, cz: int) -> String:
+		var ps := {"kind": "obj", "cx": cx, "cz": cz, "dir": 0, "level": 0}
+		var ev: Dictionary = b.evaluate(type, ps)
+		return b.place(type, ps, ev.y) if ev.ok else ""
+	var pk: String = put.call("purifier", -5, 5)
+	check(pk != "" and not Purifier.near_well(b.pieces[pk]), "a purifier out of the main well's reach")
+	if pk == "":
+		w.store = old_store
+		w.set_pump(old_pump)
+		return
+	var pur: Dictionary = b.pieces[pk]
+	check(w.pipe_problem("main", pk) == "" and w.pipe_prompt(pk).begins_with("Water purifier"), "a water pipe can end at it: " + w.pipe_prompt(pk).replace("\n", " / "))
+	check(w.connect_pipe("main", pk), "piped from the main well")
+	main.power.tick(0.25)
+	check(pur.input == 0 and w.fed_purifiers().is_empty(), "without the hand pump the pipe brings nothing")
+	check(main._prompt_for("machine:" + pk).contains("need its hand pump"), "and its prompt says why: " + main._prompt_for("machine:" + pk).replace("\n", " / "))
+	w.set_pump(true)
+	var drawn: float = w.drawn_today()
+	main.power.tick(0.25)
+	check(w.fed_purifiers().has(pk) and pur.input == b.MACHINE_IN_MAX and is_equal_approx(w.store, 50.0 - b.MACHINE_IN_MAX), "with the hand pump it fills its tank from the main well's store (%d L, well %.0f L)" % [pur.input, w.store])
+	check(w.drawn_today() >= drawn + b.MACHINE_IN_MAX - 0.01, "and that counts as water drawn today")
+	check(main._prompt_for("machine:" + pk).contains("piped from the main well"), "its prompt says so: " + main._prompt_for("machine:" + pk).replace("\n", " / "))
+	check(not w.fed_sprinklers().has(pk), "a purifier isn't counted as a sprinkler")
+	w.tick(1.0, true)
+	check(b.pieces.has(pk) and w.pipes.size() == 1, "the sprinklers' tick leaves its pipe alone")
+	# A purifier keeps its water: a sprinkler piped only from it gets none.
+	var sk: String = put.call("sprinkler", -5, 7)
+	if sk != "":
+		check(w.connect_pipe(pk, sk) and not w.fed_sprinklers().has(sk), "it doesn't pass water on to a sprinkler")
+		w.take_up(pk)
+		check(w.connect_pipe("main", sk) and w.connect_pipe(sk, pk) and w.fed_purifiers().has(pk), "but a sprinkler passes main-well water on to it")
+	var pk2: String = put.call("purifier", -7, 5)
+	if pk2 != "":
+		check(w.pipe_problem(pk, pk2).contains("Two purifiers"), "two purifiers can't be piped together: " + w.pipe_problem(pk, pk2))
+	# A dry well gives nothing.
+	pur.input = 0
+	w.store = 0.0
+	main.power.tick(0.25)
+	check(pur.input == 0, "with the main well dry it gets nothing")
+	# Saved and loaded with the pipes.
+	var wd: Dictionary = w.save_data()
+	w.load_data(wd)
+	check(w.fed_purifiers().has(pk), "its pipe is saved and loaded")
+	# Picked up: its pipes go.
+	b.remove(pk, false)
+	w.prune_pipes()
+	check(w.pipes_of(pk).is_empty(), "when it's gone its pipes go too")
+	if pk2 != "":
+		b.remove(pk2, false)
+	if sk != "":
+		b.remove(sk, false)
+	w.pipes = []
+	# At an outpost: piped from a spring's sprinkler inside the zone, it gets spring water.
+	var was_claimed: bool = oa.list[0].claimed
+	oa.list[0].claimed = true
+	oa._apply_zones()
+	var pond: Vector3 = oa.list[0].pos
+	var post: Vector3 = oa.list[0].post_pos
+	var away := Vector2(post.x - pond.x, post.z - pond.z).normalized()
+	var place_at := func(type: String, dists: Array) -> String:
+		for dist in dists:
+			for turn in [0.0, 0.3, -0.3, 0.6, -0.6]:
+				var d: Vector2 = away.rotated(float(turn)) * float(dist)
+				var k: String = put.call(type, int(floor((pond.x + d.x) / b.CELL)), int(floor((pond.z + d.y) / b.CELL)))
+				if k != "":
+					return k
+		return ""
+	var ssk: String = place_at.call("sprinkler", [7.0, 6.0, 8.0])
+	var spk: String = place_at.call("purifier", [14.0, 13.0, 15.0, 12.0])
+	check(ssk != "" and spk != "", "a spring sprinkler and a purifier further out in the outpost's zone")
+	if ssk != "" and spk != "":
+		var sp: Dictionary = b.pieces[spk]
+		check(not Purifier.near_spring(sp, oa.claimed_springs()), "the purifier is too far from the pond to draw by itself")
+		check(w.connect_pipe(ssk, spk) and w.spring_purifiers().has(spk), "piped to the spring's sprinkler, the spring feeds it")
+		w.store = 40.0
+		drawn = w.drawn_today()
+		main.power.tick(0.25)
+		check(sp.input == b.MACHINE_IN_MAX and is_equal_approx(w.store, 40.0) and is_equal_approx(w.drawn_today(), drawn), "it fills from the spring, leaving the main well alone (%d L)" % sp.input)
+		check(main._prompt_for("machine:" + spk).contains("spring through a pipe"), "its prompt says so: " + main._prompt_for("machine:" + spk).replace("\n", " / "))
 	oa.list[0].claimed = was_claimed
 	oa._apply_zones()
 	w.pipes = []

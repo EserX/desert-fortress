@@ -11,6 +11,10 @@ extends RefCounted
 ## - set within SPRING_REACH of a claimed outpost's spring (v2.8.1), it draws
 ##   from the spring, which never runs dry and isn't the main well, so it takes
 ##   nothing from the well and doesn't add to the night's lure;
+## - piped (v2.8.3): a water pipe from the main well (with the hand pump, through
+##   sprinklers if you like) feeds it from the well's store wherever it stands,
+##   like a sprinkler; a pipe from a spring's sprinkler inside an outpost's zone
+##   feeds it spring water;
 ## - E with a watering can pours the can in.
 ## power.gd calls draw() before each work step; main.gd calls pour_can() and
 ## prompt() for E. `springs` is oases.gd's claimed_springs() (pond centres).
@@ -32,6 +36,17 @@ static func near_well(rec: Dictionary) -> bool:
 	return Vector2(p.x, p.z).distance_to(preload("res://scripts/water.gd").WELL_POS) <= REACH
 
 
+## Where a pipe brings the purifier `key` water from: "well", "spring" or "".
+static func piped(water, key: String) -> String:
+	if water == null or key == "":
+		return ""
+	if water.spring_purifiers().has(key):
+		return "spring"
+	if water.fed_purifiers().has(key):
+		return "well"
+	return ""
+
+
 ## True if the purifier piece `rec` stands by one of `springs` (claimed outposts' pond centres).
 static func near_spring(rec: Dictionary, springs: Array) -> bool:
 	if rec.is_empty() or not is_instance_valid(rec.get("node")):
@@ -44,14 +59,17 @@ static func near_spring(rec: Dictionary, springs: Array) -> bool:
 
 
 ## Tops the tank up from the main well's store (whole litres only), or from an
-## outpost's spring when it stands by one. Returns litres drawn.
-static func draw(building, water, rec: Dictionary, springs: Array = []) -> int:
-	if not near_well(rec) and near_spring(rec, springs):
+## outpost's spring when it stands by one; `key` is its piece key, for pipes.
+## Free spring water comes first. Returns litres drawn.
+static func draw(building, water, rec: Dictionary, springs: Array = [], key := "") -> int:
+	var pipe := piped(water, key)
+	var well := near_well(rec) or pipe == "well"
+	if pipe == "spring" or (not near_well(rec) and near_spring(rec, springs)):
 		var free: int = building.MACHINE_IN_MAX - int(rec.input)
 		if free > 0:
 			rec.input += free  # a spring never runs dry and isn't the main well's store
 		return maxi(free, 0)
-	if water == null or not near_well(rec):
+	if water == null or not well:
 		return 0
 	var n := mini(building.MACHINE_IN_MAX - int(rec.input), int(floor(water.store)))
 	if n <= 0:
@@ -74,7 +92,7 @@ static func pour_can(building, water, rec: Dictionary) -> int:
 
 
 ## "Water purifier (running): 24 L in the tank, 3 bottles ready, drawing from the main well"
-static func prompt(building, water, rec: Dictionary, has_can: bool, springs: Array = []) -> String:
+static func prompt(building, water, rec: Dictionary, has_can: bool, springs: Array = [], key := "") -> String:
 	var m: Dictionary = building.MACHINES.purifier
 	# A generator only runs by day while a machine has work, so an empty tank
 	# is said first: "no power" would send you looking for a cable that's fine.
@@ -87,11 +105,18 @@ static func prompt(building, water, rec: Dictionary, has_can: bool, springs: Arr
 		state = "no power: cable it to a generator"
 	var text := "Water purifier (%s): %d L in the tank, %d %s ready" % [state, rec.input, rec.output, "bottle" if rec.output == 1 else "bottles"]
 	var near := near_well(rec)
-	if near:
-		text += ", drawing from the main well"
-	elif near_spring(rec, springs):
+	var pipe := piped(water, key)
+	if pipe == "spring" or (not near and near_spring(rec, springs)):
 		near = true
-		text += ", drawing from the outpost's spring"
+		text += ", drawing from the outpost's spring" + (" through a pipe" if pipe == "spring" else "")
+	elif near:
+		text += ", drawing from the main well"
+	elif pipe == "well":
+		near = true
+		text += ", piped from the main well"
+	elif water != null and key != "" and not water.pump and not water.pipes_of(key).is_empty():
+		near = true
+		text += ", piped to the main well, but the pipes need its hand pump (shop: base upgrades)"
 	if preload("res://scripts/chest_feed.gd").chest_for(building, rec) != "":
 		text += ", feeding the chest next to it"
 	var acts: Array = []
@@ -100,7 +125,7 @@ static func prompt(building, water, rec: Dictionary, has_can: bool, springs: Arr
 	if rec.output > 0:
 		acts.append("take the water bottles")
 	if acts.is_empty():
-		var how := "" if near else "\nSet it within %d m of the main well or by an outpost's spring, or pour water in with a watering can" % int(REACH)
+		var how := "" if near else "\nSet it within %d m of the main well or by an outpost's spring, pipe it from the main well, or pour water in with a watering can" % int(REACH)
 		return text + "\n%d L make a bottle of drinking water every %d s" % [m.need, int(m.secs)] + how
 	var act: String = ", ".join(acts)
 	return text + "\n[E] " + act.left(1).to_upper() + act.substr(1)

@@ -96,6 +96,7 @@ var shots := [
 	{"name": "86_purifier", "pos": Vector3(5, 0, 2), "yaw": 0.0, "pitch": -0.3, "hour": 14.0, "purifier": true},
 	{"name": "87_purifier_spring", "pos": Vector3(5, 0, 2), "yaw": 0.0, "pitch": -0.3, "hour": 14.0, "purifier": true, "spring": true},
 	{"name": "88_sprinkler_spring", "pos": Vector3(5, 0, 2), "yaw": 0.0, "pitch": -0.3, "hour": 11.0, "sprinkler_spring": true},
+	{"name": "89_purifier_pipe", "pos": Vector3(5, 0, 2), "yaw": 0.0, "pitch": -0.3, "hour": 14.0, "purifier_pipe": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -216,6 +217,8 @@ func _process(_d: float) -> bool:
 			_purifier_sample(p, s.get("spring", false))
 		if s.get("sprinkler_spring", false):
 			_sprinkler_spring_sample(p)
+		if s.get("purifier_pipe", false):
+			_purifier_pipe_sample(p)
 		if s.get("blast", false):
 			_blast_sample(p)
 		if s.get("greening", false):
@@ -1215,6 +1218,45 @@ func _sprinkler_spring_sample(p: Node3D) -> void:
 	var d: Vector3 = b.pieces[a].node.global_position - at
 	p.rotation.y = atan2(-d.x, -d.z)
 	p.head.rotation.x = -0.4
+
+
+## v2.8.3: a purifier away from the main well, piped from it, a water pipe in hand.
+func _purifier_pipe_sample(p: Node3D) -> void:
+	var b = main.building
+	var w = main.water
+	main.terrain.load_data({})
+	main.mutants.clear()
+	b.load_data([])
+	b.sites_load_data([])
+	w.pipes = []
+	w.set_pump(true)
+	w.store = w.capacity
+	var put := func(t: String, cx: int, cz: int, d := 0) -> String:
+		var sl := {"kind": "obj", "cx": cx, "cz": cz, "dir": d, "level": 0}
+		var ev: Dictionary = b.evaluate(t, sl)
+		return b.place(t, sl, ev.y) if ev.ok else ""
+	var pk: String = put.call("purifier", 7, 3, 2)
+	if pk == "":
+		push_warning("screenshot: no room for the piped purifier")
+		return
+	var g: String = put.call("generator", 8, 4)
+	var ck: String = put.call("chest", 8, 3)
+	if g != "":
+		b.pieces[g].fuel = 5.0
+		b.connect_cable(g, pk)
+	if ck != "":
+		b.storage_of(ck).add("water", 4)
+	w.connect_pipe("main", pk)
+	main.inventory.load_data({})
+	main.inventory.add("water_pipe", 12)
+	main.inventory.selected = 0
+	var at: Vector3 = b.pieces[pk].node.global_position + Vector3(-3.4, 0, 0.6)
+	at.y = main.terrain.surface_height(at.x, at.z)
+	p.position = at
+	var d: Vector3 = b.pieces[pk].node.global_position - at
+	p.rotation.y = atan2(-d.x, -d.z)
+	p.head.rotation.x = -0.4
+	main.power.tick(0.25)
 
 
 ## The oases (v1.18): stand back from a wild one, a nest (burning), or a claimed outpost.

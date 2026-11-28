@@ -599,7 +599,8 @@ func _process(delta: float) -> void:
 	if hud and not get_tree().paused:
 		var text := ""
 		if not inventory_ui.is_open() and not shop_ui.is_open() and not blueprint_menu.is_open():
-			text = _prompt_for(player.interact_target())
+			# v2.8.3: a water pipe in hand at a pipe end (a sprinkler, purifier, the well) shows what the pipe does there.
+			text = water.held_prompt("water_pipe") if holding("water_pipe") and water.pipe_target() != "" else _prompt_for(player.interact_target())
 			if text == "" and holding_hammer():
 				text = hammer_prompt(piece_under_crosshair())
 			elif text == "" and dig_tool() != "":
@@ -1271,7 +1272,7 @@ func _prompt_for(id: String) -> String:
 		if mrec.is_empty() or not Building.MACHINES.has(mrec.get("type", "")):
 			return ""  # a stale id: the body under the crosshair is a freed piece whose key is now another piece's
 		if mrec.type == "purifier":
-			return Purifier.prompt(building, water, mrec, inventory.count_of("watering_can") > 0, oases.claimed_springs())
+			return Purifier.prompt(building, water, mrec, inventory.count_of("watering_can") > 0, oases.claimed_springs(), mk)
 		return building.machine_prompt(mk, inventory.count_of(Building.MACHINES[mrec.type].in))
 	for prefix in ["gate:", "hatch:", "chest:", "bench:", "gen:", "fire:", "turret:", "well:", "switch:"]:
 		if id.begins_with(prefix):

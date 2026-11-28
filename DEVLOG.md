@@ -2,6 +2,25 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v2.8.3 (2026-11-28): Pipe water to a purifier
+No player feedback was waiting and every roadmap item is done, so this run took the idea that has been on the list for three runs: a pipe from the main well to a purifier further away.
+- **Checked first:** all tests passed with no Godot errors before any change.
+- **New: water pipes can end at a water purifier.** Hold a water pipe, click the main well (or a sprinkler that's already fed), then the purifier: it now fills its tank from the main well's store wherever it stands, like a sprinkler does. It needs the **hand pump** on the main well, as all pipes do, and the pipe can run through sprinklers on the way (each pipe is still 24 m at most).
+  - The water comes out of the main well's store and counts as water drawn today (so it adds to the night's lure), exactly as for a purifier standing by the well.
+  - **At an outpost:** a pipe from a sprinkler by a claimed spring to a purifier in the same outpost's zone brings it spring water (free, not from the main well), so the purifier can stand anywhere in the zone, not only by the pond.
+  - Its prompt says where the water comes from ("piped from the main well", "drawing from the outpost's spring through a pipe"), and, if it's piped but the main well has no hand pump yet, says so.
+- **Rough edge fixed: with a water pipe in hand, the pipe's prompt now shows at a pipe end.** Before, close up to a sprinkler (or the main well) you saw its own prompt ("[E] Turn it off") instead of "[LMB] Start a pipe here", although the clicks worked. Now, holding a water pipe and looking at a sprinkler, purifier or the main well shows what the pipe does there.
+- **Decisions:**
+  - A purifier is an end of the line: it takes water but doesn't pass it on, so a sprinkler piped only from a purifier stays dry, and two purifiers can't be piped to each other ("Two purifiers can't feed each other"). That keeps the water network a tree from the well and the sprinklers.
+  - If a purifier gets both spring water and main-well water through pipes, it uses the free spring water first (same rule as sprinklers in v2.8.2).
+  - Code: water.gd's pipe search is now one queue (`_from_main()`, `_from_springs()`) that passes water on through the main well and sprinklers only; `fed_sprinklers()` / `spring_sprinklers()` keep their meaning and the new `fed_purifiers()` / `spring_purifiers()` pick the purifiers out of the same search. purifier.gd got `piped()` and a `key` argument for `draw()` and `prompt()` (power.gd and main.gd pass it). main.gd: +2 lines.
+- No save changes: pipes already save as pairs of piece keys, and a purifier's key now loads as a valid pipe end. Old saves load as before.
+- **Tests (21 new):** a purifier out of the main well's reach; a pipe can end at a purifier and its pipe prompt names it; without the hand pump the pipe brings nothing and the prompt says why; with it the tank fills from the main well's store and counts as water drawn; its prompt; a purifier isn't counted as a sprinkler; it doesn't pass water on; a sprinkler passes water on to it; two purifiers can't be piped together; a dry well gives nothing; the pipe saves and loads; its pipes go when it's picked up; at an outpost, piped from the spring's sprinkler, it fills with spring water and leaves the main well alone.
+- New screenshot view `89_purifier_pipe` (a purifier away from the well, piped from it and cabled to a generator, a water pipe in hand showing the pipe prompt).
+
+**Try:** with the hand pump bought, build a water purifier 10 to 20 m from the main well, cable it to a generator, then hold water pipes, click the main well and then the purifier. Watch its tank fill and the well's litres drop. At an outpost, pipe a purifier at the edge of the zone from a sprinkler by the spring.
+**Next:** more bug hunting and rough edges. Ideas for the owner to pick from (write them under Player feedback to ask for one): a "base status" page listing machines that are idle and why; a dew collector that shows on the map; pipes shown on the map.
+
 ## v2.8.2 (2026-11-28): Sprinklers at an outpost run on the spring
 No player feedback was waiting and every roadmap item is done, so this run did a bug check and took the next small idea from v2.8.1's list.
 - **Checked first:** all tests pass with no Godot errors. The full screenshot run (about 15 minutes here, all 88 views) showed one script error, fixed below; its one `ERR_CANT_OPEN` line is just the sandbox having no ALSA audio device.

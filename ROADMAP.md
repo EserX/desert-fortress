@@ -3,6 +3,7 @@
 ## Player feedback
 <!-- Write bugs, feelings and ideas here. Each run handles these BEFORE roadmap items. -->
 <!-- Example: - Sprint feels too slow. - Fell through the ground near a big rock. -->
+- (found by the v2.4 run) The test "a thrown stone hits a walker" fails now and then (once in v2.2's session, once in v2.4's out of three runs; the next runs passed). Find out whether a thrown stone can really pass through a mutant in play (the stone is a small box with continuous collision and a random spin; the test spawns the walker and throws in the same frame) and fix the cause, with a test that throws many stones
 
 ## Milestones
 One version per development run, in this order. The full plan with reasons is in the "Desert Fortress: Version Plan" doc. Player feedback above always comes first.
@@ -62,7 +63,8 @@ Keep the visuals simple (low-poly primitives, no art or animation work) and put 
 ### Owner requests (2026-11-27)
 Building is to be a big part of the game, with the fine-tuned feel of survival-builder games: turn pieces freely before placing them, ready-made buildings such as cabins, and a stand with a button that calls the enemies to you.
 - [x] v1.9: **Building overhaul:** objects turn in 15° steps (Z / X) and the preview swings round smoothly; ready-made buildings (shelter, cabin, big cabin, watchtower, gatehouse) laid as free blueprints and built piece by piece with E (hold to keep going), paid from pockets and chests; the **horde button** stand at the spawn point calls a wave on demand; build-mode key help; walls at corners no longer blocked
-- [ ] Later building ideas (not scheduled): more ready-made buildings (a walled compound, a bunker with a well), choosing the tier of a blueprint, a blueprint menu with pictures
+- [x] v2.4: **Blueprint materials:** G in ready-made building mode picks wood, scrap metal, stone or concrete; every piece goes up straight in that material for its wooden price plus the hammer upgrades
+- [ ] Later building ideas (not scheduled): a blueprint menu with pictures, more ready-made buildings (a walled compound, a bunker with a well)
 
 ### Owner requests (2026-11-27, later)
 Resource gathering and processing: trees and an axe, rocks to pick up, machines bought for cash and delivered by drone (a rock crusher for cement), and traps made from gathered resources.

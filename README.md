@@ -2,7 +2,7 @@
 
 A 3D low-poly survival and fortress-defence game for Linux, made with Godot 4.5. Scavenge the desert by day, build and arm a fortress around the flag, and survive a bigger mutant wave every night. Each night pays cash you spend at the shop terminal on supplies, weapons, drone deliveries and base upgrades. Now also: turning the desert green from a main well at the centre, farming it and selling the harvest at the market, and hunting the animals the green land draws in (by night the water draws the mutants); claiming hidden oases as outposts, and green milestones that end with the rain coming back (then free play). A peaceful mode leaves out the mutants altogether.
 
-**Current version: v2.3.0.** See [ROADMAP.md](ROADMAP.md) for the plan and [DEVLOG.md](DEVLOG.md) for what changed in each update.
+**Current version: v2.4.0.** See [ROADMAP.md](ROADMAP.md) for the plan and [DEVLOG.md](DEVLOG.md) for what changed in each update.
 
 ## Play (Linux Mint)
 
@@ -40,7 +40,7 @@ If `git pull` complains about untracked `.uid` files, they are safe to delete.
 
 **Faster building.** In build mode, hold left click on the first square (or edge) and let go on the last to build a whole **line** of up to 12 walls, foundations, floors or pillars, each one paid as it goes. With the hammer, **R** repairs everything damaged within 8 m and **G** upgrades every piece of the same tier as the one you look at within 8 m; both pay from your pockets and any chest within reach. In build mode, **G** picks up the piece you look at (a chest keeps its contents, a turret its ammo, damage stays) and left click puts it down elsewhere for free; G again (or leaving build mode) puts it back. Foundations and pieces that hold something up can't be moved.
 
-**Ready-made buildings and turning.** In build mode, **Z / X** turn the piece (chests, turrets, traps and other objects in 15° steps, so they don't have to sit square). **T** switches to ready-made buildings: shelter, cabin, big cabin, watchtower and gatehouse. Left click lays a free blue blueprint of the whole building; then walk up to it and press **E** to build the next piece (hold E to keep going), paid from your pockets and chests in reach. Right click on a blueprint in build mode scraps it. Blueprints are saved, so you can finish one later.
+**Ready-made buildings and turning.** In build mode, **Z / X** turn the piece (chests, turrets, traps and other objects in 15° steps, so they don't have to sit square). **T** switches to ready-made buildings: shelter, cabin, big cabin, watchtower and gatehouse. Left click lays a free blue blueprint of the whole building; then walk up to it and press **E** to build the next piece (hold E to keep going), paid from your pockets and chests in reach. **G** picks the material the building goes up in (wood, scrap metal, stone or concrete): each piece then costs its wooden price plus the hammer upgrades on the way, and goes up straight in that material (ladders, doors and other fixed pieces stay as they are). Right click on a blueprint in build mode scraps it. Blueprints are saved, so you can finish one later.
 
 **Gathering and machines.** Chop trees in the palm groves with an **axe** (left click) for logs, and pick up loose stones with **E**. Logs split into 2 wood at the workbench, or 5 at a **sawmill**. Machines come by drone from the shop terminal: the **sawmill** (logs to wood), the **rock crusher** (stone to cement) and the **nail press** (scrap to nails). Place one next to a generator or cable it to one, then **E** loads it and takes what it made. Generators start up by day for machines with work. **Log stakes** are a trap made from logs. Felled trees grow back after 3 days.
 
@@ -151,7 +151,7 @@ Dropped bags (**Q**) are tossed a step ahead, fall and roll, and blasts throw th
 | Left click | Swing, shoot, throw (hold to throw further), build (hold and drag for a line), use the hammer, dig with the shovel, pour the watering can, or plant seeds |
 | Right click | Aim a gun; hammer: demolish; shovel: fill; build mode: undo |
 | R | Reload; build mode: turn the piece; hammer: repair everything nearby; lock or unlock a metal door |
-| G | Build mode: pick a piece up and move it; hammer: upgrade everything like it nearby |
+| G | Build mode: pick a piece up and move it (ready-made buildings: pick the material); hammer: upgrade everything like it nearby |
 | Z / X | Build mode: turn the piece back / on (objects in 15° steps) |
 | T | Build mode: switch between single pieces and ready-made buildings |
 | E | Search, open, use (gates, chests, workbench, generator, fire pit, turret, switch, well, shop), harvest a ripe plant |

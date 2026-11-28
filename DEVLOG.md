@@ -2,6 +2,26 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v2.4.0 (2026-11-28): Blueprint materials
+Every scheduled milestone is done and no player feedback was waiting, so this run took the first unscheduled building idea: choosing the material of a ready-made building.
+- **G in ready-made building mode** (build mode, T) picks the material the building goes up in: **wood, scrap metal, stone, concrete**, then round to wood. The HUD line says "BUILDING: Cabin (2×2) in stone" with the whole price, and the key help lists G.
+- The blueprint remembers its material. **E at it** builds each piece straight in that material: it costs the wooden price **plus every hammer upgrade on the way** (so exactly what building in wood and upgrading by hand would cost, no discount and no extra), paid from pockets and chests in reach as before. The prompt names it: "[E] Build Cabin (2×2) in stone: next stone wall (...)".
+- Ladders, doors, trapdoors and other fixed pieces keep their own material; roofs stay at least scrap metal.
+- **Weight still counts.** Each piece is raised one tier at a time with the hammer's own check, so if a stone or concrete piece would bring itself or what it holds down, it stops at the heaviest tier that's safe, you only pay for that, and a banner says why ("Too heavy: ... left as scrap metal roof").
+- **Decisions:**
+  - G was free in ready-made mode (it did nothing there), so it became the material key rather than adding a new one.
+  - The price is the wood cost plus the hammer upgrades (`Building.cost_at_tier`) so there is one source of truth for tier prices; the hammer's `upgrade_cost` now calls the same `step_cost`. No discount for building straight in stone: the point is saving clicks, not materials.
+  - Pieces are placed in their base tier and upgraded with `building.upgrade()` and `upgrade_problem()`, the same path as the hammer, instead of a second way of placing heavy pieces.
+  - The material you pick isn't saved (it's a build-mode setting like the piece you have selected); each blueprint's material is.
+- **Saved:** each blueprint's `tier` (new field). Older saves load their blueprints as wood; a broken value falls back to wood, too high is clamped to concrete. No `SAVE_VERSION` bump.
+- Code: building.gd `step_cost`, `tier_for`, `cost_at_tier`, `prefab_cost`, `site_tier`, the site's `tier`, prompt and save; build_mode.gd `prefab_tier` and `cycle_prefab_tier`; main.gd `build_site_step` raises the piece and G cycles the material (+13 lines).
+- **Tests (24 new):** wood prices unchanged, a stone wall costing the wood price plus both upgrades, fixed pieces and roofs, a wooden blueprint costing what it did and concrete needing cement, G cycling and the HUD/key text, laying a stone shelter, its price and prompt, wood alone not being enough, building it in full with every piece in stone at full strength using up exactly the price, and saving (a concrete blueprint, an older save, a broken and a too-high tier).
+- New screenshot view `82_blueprint_tiers` (the five buildings in different materials, build mode set to a stone shelter).
+- Bug noted under Player feedback: the throwables test "a thrown stone hits a walker" failed once again this session (then passed). The next run looks into it before new features.
+
+**Try:** press B, then T, pick the cabin with the wheel and press G twice for stone. Lay it, put stone, clay, scrap, wood and nails in a chest next to it (the green test box has plenty) and hold E: it goes up as a stone cabin without touching the hammer.
+**Next:** the flaky thrown-stone test (Player feedback), then the remaining building ideas: a blueprint menu with pictures, and more ready-made buildings (a walled compound, a bunker with a well).
+
 ## v2.3.0 (2026-11-28): Events
 Last scheduled M9 step: sandstorms, a boss every tenth night and day raids on outposts. No player feedback was waiting.
 - **Sandstorms** (from day 3, about 3 days in 10, starting between 9:00 and 13:30 and lasting 2.5 to 4 hours, so 2 to 3 minutes). A banner warns an hour ahead and names the side it comes from ("Sandstorm at 11:15" on the HUD). It builds up over about 20 seconds: the fog closes in to about 30 m and hides the sky, sky and fog turn sandy brown, the sun dims, sand streaks blow past you along the wind and the wind howls. At half strength a **band of mutants** (4, plus one every 4 days, at most 10; walkers, runners, the odd spitter) comes in on the wind from 125 m out and marches on the main well, by day. While it blows every mutant sees as little as at night. **Drifting sand** fills dug holes: every 3 s five dug cells rise a step (0.25 m), never above the old ground, so a storm fills roughly a tenth to a fifth of a trench ring. When the storm passes, its mutants sink back into the sand and a banner says so.

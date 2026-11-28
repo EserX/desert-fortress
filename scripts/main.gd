@@ -1291,14 +1291,24 @@ func build_site_step(id: int) -> String:
 	if not nxt.has("i"):
 		hud.show_banner(str(nxt.get("reason", "Nothing to build")))
 		return ""
-	var cost: Dictionary = Building.PIECES[nxt.type].cost
+	var tier := Building.tier_for(nxt.type, building.site_tier(id))
+	var cost := Building.cost_at_tier(nxt.type, tier)
 	if not has_near(cost):
 		hud.show_banner("Not enough for the next %s: %s" % [Building.PIECES[nxt.type].name.to_lower(), _cost_text(cost)])
 		return ""
 	if not use_stamina(STAMINA_BUILD):
 		return ""
-	pay_near(cost)
+	pay_near(Building.PIECES[nxt.type].cost)
 	var key := building.build_site_piece(id, nxt)
+	# Raised to the blueprint's material one step at a time, like the hammer
+	# does, unless the piece can't carry the weight where it stands.
+	while key != "" and building.pieces[key].tier < tier:
+		var problem := building.upgrade_problem(key)
+		if problem != "":
+			hud.show_banner("%s: left as %s" % [problem, building.describe(building.pieces[key]).to_lower()])
+			break
+		pay_near(building.upgrade_cost(building.pieces[key]))
+		building.upgrade(key)
 	if not building.sites.has(id):
 		hud.show_pickup(["Finished building!"])
 	return key
@@ -1330,6 +1340,8 @@ func _build_input(event: InputEvent) -> bool:
 				hud.show_pickup(["Blueprint scrapped"])
 			return true
 	if build_mode.prefab_mode and event.is_action_pressed("move_piece"):
+		build_mode.cycle_prefab_tier()
+		hud.show_pickup(["Blueprint material: " + Building.TIER_NAMES[build_mode.prefab_tier]])
 		return true
 	if build_mode.prefab_mode and event is InputEventMouseButton and event.button_index in [MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT]:
 		return true

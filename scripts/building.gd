@@ -1624,13 +1624,49 @@ static func _size(type: String) -> int:
 ## What it costs to raise a piece one tier ({} at concrete): scrap metal and
 ## nails, then stone with clay as mortar, then cement.
 func upgrade_cost(rec: Dictionary) -> Dictionary:
-	if rec.tier >= TIER_NAMES.size() - 1 or PIECES[rec.type].get("fixed", false):
+	return step_cost(rec.type, int(rec.tier))
+
+
+## What raising a `type` piece from `tier` to the next costs ({} if it can't).
+static func step_cost(type: String, tier: int) -> Dictionary:
+	if tier >= TIER_NAMES.size() - 1 or PIECES[type].get("fixed", false):
 		return {}
-	if rec.tier == 0:
-		return {"scrap": _size(rec.type) + 1, "nails": 2}
-	if rec.tier == 1:
-		return {"stone": _size(rec.type) + 2, "clay": 1}
-	return {"cement": _size(rec.type), "scrap": 1}
+	if tier == 0:
+		return {"scrap": _size(type) + 1, "nails": 2}
+	if tier == 1:
+		return {"stone": _size(type) + 2, "clay": 1}
+	return {"cement": _size(type), "scrap": 1}
+
+
+## The tier a piece of a blueprint laid in `tier` goes up in: fixed pieces
+## (ladders, doors...) keep theirs, roofs never drop below scrap.
+static func tier_for(type: String, tier: int) -> int:
+	if PIECES[type].get("fixed", false):
+		return base_tier(type)
+	return clampi(maxi(tier, base_tier(type)), 0, TIER_NAMES.size() - 1)
+
+
+## Everything a `type` piece costs built straight in `tier`: its own cost plus
+## every upgrade on the way (what the hammer would charge, no more).
+static func cost_at_tier(type: String, tier: int) -> Dictionary:
+	var out: Dictionary = PIECES[type].cost.duplicate()
+	var t := base_tier(type)
+	while t < tier_for(type, tier):
+		var up := step_cost(type, t)
+		for item in up:
+			out[item] = int(out.get(item, 0)) + int(up[item])
+		t += 1
+	return out
+
+
+## Everything a whole ready-made building costs laid in `tier`.
+static func prefab_cost(id: String, tier: int) -> Dictionary:
+	var out := {}
+	for e in Prefabs.entries(id):
+		var c := cost_at_tier(e.type, tier)
+		for item in c:
+			out[item] = int(out.get(item, 0)) + int(c[item])
+	return out
 
 
 ## One unit of the tier's material per started quarter of missing hit points.
@@ -2254,13 +2290,14 @@ func load_data(data: Array, old_tiers := false) -> void:
 
 ## Lays out a blueprint: `todo` is prefabs.placed() (pieces in build order),
 ## y the height its foundations' tops come to. Returns its id.
-func add_site(prefab: String, todo: Array, y: float) -> int:
+## `tier` is the material its pieces go up in (0 wood to 3 concrete).
+func add_site(prefab: String, todo: Array, y: float, tier := 0) -> int:
 	var id := _site_next
 	_site_next += 1
 	var list: Array = []
 	for e in todo:
 		list.append({"type": str(e.type), "slot": e.slot.duplicate()})
-	sites[id] = {"prefab": prefab, "y": y, "todo": list, "node": null}
+	sites[id] = {"prefab": prefab, "y": y, "todo": list, "node": null, "tier": clampi(tier, 0, TIER_NAMES.size() - 1)}
 	_rebuild_site(id)
 	return id
 
@@ -2342,18 +2379,27 @@ func site_prompt(id: int, cost_text: Callable, person := Vector3.INF) -> String:
 	if s.is_empty():
 		return ""
 	var nxt := site_next(id, person)
-	var name: String = Prefabs.display_name(s.prefab)
+	var tier := int(s.get("tier", 0))
+	var name: String = Prefabs.display_name(s.prefab) + ("" if tier == 0 else " in " + TIER_NAMES[tier])
 	if not nxt.has("i"):
 		return "Blueprint: %s   (%s)" % [name, nxt.reason]
-	return "[E] Build %s: next %s (%s)   %d piece%s left, hold E to keep going" % [name, PIECES[nxt.type].name.to_lower(),
-		cost_text.call(PIECES[nxt.type].cost), s.todo.size(), "" if s.todo.size() == 1 else "s"]
+	var t := tier_for(nxt.type, tier)
+	var piece: String = (PIECES[nxt.type].name if t == base_tier(nxt.type) else describe({"type": nxt.type, "tier": t})).to_lower()
+	return "[E] Build %s: next %s (%s)   %d piece%s left, hold E to keep going" % [name, piece,
+		cost_text.call(cost_at_tier(nxt.type, tier)), s.todo.size(), "" if s.todo.size() == 1 else "s"]
 
 
-## What a blueprint still needs, summed up.
+## The tier the pieces of a blueprint go up in (0 if it's gone).
+func site_tier(id: int) -> int:
+	return int(sites.get(id, {}).get("tier", 0))
+
+
+## What a blueprint still needs, summed up (at its tier).
 func site_cost(id: int) -> Dictionary:
 	var out := {}
+	var tier := site_tier(id)
 	for e in sites.get(id, {}).get("todo", []):
-		var c: Dictionary = PIECES[e.type].cost
+		var c := cost_at_tier(e.type, tier)
 		for item in c:
 			out[item] = int(out.get(item, 0)) + int(c[item])
 	return out
@@ -2418,7 +2464,7 @@ func sites_save_data() -> Array:
 		var todo: Array = []
 		for e in s.todo:
 			todo.append({"type": e.type, "kind": e.slot.kind, "cx": e.slot.cx, "cz": e.slot.cz, "dir": e.slot.dir, "level": e.slot.get("level", 0)})
-		out.append({"prefab": s.prefab, "y": s.y, "todo": todo})
+		out.append({"prefab": s.prefab, "y": s.y, "todo": todo, "tier": int(s.get("tier", 0))})
 	return out
 
 
@@ -2432,4 +2478,6 @@ func sites_load_data(data: Array) -> void:
 			if PIECES.has(str(e.get("type", ""))):
 				todo.append({"type": str(e.type), "slot": {"kind": str(e.kind), "cx": int(e.cx), "cz": int(e.cz), "dir": int(e.dir), "level": int(e.get("level", 0))}})
 		if not todo.is_empty():
-			add_site(str(d.get("prefab", "")), todo, float(d.get("y", 0.0)))
+			# Saves before v2.4 have no tier: wood.
+			var tier = d.get("tier", 0)
+			add_site(str(d.get("prefab", "")), todo, float(d.get("y", 0.0)), int(tier) if (tier is int or tier is float) else 0)

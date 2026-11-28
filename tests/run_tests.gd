@@ -2256,6 +2256,102 @@ func _test_fast_building() -> void:
 	player.stamina = player.STAMINA_MAX
 
 
+## v2.4: ready-made buildings laid in a chosen material (G in build mode).
+func _test_blueprint_tiers() -> void:
+	var b = main.building
+	var bm = main.build_mode
+	var inv = main.inventory
+	var player = main.player
+	var Prefabs = load("res://scripts/prefabs.gd")
+	main.terrain.load_data({})
+	b.load_data([])
+	b.sites_load_data([])
+	inv.load_data({})
+	player.position = Vector3(-14, main.terrain.surface_height(-14, 12), 12)
+	var W: Dictionary = b.PIECES.wall.cost
+	check(b.cost_at_tier("wall", 0) == W, "a wooden wall costs what it always did")
+	var stone: Dictionary = b.cost_at_tier("wall", 2)
+	var by_hand: Dictionary = W.duplicate()
+	for t in 2:
+		var up: Dictionary = b.upgrade_cost({"type": "wall", "tier": t})
+		for item in up:
+			by_hand[item] = int(by_hand.get(item, 0)) + up[item]
+	check(stone == by_hand, "a stone wall costs the wood one plus both hammer upgrades (%s)" % str(stone))
+	check(b.tier_for("ladder", 3) == 0 and b.cost_at_tier("ladder", 3) == b.PIECES.ladder.cost, "ladders and other fixed pieces keep their own material")
+	check(b.tier_for("roof", 0) == 1 and b.tier_for("roof", 2) == 2, "roofs are never below scrap metal")
+	check(b.prefab_cost("cabin", 0) == Prefabs.total_cost("cabin", b.PIECES), "a wooden blueprint costs the same as before")
+	check(b.prefab_cost("cabin", 3).has("cement") and not b.prefab_cost("cabin", 1).has("cement"), "a concrete one needs cement, a scrap one doesn't")
+	# Picking the material in build mode.
+	bm.toggle()
+	if not bm.prefab_mode:
+		bm.toggle_prefabs()
+	bm.select(Prefabs.ORDER.find("shelter"))
+	check(bm.prefab_tier == 0 and bm.status_text().contains("Shelter (1×1) in wood"), "blueprints start out in wood")
+	bm.cycle_prefab_tier()
+	bm.cycle_prefab_tier()
+	check(bm.prefab_tier == 2 and bm.status_text().contains("in stone") and bm.status_text().contains(" stone"), "G twice picks stone, and the HUD shows the stone cost")
+	check(bm.keys_text().contains("[G] material"), "the key help lists G")
+	var ev: Dictionary = bm.evaluate_prefab("shelter", -5, -5, 0)
+	check(ev.ok, "a shelter fits (%s)" % ev.reason)
+	bm.can_build = true
+	bm.prefab_plan = ev.plan
+	bm.prefab_y = ev.y
+	var sid: int = bm.place_prefab()
+	check(sid > 0 and b.site_tier(sid) == 2, "the blueprint is laid in stone")
+	check(b.site_cost(sid) == b.prefab_cost("shelter", 2), "it needs the stone price (%s)" % str(b.site_cost(sid)))
+	var pr: String = b.site_prompt(sid, main._cost_text)
+	check(pr.contains("Shelter (1×1) in stone") and pr.contains("next stone foundation"), "the prompt names the material: " + pr)
+	var need: Dictionary = b.site_cost(sid)
+	var short: Dictionary = b.cost_at_tier("foundation", 2)
+	inv.add_all(b.PIECES.foundation.cost)
+	check(main.build_site_step(sid) == "", "the wood alone isn't enough for a stone foundation")
+	inv.load_data({})
+	inv.add_all(need)
+	var n := 0
+	for i in 40:
+		player.stamina = player.STAMINA_MAX
+		if not b.sites.has(sid) or main.build_site_step(sid) == "":
+			break
+		n += 1
+	check(not b.sites.has(sid) and n == Prefabs.entries("shelter").size(), "the stone shelter goes up in full (%d pieces)" % n)
+	var all_stone := true
+	for k in b.pieces:
+		var r: Dictionary = b.pieces[k]
+		if not b.PIECES[r.type].get("fixed", false) and (r.tier != 2 or r.hp < b.max_hp(r)):
+			all_stone = false
+	check(all_stone, "every piece stands in stone at full strength")
+	check(inv.weight() < 0.01, "and it used up exactly the stone price (%.1f kg left)" % inv.weight())
+	check(short.has("stone"), "a stone foundation costs stone")
+	# Saving keeps the material; older saves and broken values load as wood.
+	b.load_data([])
+	var pev: Dictionary = bm.evaluate_prefab("cabin", -11, 0, 0)
+	check(pev.ok, "a cabin fits (%s)" % pev.reason)
+	var s3: int = b.add_site("cabin", pev.plan, pev.y, 3)
+	var data: Dictionary = main.collect_save_data()
+	b.sites_load_data([])
+	main.apply_save_data(JSON.parse_string(JSON.stringify(data)))
+	check(b.sites.size() == 1 and b.site_tier(b.sites.keys()[0]) == 3, "a concrete blueprint stays concrete through a save")
+	var old: Array = b.sites_save_data()
+	old[0].erase("tier")
+	b.sites_load_data(old)
+	check(b.site_tier(b.sites.keys()[0]) == 0, "a blueprint from an older save is wood")
+	old[0]["tier"] = "lots"
+	b.sites_load_data(old)
+	check(b.site_tier(b.sites.keys()[0]) == 0, "a broken tier falls back to wood")
+	old[0]["tier"] = 9
+	b.sites_load_data(old)
+	check(b.site_tier(b.sites.keys()[0]) == 3, "a tier past concrete is clamped")
+	bm.cycle_prefab_tier()
+	bm.cycle_prefab_tier()
+	check(bm.prefab_tier == 0, "G goes round back to wood")
+	bm.toggle_prefabs()
+	bm.toggle()
+	b.sites_load_data([])
+	b.load_data([])
+	inv.load_data({})
+	player.stamina = player.STAMINA_MAX
+
+
 ## v1.9: free turning, ready-made buildings (blueprints) and the horde button.
 func _test_building_v19() -> void:
 	var b = main.building
@@ -3011,6 +3107,7 @@ func _process(_delta: float) -> bool:
 			_test_fast_building()
 			_test_wiring()
 			_test_building_v19()
+			_test_blueprint_tiers()
 			_test_resources()
 			_test_water()
 			_test_farming()

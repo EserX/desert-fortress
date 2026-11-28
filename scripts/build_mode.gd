@@ -37,6 +37,8 @@ var turn := 0
 ## T: ready-made buildings instead of single pieces.
 var prefab_mode := false
 var prefab_index := 0
+## The material a ready-made building is laid in (G): 0 wood to 3 concrete.
+var prefab_tier := 0
 ## The ready-made building under the crosshair: Prefabs.placed() and the height
 ## of its foundations.
 var prefab_plan: Array = []
@@ -142,6 +144,11 @@ func toggle_prefabs() -> void:
 
 func current_prefab() -> String:
 	return Prefabs.ORDER[prefab_index]
+
+
+## G with ready-made buildings: wood, scrap metal, stone, concrete, wood...
+func cycle_prefab_tier() -> void:
+	prefab_tier = (prefab_tier + 1) % Building.TIER_NAMES.size()
 
 
 ## R: a quarter turn clockwise.
@@ -327,7 +334,7 @@ func evaluate_prefab(id: String, cx: int, cz: int, turns: int) -> Dictionary:
 func place_prefab() -> int:
 	if not active or not prefab_mode or not can_build or prefab_plan.is_empty():
 		return 0
-	return building.add_site(current_prefab(), prefab_plan, prefab_y)
+	return building.add_site(current_prefab(), prefab_plan, prefab_y, prefab_tier)
 
 
 func _rebuild_prefab_ghost(id: String) -> void:
@@ -522,7 +529,7 @@ func try_remove() -> String:
 ## Keys while building, for the HUD.
 func keys_text() -> String:
 	if prefab_mode:
-		return "[LMB] lay blueprint  [R/Z/X] turn  [Wheel] building  [T] single pieces  [E at a blueprint] build it  [RMB on it] scrap it"
+		return "[LMB] lay blueprint  [R/Z/X] turn  [Wheel] building  [G] material  [T] single pieces  [E at a blueprint] build it  [RMB on it] scrap it"
 	return "[LMB] build (drag: a line)  [R] turn 90°  [Z/X] turn %s  [Wheel/1-9] piece  [T] ready-made buildings  [G] move  [RMB] undo" % ("15°" if current_type() in Building.FREE_TURN else "90°")
 
 
@@ -530,11 +537,12 @@ func keys_text() -> String:
 func status_text() -> String:
 	if prefab_mode:
 		var id := current_prefab()
-		var cost: Dictionary = Prefabs.total_cost(id, Building.PIECES)
+		var cost: Dictionary = Building.prefab_cost(id, prefab_tier)
 		var parts: Array = []
 		for item in cost:
 			parts.append("%d %s" % [cost[item], Items.display_name(item).to_lower()])
-		var pl := "BUILDING: %s   (%d pieces: %s)   facing %d°" % [Prefabs.display_name(id), Prefabs.entries(id).size(), ", ".join(parts), dir * 90]
+		var pl := "BUILDING: %s in %s   (%d pieces: %s)   facing %d°" % [Prefabs.display_name(id), Building.TIER_NAMES[prefab_tier],
+			Prefabs.entries(id).size(), ", ".join(parts), dir * 90]
 		pl += "\n" + (reason if not can_build and reason != "" else "Left click lays the blueprint for free, then E at it builds it piece by piece")
 		return pl + "\n" + keys_text()
 	var type := current_type()

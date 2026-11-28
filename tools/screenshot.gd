@@ -89,6 +89,7 @@ var shots := [
 	{"name": "79_sledgehammer", "pos": Vector3(-26, 0, -40), "yaw": PI * 0.5, "pitch": -0.05, "hour": 15.0, "forge": "sledge"},
 	{"name": "80_sandstorm", "pos": Vector3(0, 0, 9), "yaw": -PI * 0.5, "pitch": -0.02, "hour": 12.0, "event": "storm"},
 	{"name": "81_behemoth", "pos": Vector3(0, 0, 9), "yaw": -PI * 0.5, "pitch": 0.1, "hour": 17.6, "event": "boss"},
+	{"name": "82_blueprint_tiers", "pos": Vector3(6, 0, 16), "yaw": 0.25, "pitch": -0.1, "hour": 16.5, "prefab_tiers": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -352,6 +353,15 @@ func _process(_d: float) -> bool:
 				bm.toggle_prefabs()
 			bm.select(1)  # cabin
 			bm.dir = 1
+		elif s.get("prefab_tiers", false):
+			_prefabs_sample(false, true)
+			var bm = main.build_mode
+			if not bm.active:
+				bm.toggle()
+			if not bm.prefab_mode:
+				bm.toggle_prefabs()
+			bm.select(0)  # shelter
+			bm.prefab_tier = 2
 		elif s.get("zone", false):
 			main.build_mode.active = true
 			main.build_mode.select(10)
@@ -790,7 +800,8 @@ func _pieces2_sample() -> void:
 
 ## v1.9: a cabin, a big cabin and a watchtower built from blueprints, and a
 ## shelter blueprint half built. With half_only, just a half-built blueprint.
-func _prefabs_sample(half_only := false) -> void:
+## tiers: each building laid in another material (v2.4).
+func _prefabs_sample(half_only := false, tiers := false) -> void:
 	var b = main.building
 	var bm = main.build_mode
 	main.terrain.load_data({})
@@ -803,7 +814,8 @@ func _prefabs_sample(half_only := false) -> void:
 		if not ev.ok:
 			print("prefab ", sp[0], " does not fit: ", ev.reason)
 			continue
-		var id: int = b.add_site(sp[0], ev.plan, ev.y)
+		var tier: int = {"cabin": 2, "long_cabin": 1, "watchtower": 0, "shelter": 3, "gatehouse": 3}[sp[0]] if tiers else 0
+		var id: int = b.add_site(sp[0], ev.plan, ev.y, tier)
 		for i in sp[3]:
 			if not b.sites.has(id):
 				break
@@ -811,7 +823,9 @@ func _prefabs_sample(half_only := false) -> void:
 			if not nxt.has("i"):
 				print("prefab ", sp[0], " stuck: ", nxt.reason)
 				break
-			b.build_site_piece(id, nxt)
+			var key: String = b.build_site_piece(id, nxt)
+			while key != "" and b.pieces[key].tier < b.tier_for(nxt.type, tier) and b.upgrade_problem(key) == "":
+				b.upgrade(key)
 
 
 ## v1.11: a generator powering a sawmill, a rock crusher and a nail press by

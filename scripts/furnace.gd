@@ -8,6 +8,7 @@ extends Node
 ## this script does the smelting, the prompt and E.
 
 const Items = preload("res://scripts/items.gd")
+const ChestFeed = preload("res://scripts/chest_feed.gd")
 
 ## What it smelts: input item -> how many `need` make `make` of `out` in `secs`.
 const SMELT := {
@@ -147,7 +148,8 @@ static func use(rec: Dictionary, inventory, held: String) -> Array:
 
 ## "Furnace (smelting clay to bricks): 8 clay in, 4 bricks ready, fuel 2:40
 ## [E] Load sand, take the bricks"
-static func prompt(rec: Dictionary, held: String) -> String:
+## With `building` given, it also says when a chest next to it takes the goods.
+static func prompt(rec: Dictionary, held: String, building = null) -> String:
 	var state := "cold"
 	if rec.smelt != "":
 		var s: Dictionary = SMELT[rec.smelt]
@@ -169,6 +171,8 @@ static func prompt(rec: Dictionary, held: String) -> String:
 	if not ready.is_empty():
 		text += ", " + ", ".join(ready) + " ready"
 	text += ", fuel %d:%02d" % [int(rec.heat) / 60, int(rec.heat) % 60]
+	if building != null and ChestFeed.chest_for(building, rec) != "":
+		text += ", feeding the chest next to it"
 	var acts: Array = []
 	if FUEL.has(held):
 		acts.append("burn %s" % Items.display_name(held).to_lower())
@@ -205,5 +209,6 @@ func tick(dt: float) -> void:
 		if rec.is_empty():
 			continue
 		rec.working = work(rec, dt)
+		ChestFeed.feed(building, rec)  # v2.7: into a chest next to it
 		if rec.has("glow") and rec.glow.visible != rec.working:
 			rec.glow.visible = rec.working

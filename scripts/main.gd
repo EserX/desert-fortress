@@ -1257,7 +1257,7 @@ func _prompt_for(id: String) -> String:
 		return building.prompt(id) + camp.cook_prompt(building.pieces.get(id.trim_prefix("fire:"), {}))
 	if id.begins_with("furnace:"):
 		var frec: Dictionary = building.pieces.get(id.trim_prefix("furnace:"), {})
-		return "" if frec.is_empty() else Furnace.prompt(frec, inventory.selected_stack().get("item", ""))
+		return "" if frec.is_empty() else Furnace.prompt(frec, inventory.selected_stack().get("item", ""), building)
 	if id.begins_with("machine:"):
 		var mk := id.trim_prefix("machine:")
 		var mrec: Dictionary = building.pieces.get(mk, {})

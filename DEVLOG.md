@@ -2,6 +2,23 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v2.7.0 (2026-11-28): Machines feed a chest
+No player feedback was waiting and every scheduled item is done, so this run took one of the resource ideas: machines that fill a chest by themselves.
+- **Put a storage chest on a square next to a machine** (sawmill, rock crusher, nail press) **or a furnace**, on its sides or corners and on the same floor, and what it makes goes straight into that chest, four times a second. Load a sawmill with 30 logs, walk off, and come back to 150 wood in the chest.
+- A fed machine no longer stops when its own tray is full (60): it keeps going as long as the chest has room. If the chest fills up, the goods wait in the machine as before and go in as soon as there's space. Nothing is ever lost.
+- The machine and furnace prompts end with "feeding the chest next to it" when a chest is in place.
+- **Decisions:**
+  - Machines only ever put things **in**. They don't take their input from the chest, because stone, scrap and logs kept in a chest are also building materials, and a crusher eating your stone or a nail press eating your scrap would be a nasty surprise. You still load machines with E.
+  - "Next to" is a chest whose middle is within 3 m of the machine's (one square away, diagonals too, 2 m squares) and within 1.2 m in height. With several chests in reach the nearest one is used.
+  - The logic is one small new script, `scripts/chest_feed.gd` (`chest_for`, `feed`), called by power.gd after each machine step and by furnace.gd after each smelting step. It works on the existing piece records and `Inventory.add`, so no second copy of storage code. main.gd changed by one argument (the furnace prompt gets `building`).
+  - No new model: the chest you already build is the link, and the prompt says it's working.
+- No save changes (it only moves items between things that are already saved).
+- **Tests (13 new):** no chest, a chest two squares away not counting, a chest on the corner square counting, the sawmill's wood going in, the prompt, nothing being taken out of the chest (logs kept there stay), a full chest leaving the wood in the mill and taking it once there's room, a fed sawmill working past its own 60, a furnace's bricks going in and its prompt, and nothing fed once the chest is gone.
+- New screenshot view `85_chest_feed` (a sawmill with a chest beside it, its prompt showing).
+
+**Try:** buy a sawmill by drone (or take one from the green test box), put it by a generator, build a storage chest on the square next to it, load it with logs and walk away. Open the chest a minute later.
+**Next:** the last resource idea, a water purifier (unless there's player feedback in ROADMAP.md first).
+
 ## v2.6.0 (2026-11-28): Blueprint menu with pictures
 No player feedback was waiting, so this run took the last building idea: picking ready-made buildings from a menu instead of only the mouse wheel.
 - **T in build mode opens the blueprint menu.** Each ready-made building is a card with a small drawing of it (seen from above at an angle), its number, name, how many pieces it has and its full price. A row along the top picks the material (wood, scrap metal, stone, concrete, same as G); the drawings and prices change with it. Click a card or press 1-7 to pick it, then left click lays the blueprint as before. The mouse wheel still steps through buildings with the menu closed.

@@ -1107,6 +1107,8 @@ func machine_prompt(key: String, has_input: int) -> String:
 	if rec.powered:
 		state = "running" if rec.input >= m.need and rec.output + m.make <= MACHINE_OUT_MAX else ("full" if rec.output + m.make > MACHINE_OUT_MAX else "waiting for %s" % Items.display_name(m.in).to_lower())
 	var text := "%s (%s): %d %s in, %d %s ready" % [PIECES[rec.type].name, state, rec.input, Items.display_name(m.in).to_lower(), rec.output, Items.display_name(m.out).to_lower()]
+	if preload("res://scripts/chest_feed.gd").chest_for(self, rec) != "":
+		text += ", feeding the chest next to it"
 	var acts: Array = []
 	if has_input > 0 and rec.input < MACHINE_IN_MAX:
 		acts.append("load %s" % Items.display_name(m.in).to_lower())

@@ -92,6 +92,7 @@ var shots := [
 	{"name": "82_blueprint_tiers", "pos": Vector3(6, 0, 16), "yaw": 0.25, "pitch": -0.1, "hour": 16.5, "prefab_tiers": true},
 	{"name": "83_compound_bunker", "pos": Vector3(2, 0, -1), "yaw": 0.0, "pitch": -0.6, "hour": 15.5, "compound": true},
 	{"name": "84_blueprint_menu", "pos": Vector3(6, 0, 16), "yaw": 0.25, "pitch": -0.1, "hour": 16.5, "bpmenu": true},
+	{"name": "85_chest_feed", "pos": Vector3(-8, 0, 12.5), "yaw": 0.1, "pitch": -0.3, "hour": 14.0, "machines": true, "feed": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -207,7 +208,7 @@ func _process(_d: float) -> bool:
 			main.inventory.add("axe", 1)
 			main.inventory.selected = 0
 		if s.get("machines", false):
-			_machines_sample()
+			_machines_sample(p if s.get("feed", false) else null)
 		if s.get("blast", false):
 			_blast_sample(p)
 		if s.get("greening", false):
@@ -1076,7 +1077,9 @@ func _raid_sample() -> void:
 	main.hud.show_banner("Mutants are trampling your fields!")
 
 
-func _machines_sample() -> void:
+## With `feeder` (v2.7), a chest stands next to the sawmill and fills with its
+## wood, and the player looks at the sawmill so its prompt shows.
+func _machines_sample(feeder: Node3D = null) -> void:
 	var b = main.building
 	main.terrain.load_data({})
 	main.mutants.clear()
@@ -1099,6 +1102,18 @@ func _machines_sample() -> void:
 				b.pieces[k].input = 10
 	put.call("log_stakes", -6, 6, 0, 1)
 	put.call("log_stakes", -4, 6, 0, 5)
+	if feeder != null and keys[0] != "":
+		var ck: String = put.call("chest", -7, 3)
+		if ck != "":
+			b.storage_of(ck).add("wood", 25)
+		var saw: Node3D = b.pieces[keys[0]].node
+		main.inventory.load_data({})  # empty hands, so the machine's own prompt shows
+		var at: Vector3 = saw.global_position + Vector3(-0.7, 0, 1.7)
+		at.y = main.terrain.surface_height(at.x, at.z)
+		feeder.position = at
+		var d: Vector3 = saw.global_position - at
+		feeder.rotation.y = atan2(-d.x, -d.z)
+		feeder.head.rotation.x = -0.6
 	main.power.tick(0.25)
 
 

@@ -5,6 +5,8 @@ extends Node3D
 ## switches that are on), or when within PLUG_RANGE of one.
 ## Fire pits burn down the wood put in them. Wells fill up with water.
 
+const ChestFeed = preload("res://scripts/chest_feed.gd")
+
 const TICK := 0.25
 const POWER_RANGE := 18.0    # the old wireless reach (older saves get cables for it)
 const FUEL_SECONDS := 90.0   # one can runs a generator this long
@@ -88,6 +90,7 @@ func tick(dt: float) -> void:
 		if building.MACHINES.has(rec.type):
 			building.set_powered(rec, on)
 			rec.working = building.run_machine(rec, dt)
+			ChestFeed.feed(building, rec)  # v2.7: into a chest next to it
 		elif rec.type in ["turret", "switch"]:
 			rec.powered = on and (rec.type != "switch" or rec.open)
 		else:

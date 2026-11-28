@@ -3313,6 +3313,7 @@ func _process(_delta: float) -> bool:
 			_check_throws()
 			_test_survival_depth()
 			_test_crafting_chain()
+			_test_chest_feed()
 			_test_events()
 			_start_shelter()
 		4280:
@@ -4957,6 +4958,79 @@ func _test_survival_depth() -> void:
 	check(main.player.load_mult > 1.2 and cp.load_mult() == main.player.load_mult, "a heavy load slows climbing (x%.2f, %.0f kg)" % [main.player.load_mult, inv.weight()])
 	inv.load_data({})
 	bd.load_data([])
+
+
+## v2.7: machines and furnaces put what they make into a chest next to them.
+func _test_chest_feed() -> void:
+	var ChestFeed = load("res://scripts/chest_feed.gd")
+	var Furnace = load("res://scripts/furnace.gd")
+	var b = main.building
+	var inv = main.inventory
+	b.load_data([])
+	inv.load_data({})
+	var day: int = main.day_night.day
+	main.day_night.restore(day, 10.0)
+	var gs := {"kind": "obj", "cx": -9, "cz": 9, "dir": 0, "level": 0}
+	var gk: String = b.place("generator", gs, b.evaluate("generator", gs).y)
+	b.pieces[gk].fuel = 3.0
+	var ss := {"kind": "obj", "cx": -8, "cz": 9, "dir": 0, "level": 0}
+	var sk: String = b.place("sawmill", ss, b.evaluate("sawmill", ss).y)
+	var saw: Dictionary = b.pieces[sk]
+	check(ChestFeed.chest_for(b, saw) == "" and not main._prompt_for("machine:" + sk).contains("chest"), "a sawmill with no chest by it keeps its wood")
+	# A chest two squares away is too far.
+	var far := {"kind": "obj", "cx": -8, "cz": 11, "dir": 0, "level": 0}
+	var fark: String = b.place("chest", far, b.evaluate("chest", far).y)
+	check(ChestFeed.chest_for(b, saw) == "", "a chest two squares away doesn't count")
+	# One on the corner next to it does.
+	var cs := {"kind": "obj", "cx": -7, "cz": 10, "dir": 0, "level": 0}
+	var ck: String = b.place("chest", cs, b.evaluate("chest", cs).y)
+	check(ChestFeed.chest_for(b, saw) == ck, "a chest on the corner square next to it does")
+	saw.input = 2
+	for i in 25:
+		main.power.tick(0.25)
+	var store = b.storage_of(ck)
+	check(saw.output == 0 and store.count_of("wood") == 5 and b.storage_of(fark).count_of("wood") == 0, "the sawmill's wood goes into that chest (%d in the chest, %d in the mill)" % [store.count_of("wood"), saw.output])
+	check(main._prompt_for("machine:" + sk).contains("feeding the chest next to it"), "its prompt says so: " + main._prompt_for("machine:" + sk).replace("\n", " / "))
+	check(saw.input == 1, "it never takes from the chest (%d logs in)" % saw.input)
+	store.add("log", 10)
+	for i in 30:
+		main.power.tick(0.25)
+	check(store.count_of("log") == 10 and saw.input == 0 and store.count_of("wood") == 10, "logs kept in the chest stay there (%d)" % store.count_of("log"))
+	# A full chest: the goods wait in the machine, and nothing is lost.
+	store.load_data({})
+	for i in store.slots.size():
+		store.slots[i] = {"item": "sand", "count": 99}
+	saw.input = 3
+	for i in 80:
+		main.power.tick(0.25)
+	check(saw.output == 15 and store.count_of("wood") == 0, "with the chest full the wood waits in the sawmill (%d)" % saw.output)
+	store.slots[0] = {}
+	main.power.tick(0.25)
+	check(saw.output == 0 and store.count_of("wood") == 15, "and goes in as soon as there's room")
+	# The machine keeps going past its own tray: 60 is its limit, the chest takes more.
+	store.load_data({})
+	saw.input = 14
+	for i in 14 * 24 + 4:
+		main.power.tick(0.25)
+	check(store.count_of("wood") == 70 and saw.output == 0, "a fed sawmill works past its own %d (%d wood in the chest)" % [b.MACHINE_OUT_MAX, store.count_of("wood")])
+	# A furnace next to a chest.
+	var fs := {"kind": "obj", "cx": -6, "cz": 9, "dir": 0, "level": 0}
+	var fk: String = b.place("furnace", fs, b.evaluate("furnace", fs).y)
+	var f: Dictionary = b.pieces[fk]
+	check(ChestFeed.chest_for(b, f) == ck, "a furnace next to the chest finds it")
+	store.load_data({})
+	f.heat = 100.0
+	f.smelt = "clay"
+	f.load = 4
+	for i in 25:
+		main.furnace.tick(0.25)
+	check(store.count_of("brick") == 2 and f.made.is_empty(), "the furnace's bricks go into the chest (%d, %s)" % [store.count_of("brick"), str(f.made)])
+	check(Furnace.prompt(f, "", b).contains("feeding the chest next to it") and main._prompt_for("furnace:" + fk).contains("feeding the chest"), "its prompt says so too")
+	b.remove(ck)
+	check(ChestFeed.chest_for(b, saw) == "" and ChestFeed.feed(b, saw).is_empty(), "with the chest gone, nothing is fed")
+	b.load_data([])
+	inv.load_data({})
+	main.day_night.restore(day, 10.0)
 
 
 ## v2.2 crafting chain: the furnace, brick pieces, glass panes and steel tools.

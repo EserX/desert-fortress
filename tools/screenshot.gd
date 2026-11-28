@@ -98,6 +98,7 @@ var shots := [
 	{"name": "88_sprinkler_spring", "pos": Vector3(5, 0, 2), "yaw": 0.0, "pitch": -0.3, "hour": 11.0, "sprinkler_spring": true},
 	{"name": "89_purifier_pipe", "pos": Vector3(5, 0, 2), "yaw": 0.0, "pitch": -0.3, "hour": 14.0, "purifier_pipe": true},
 	{"name": "90_water_map", "pos": Vector3(20, 0, 40), "yaw": 0.9, "pitch": 0.0, "hour": 10.0, "map": true, "water_map": true, "zoom": 4.0},
+	{"name": "91_reach_ring", "pos": Vector3(8, 0, 5), "yaw": -0.1, "pitch": -0.32, "hour": 15.0, "ring": "dew_collector"},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -341,6 +342,8 @@ func _process(_d: float) -> bool:
 			main.shop_ui.close()
 		if s.get("turret", false):
 			_turret_sample()
+		elif s.has("ring"):
+			_ring_sample(s.ring)
 		elif main.build_mode.range_ring.visible and not s.get("build", false):
 			main.build_mode.range_ring.visible = false
 		if s.get("power", false):
@@ -394,7 +397,7 @@ func _process(_d: float) -> bool:
 		elif s.get("zone", false):
 			main.build_mode.active = true
 			main.build_mode.select(10)
-		elif main.build_mode.active and not s.get("turret", false):
+		elif main.build_mode.active and not s.get("turret", false) and not s.has("ring"):
 			main.build_mode.toggle()
 		if not s.get("bpmenu", false) and main.blueprint_menu.is_open():
 			main.blueprint_menu.close()
@@ -731,6 +734,20 @@ func _turret_sample() -> void:
 	main.shop.unlocked["turret"] = true
 	main.build_mode.active = true
 	main.build_mode.select(b.ORDER.find("turret"))
+
+
+## Placing a piece with a reach circle (v2.8.5), next to a sprinkler already built.
+func _ring_sample(type: String) -> void:
+	var b = main.building
+	b.load_data([])
+	main.mutants.clear()
+	var slot := {"kind": "obj", "cx": 5, "cz": -1, "dir": 0, "level": 0}
+	b.place("sprinkler", slot, b.evaluate("sprinkler", slot).y)
+	main.inventory.load_data({})
+	main.inventory.add_all({"scrap": 40, "nails": 20, "wood": 10, "kit_dew": 1})
+	main.shop.unlocked[type] = true
+	main.build_mode.active = true
+	main.build_mode.select(b.ORDER.find(type))
 
 
 ## A landing pad with the drone coming down over it, and sandbag walls (v0.23).

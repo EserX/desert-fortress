@@ -1085,6 +1085,33 @@ func _start_turret() -> void:
 	var t0: Vector3 = bm.ring_points[0]
 	var c: Vector3 = bm._ghost.global_position
 	check(absf(Vector2(t0.x - c.x, t0.z - c.z).length() - b.TURRET_RANGE) < 0.1, "the circle is %d m round the turret" % int(b.TURRET_RANGE))
+	check(bm.status_text().contains("up to 22 m"), "the build line says the turret's reach")
+	# v2.8.5: sprinklers, dew collectors and weather stations show their reach too.
+	var ring_cases := {"sprinkler": 5.0, "dew_collector": 8.0, "weather_station": 40.0}
+	var ring_cols := {}
+	for rt in ring_cases:
+		bm.select(b.ORDER.find(rt))
+		bm.update_preview()
+		check(bm.range_ring.visible, "placing a %s shows its reach circle" % rt)
+		var rp: Vector3 = bm.ring_points[0]
+		var rc: Vector3 = bm._ghost.global_position
+		var rr := Vector2(rp.x - rc.x, rp.z - rc.z).length()
+		check(absf(rr - float(ring_cases[rt])) < 0.1, "the %s circle is %d m round it (%.2f)" % [rt, int(ring_cases[rt]), rr])
+		check(bm.status_text().contains("up to %d m" % int(ring_cases[rt])), "the build line says the %s's reach" % rt)
+		ring_cols[bm.range_ring.material_override.albedo_color.to_html()] = true
+	check(ring_cols.size() == 3, "each kind of circle has its own colour")
+	bm.select(b.ORDER.find("wall"))
+	bm.update_preview()
+	check(not bm.range_ring.visible, "a wall shows no circle")
+	check(not bm.status_text().contains("(the circle)"), "and its build line says nothing about one")
+	bm.select(b.ORDER.find("sprinkler"))
+	bm.update_preview()
+	player.head.rotation.x = 1.4  # look up at the sky: no preview, no circle
+	bm.update_preview()
+	check(not bm.range_ring.visible, "looking at the sky hides the circle with the preview")
+	player.head.rotation.x = -0.5
+	bm.select(b.ORDER.find("turret"))
+	bm.update_preview()
 	bm.toggle()
 	check(not bm.range_ring.visible, "and hides when you stop building")
 	var slot := {"kind": "obj", "cx": -2, "cz": -8, "dir": 0, "level": 0}

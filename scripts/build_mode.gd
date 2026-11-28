@@ -11,6 +11,8 @@ extends Node3D
 const Building = preload("res://scripts/building.gd")
 const Prefabs = preload("res://scripts/prefabs.gd")
 const Items = preload("res://scripts/items.gd")
+const Water = preload("res://scripts/water.gd")
+const Weather = preload("res://scripts/weather.gd")
 ## Ground under a ready-made building may differ by at most this much.
 const PREFAB_MAX_SPREAD := 1.4
 ## How fast the preview swings round to a new heading (per second).
@@ -62,9 +64,19 @@ var _mid_mat: StandardMaterial3D
 var _weak_mat: StandardMaterial3D
 const SUPPORT_SOLID := 60.0
 const SUPPORT_WEAK := 35.0
-## Dashed circle on the sand showing a turret's reach while placing one.
+## Dashed circle on the sand showing a piece's reach while placing it
+## (v2.8.5: not only turrets; see REACH_RINGS).
 var range_ring: MultiMeshInstance3D
 var _ring_at := Vector3.INF
+var _ring_type := ""
+var _ring_mat: StandardMaterial3D
+## The pieces that show a reach circle: [radius in m, colour, what the HUD says].
+const REACH_RINGS := {
+	"turret": [Building.TURRET_RANGE, Color(1.0, 0.75, 0.25), "Shoots mutants up to %d m away (the circle)"],
+	"sprinkler": [Water.SPRAY_R, Color(0.3, 0.65, 1.0), "Waters the ground up to %d m round it (the circle)"],
+	"dew_collector": [Weather.DEW_R, Color(0.2, 0.85, 0.75), "Waters the ground up to %d m round it each morning (the circle)"],
+	"weather_station": [Weather.STATION_R, Color(0.6, 0.8, 1.0), "Its showers cover up to %d m round it (the circle)"],
+}
 var ring_points := PackedVector3Array()  # where the dashes are (kept here, headless can't read a MultiMesh back)
 const RING_DASHES := 90
 
@@ -85,10 +97,10 @@ func _ready() -> void:
 	mm.instance_count = RING_DASHES
 	range_ring = MultiMeshInstance3D.new()
 	range_ring.multimesh = mm
-	var rm := StandardMaterial3D.new()
-	rm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	rm.albedo_color = Color(1.0, 0.75, 0.25)
-	range_ring.material_override = rm
+	_ring_mat = StandardMaterial3D.new()
+	_ring_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_ring_mat.albedo_color = Color(1.0, 0.75, 0.25)
+	range_ring.material_override = _ring_mat
 	range_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	range_ring.visible = false
 	add_child(range_ring)
@@ -197,6 +209,7 @@ func update_preview(delta := 1.0) -> void:
 	looking_at_piece = ""
 	if hit.is_empty():
 		_ghost.visible = false
+		range_ring.visible = false
 		can_build = false
 		reason = "Look at the ground nearby"
 		slot = {}
@@ -347,23 +360,35 @@ func _rebuild_prefab_ghost(id: String) -> void:
 		Building.add_ghost_meshes(_ghost, e.type, Building.piece_transform(e.type, e.slot, y))
 
 
-## Lays the dashes of the range circle on the sand around the previewed turret.
+## The reach circle's radius for a piece type, or 0 when it has none.
+static func ring_radius(type: String) -> float:
+	return float(REACH_RINGS[type][0]) if REACH_RINGS.has(type) else 0.0
+
+
+## Lays the dashes of the reach circle on the sand around the previewed piece.
+## Runs every frame in build mode, but only redraws (RING_DASHES dashes) when
+## the preview moved or the piece changed.
 func _update_ring(type: String) -> void:
-	range_ring.visible = type == "turret"
+	range_ring.visible = REACH_RINGS.has(type) and _ghost.visible
 	if not range_ring.visible:
 		return
 	var c := _ghost.global_position
-	if c.distance_to(_ring_at) < 0.01:
+	if type == _ring_type and c.distance_to(_ring_at) < 0.01:
 		return
 	_ring_at = c
-	var r: float = Building.TURRET_RANGE
+	_ring_type = type
+	var r := ring_radius(type)
+	_ring_mat.albedo_color = REACH_RINGS[type][1]
+	# Shorter dashes on small circles so they stay dashes, not a solid ring.
+	var dash_len := clampf(TAU * r / RING_DASHES * 0.55, 0.12, 1.0)
+	var sc := Basis.from_scale(Vector3(1, 1, dash_len / 0.8))
 	ring_points.resize(RING_DASHES)
 	for i in RING_DASHES:
 		var a := i * TAU / RING_DASHES
 		var p := c + Vector3(cos(a) * r, 0, sin(a) * r)
 		p.y = maxf(building.terrain.surface_height(p.x, p.z), c.y) + 0.06
 		ring_points[i] = p
-		range_ring.multimesh.set_instance_transform(i, Transform3D(Basis(Vector3.UP, -a), p))
+		range_ring.multimesh.set_instance_transform(i, Transform3D(Basis(Vector3.UP, -a) * sc, p))
 
 
 func _rebuild_ghost(type: String) -> void:
@@ -559,4 +584,6 @@ func status_text() -> String:
 		line += "\n" + reason
 	elif slot.get("level", 0) > 0 and support_preview > -INF:
 		line += "\nSupport here: %d%%" % int(support_preview)
+	if REACH_RINGS.has(type) and carrying.is_empty() and not slot.is_empty():
+		line += "\n" + String(REACH_RINGS[type][2]) % int(ring_radius(type))
 	return line + "\n" + keys_text()

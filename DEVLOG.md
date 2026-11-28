@@ -2,6 +2,22 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v2.8.5 (2026-11-28): Reach circles while placing
+No player feedback was waiting and every roadmap item is done, so this run took one of the ideas from v2.8.4's list: a dew collector's reach shown while placing it, done for every piece that works at a distance.
+- **Checked first:** all tests passed with no Godot errors before any change.
+- **New: reach circles in build mode.** The dashed circle the turret already had now shows for a **sprinkler** (blue, 5 m: the squares it waters), a **dew collector** (teal, 8 m) and a **weather station** (pale blue, 40 m: where its showers fall). The turret's stays amber (22 m). The build line under the crosshair says it too ("Waters the ground up to 8 m round it each morning (the circle)"), even when the piece is still locked or you lack materials, so you can plan before you buy.
+- **Rough edge fixed:** looking up at the sky in build mode hid the preview but left the turret's circle where it last was. The circle now hides with the preview.
+- **Decisions:**
+  - One table, `REACH_RINGS` in build_mode.gd, reads the radii from the constants the systems really use (`Water.SPRAY_R`, `Weather.DEW_R`, `Weather.STATION_R`, `Building.TURRET_RANGE`), so the circle can't drift from the rules.
+  - The circle keeps its 90 dashes, but they get shorter on small circles (a 5 m one would otherwise be a solid ring). It is only redrawn when the preview moves or the piece changes.
+  - Watering works on 4 m squares whose middle is inside the reach, so the circle is a close guide, not an exact edge.
+  - main.gd untouched. No save changes.
+- **Tests (14 new):** the turret's build line; for a sprinkler, dew collector and weather station: the circle shows, has the right radius and the build line says the reach; each kind has its own colour; a wall shows none and says nothing; looking at the sky hides it.
+- New screenshot view `91_reach_ring` (placing a dew collector next to the main well and a sprinkler, teal circle on the sand).
+
+**Try:** press B and pick the sprinkler or the dew collector: walk around with it and watch the circle on the sand, then set them so their circles just touch to green a strip without gaps.
+**Next:** more bug hunting and rough edges. Ideas for the owner to pick from (write them under Player feedback to ask for one): a "base status" page listing machines that are idle and why; outposts' pipes on a zoomed map round the outpost; the reach circle also shown when you look at a built sprinkler with the hammer.
+
 ## v2.8.4 (2026-11-28): Water on the map
 No player feedback was waiting and every roadmap item is done, so this run took one of the ideas from v2.8.3's list: pipes shown on the map.
 - **Checked first:** all tests passed with no Godot errors before any change.

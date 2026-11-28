@@ -2,6 +2,22 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v2.6.0 (2026-11-28): Blueprint menu with pictures
+No player feedback was waiting, so this run took the last building idea: picking ready-made buildings from a menu instead of only the mouse wheel.
+- **T in build mode opens the blueprint menu.** Each ready-made building is a card with a small drawing of it (seen from above at an angle), its number, name, how many pieces it has and its full price. A row along the top picks the material (wood, scrap metal, stone, concrete, same as G); the drawings and prices change with it. Click a card or press 1-7 to pick it, then left click lays the blueprint as before. The mouse wheel still steps through buildings with the menu closed.
+- **Leaving it:** Esc or Tab closes the menu and keeps the building picked; T in the menu (or the "Single pieces" card) goes back to single pieces. So T, T from single pieces is a round trip.
+- **Decisions:**
+  - The drawings are plain 2D polygons worked out from each building's piece list in prefabs.gd (new `scripts/blueprint_picture.gd`), not little 3D views: they cost next to nothing, look the same with both renderers, and a new ready-made building gets its picture for free. Walls, doorways, windows, gun slits, the metal door, pillars, the ladder and the well each have a simple look; floors and roofs sit on top of the storey below.
+  - The bunker's well is under its roof, where its walls hide it, so its picture marks the well with a blue circle on the roof.
+  - The menu (new `scripts/blueprint_menu.gd`) changes build mode's `prefab_index` and `prefab_tier` directly, so there's still one place that knows which building and material are picked. main.gd only creates it and gives the HUD pop-ups (+11 lines).
+  - T used to flip between single pieces and ready-made buildings. Now from single pieces it opens the menu, and from ready-made mode it reopens the menu, whose T goes back. That keeps one key for all of it.
+- No save changes.
+- **Tests (16 new):** a card for every building; every picture has a shape per piece, is drawn back to front and fits its box; the material changes the colours; the bunker's well shows; T opening the menu in ready-made mode with the right card highlighted and a price on it; B doing nothing while it's up; clicking a card, reopening, the material row, G and number keys inside the menu; Esc keeping the building; T going back to single pieces; the menu closing when build mode ends.
+- New screenshot view `84_blueprint_menu` (the menu in stone with the bunker picked).
+
+**Try:** press B, then T. Click "Stone" along the top and look at the drawings change, then click the walled compound and lay it. Press T twice to get back to single pieces.
+**Next:** every scheduled item and building idea is done. Next up is the resource ideas: a water purifier and machines that feed a chest by themselves (unless there's player feedback in ROADMAP.md first).
+
 ## v2.5.0 (2026-11-28): Walled compound and bunker with a well
 No player feedback was waiting, so this run took the next building idea: two more ready-made buildings (build mode, T).
 - **Walled compound (5×5):** a ring of 16 foundations with walls round the outside, a gun slit wall in the middle of the north, west and east sides and a gate in the middle of the south side. The 3×3 yard inside (6 m across) stays bare sand, to farm, dig or build in. 36 pieces, 125 wood and 125 nails in wood; G picks its material like any other blueprint.

@@ -91,6 +91,7 @@ var shots := [
 	{"name": "81_behemoth", "pos": Vector3(0, 0, 9), "yaw": -PI * 0.5, "pitch": 0.1, "hour": 17.6, "event": "boss"},
 	{"name": "82_blueprint_tiers", "pos": Vector3(6, 0, 16), "yaw": 0.25, "pitch": -0.1, "hour": 16.5, "prefab_tiers": true},
 	{"name": "83_compound_bunker", "pos": Vector3(2, 0, -1), "yaw": 0.0, "pitch": -0.6, "hour": 15.5, "compound": true},
+	{"name": "84_blueprint_menu", "pos": Vector3(6, 0, 16), "yaw": 0.25, "pitch": -0.1, "hour": 16.5, "bpmenu": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -365,11 +366,23 @@ func _process(_d: float) -> bool:
 			bm.prefab_tier = 2
 		elif s.get("compound", false):
 			_compound_sample(p)
+		elif s.get("bpmenu", false):
+			_prefabs_sample(false, true)
+			var bm = main.build_mode
+			if not bm.active:
+				bm.toggle()
+			if not bm.prefab_mode:
+				bm.toggle_prefabs()
+			bm.select(bm.Prefabs.ORDER.find("bunker"))
+			bm.prefab_tier = 2
+			main.blueprint_menu.open()
 		elif s.get("zone", false):
 			main.build_mode.active = true
 			main.build_mode.select(10)
 		elif main.build_mode.active and not s.get("turret", false):
 			main.build_mode.toggle()
+		if not s.get("bpmenu", false) and main.blueprint_menu.is_open():
+			main.blueprint_menu.close()
 		if s.get("wave_map", false):
 			main.building.load_data([])
 			main.mutants.clear()

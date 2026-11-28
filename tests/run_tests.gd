@@ -2352,6 +2352,87 @@ func _test_blueprint_tiers() -> void:
 	player.stamina = player.STAMINA_MAX
 
 
+func _action(name: String) -> InputEventAction:
+	var ev := InputEventAction.new()
+	ev.action = name
+	ev.pressed = true
+	return ev
+
+
+## v2.6: the blueprint menu with pictures (build mode, T).
+func _test_blueprint_menu() -> void:
+	var bm = main.build_mode
+	var menu = main.blueprint_menu
+	var Prefabs = load("res://scripts/prefabs.gd")
+	var Picture = load("res://scripts/blueprint_picture.gd")
+	check(menu != null and menu.cards.size() == Prefabs.ORDER.size(), "the menu has a card for every ready-made building")
+	# Pictures: every building draws, fits its box and is drawn back to front.
+	var box := Vector2(184, 112)
+	var all_ok := true
+	for id in Prefabs.ORDER:
+		var raw: Array = Picture.shapes(id, 0)
+		if raw.size() < Prefabs.entries(id).size():
+			all_ok = false
+			print("  too few shapes for ", id)
+		for i in range(1, raw.size()):
+			if raw[i].band < raw[i - 1].band or (raw[i].band == raw[i - 1].band and raw[i].depth < raw[i - 1].depth):
+				all_ok = false
+				print("  shapes out of order for ", id)
+				break
+		for s in Picture.fit(raw, box):
+			for pt in s.pts:
+				if not (pt.x >= Picture.MARGIN - 0.01 and pt.y >= Picture.MARGIN - 0.01 and pt.x <= box.x - Picture.MARGIN + 0.01 and pt.y <= box.y - Picture.MARGIN + 0.01):
+					all_ok = false
+	check(all_ok, "every building's picture has a shape per piece, is drawn back to front and fits its box")
+	var wood: Array = Picture.shapes("shelter", 0)
+	var stone: Array = Picture.shapes("shelter", 2)
+	check(wood.size() == stone.size() and wood[0].color != stone[0].color, "the picture takes the material's colour")
+	var see_well := false
+	for s in Picture.shapes("bunker", 0):
+		if s.color == Picture.WATER and s.band >= 2:
+			see_well = true
+	check(see_well, "the bunker's well is marked on its roof in the picture")
+	check(Picture.shapes("nothing", 0).is_empty() and Picture.fit([], box).is_empty(), "an unknown building draws nothing")
+	# Opening it: T in single pieces mode.
+	if not bm.active:
+		bm.toggle()
+	if bm.prefab_mode:
+		bm.toggle_prefabs()
+	bm.prefab_tier = 0
+	check(main._build_input(_action("build_menu")) and bm.prefab_mode and menu.is_open(), "T opens the blueprint menu in ready-made mode")
+	check(menu.cards[bm.prefab_index].button_pressed, "the building picked is highlighted")
+	check(menu._costs[0].text.begins_with("%d pieces" % Prefabs.entries(Prefabs.ORDER[0]).size()) and menu._costs[0].text.contains("wood"), "a card shows pieces and price: " + menu._costs[0].text)
+	var active_before: bool = bm.active
+	main._unhandled_input(_action("build"))
+	check(bm.active == active_before, "B does nothing while the menu is up")
+	var ci: int = Prefabs.ORDER.find("compound")
+	menu.pick(ci)
+	check(not menu.is_open() and bm.current_prefab() == "compound" and bm.status_text().contains("Walled compound"), "clicking a card picks that building and closes the menu")
+	menu.open()
+	check(menu.cards[ci].button_pressed and not menu.cards[0].button_pressed, "reopened, the menu highlights the new pick")
+	menu.set_tier(2)
+	check(bm.prefab_tier == 2 and menu.tier_buttons[2].button_pressed and menu._costs[ci].text.contains("stone"), "the material row picks stone and the prices follow")
+	check(menu.pictures[ci].tier == 2, "the pictures redraw in stone")
+	menu._unhandled_input(_action("move_piece"))
+	check(bm.prefab_tier == 3, "G in the menu picks the next material")
+	menu._unhandled_input(_action("hotbar_2"))
+	check(not menu.is_open() and bm.prefab_index == 1, "a number key picks that building")
+	menu.open()
+	menu._unhandled_input(_action("pause"))
+	check(not menu.is_open() and bm.prefab_mode, "Esc closes the menu and keeps the building")
+	menu.open()
+	menu._unhandled_input(_action("build_menu"))
+	check(not menu.is_open() and not bm.prefab_mode, "T in the menu goes back to single pieces")
+	main._build_input(_action("build_menu"))
+	bm.toggle()
+	menu._process(0.0)
+	check(not menu.is_open(), "the menu closes when build mode ends")
+	bm.prefab_tier = 0
+	if bm.prefab_mode:
+		bm.toggle_prefabs()
+	bm.prefab_index = 0
+
+
 ## v2.5: the walled compound and the bunker with a well.
 func _test_compound_bunker() -> void:
 	var b = main.building
@@ -3197,6 +3278,7 @@ func _process(_delta: float) -> bool:
 			_test_building_v19()
 			_test_blueprint_tiers()
 			_test_compound_bunker()
+			_test_blueprint_menu()
 			_test_resources()
 			_test_water()
 			_test_farming()

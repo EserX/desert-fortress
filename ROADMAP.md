@@ -64,7 +64,7 @@ Building is to be a big part of the game, with the fine-tuned feel of survival-b
 - [x] v1.9: **Building overhaul:** objects turn in 15° steps (Z / X) and the preview swings round smoothly; ready-made buildings (shelter, cabin, big cabin, watchtower, gatehouse) laid as free blueprints and built piece by piece with E (hold to keep going), paid from pockets and chests; the **horde button** stand at the spawn point calls a wave on demand; build-mode key help; walls at corners no longer blocked
 - [x] v2.4: **Blueprint materials:** G in ready-made building mode picks wood, scrap metal, stone or concrete; every piece goes up straight in that material for its wooden price plus the hammer upgrades
 - [x] v2.5: **More ready-made buildings:** a walled compound (5×5 ring of walls, gate, gun slits, open yard) and a bunker with a well (3×3, gun slits, metal door, roof, the well over a shaft you dig in its middle)
-- [ ] Later building ideas (not scheduled): a blueprint menu with pictures
+- [x] v2.6: **Blueprint menu:** T in build mode opens a menu of ready-made buildings, each a card with a drawing in the material picked and its full price; click or 1-7 to pick, material row (or G), T again for single pieces
 
 ### Owner requests (2026-11-27, later)
 Resource gathering and processing: trees and an axe, rocks to pick up, machines bought for cash and delivered by drone (a rock crusher for cement), and traps made from gathered resources.

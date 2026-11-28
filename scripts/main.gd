@@ -29,6 +29,7 @@ const Power = preload("res://scripts/power.gd")
 const Turrets = preload("res://scripts/turrets.gd")
 const Shop = preload("res://scripts/shop.gd")
 const ShopUI = preload("res://scripts/shop_ui.gd")
+const BlueprintMenu = preload("res://scripts/blueprint_menu.gd")
 const Market = preload("res://scripts/market.gd")
 const Drone = preload("res://scripts/drone.gd")
 const Hints = preload("res://scripts/hints.gd")
@@ -131,6 +132,7 @@ var power: Power
 var turrets: Turrets
 var shop: Shop
 var shop_ui: ShopUI
+var blueprint_menu: BlueprintMenu
 var market: Market
 var drone: Drone
 var hints: Hints
@@ -427,6 +429,13 @@ func _ready() -> void:
 	shop_ui.market_bought.connect(func(item): hud.show_pickup(["Bought 1 " + Items.display_name(item).to_lower()]))
 	add_child(shop_ui)
 	drone.delivered.connect(_on_delivery)
+	blueprint_menu = BlueprintMenu.new()
+	blueprint_menu.name = "BlueprintMenu"
+	blueprint_menu.build_mode = build_mode
+	blueprint_menu.picked.connect(func(id): hud.show_pickup(["Blueprint: " + build_mode.Prefabs.display_name(id)]))
+	blueprint_menu.tier_picked.connect(func(t): hud.show_pickup(["Blueprint material: " + Building.TIER_NAMES[t]]))
+	blueprint_menu.singles.connect(func(): hud.show_pickup(["Single pieces"]))
+	add_child(blueprint_menu)
 
 	death_screen = DeathScreen.new()
 	death_screen.name = "DeathScreen"
@@ -527,7 +536,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event.is_action_pressed("quick_save"):
 		Game.save_game("quick", _screenshot())
-	elif inventory_ui.is_open() or shop_ui.is_open():
+	elif inventory_ui.is_open() or shop_ui.is_open() or blueprint_menu.is_open():
 		return
 	elif event.is_action_pressed("build"):
 		build_mode.toggle()
@@ -587,7 +596,7 @@ func _process(delta: float) -> void:
 		animals.tick(delta, day_night.hour)
 	if hud and not get_tree().paused:
 		var text := ""
-		if not inventory_ui.is_open() and not shop_ui.is_open():
+		if not inventory_ui.is_open() and not shop_ui.is_open() and not blueprint_menu.is_open():
 			text = _prompt_for(player.interact_target())
 			if text == "" and holding_hammer():
 				text = hammer_prompt(piece_under_crosshair())
@@ -1323,8 +1332,10 @@ func _build_input(event: InputEvent) -> bool:
 		build_mode.fine_turn(-1 if event.is_action_pressed("turn_left") else 1)
 		return true
 	if event.is_action_pressed("build_menu"):
-		build_mode.toggle_prefabs()
-		hud.show_pickup(["Ready-made buildings" if build_mode.prefab_mode else "Single pieces"])
+		# T opens the blueprint menu; T in the menu goes back to single pieces.
+		if not build_mode.prefab_mode:
+			build_mode.toggle_prefabs()
+		blueprint_menu.open()
 		return true
 	if build_mode.prefab_mode and event is InputEventMouseButton and event.pressed and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		if event.button_index == MOUSE_BUTTON_LEFT:

@@ -529,7 +529,7 @@ func try_remove() -> String:
 ## Keys while building, for the HUD.
 func keys_text() -> String:
 	if prefab_mode:
-		return "[LMB] lay blueprint  [R/Z/X] turn  [Wheel] building  [G] material  [T] single pieces  [E at a blueprint] build it  [RMB on it] scrap it"
+		return "[LMB] lay blueprint  [R/Z/X] turn  [Wheel] building  [T] blueprint menu  [G] material  [E at a blueprint] build it  [RMB on it] scrap it"
 	return "[LMB] build (drag: a line)  [R] turn 90°  [Z/X] turn %s  [Wheel/1-9] piece  [T] ready-made buildings  [G] move  [RMB] undo" % ("15°" if current_type() in Building.FREE_TURN else "90°")
 
 

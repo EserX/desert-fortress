@@ -1491,8 +1491,10 @@ func auto_wire(reach: float) -> void:
 
 
 ## Every piece power reaches from these running generators: along cables, and
-## on through switches only when they are on.
-func power_network(running: Array) -> Dictionary:
+## on through switches only when they are on (or through every switch with
+## `through_off`, which the base status page uses to tell an off switch apart
+## from a missing cable).
+func power_network(running: Array, through_off := false) -> Dictionary:
 	var reached := {}
 	var todo: Array = running.duplicate()
 	for k in running:
@@ -1505,7 +1507,7 @@ func power_network(running: Array) -> Dictionary:
 			links[c[i]].append(c[1 - i])
 	while not todo.is_empty():
 		var k: String = todo.pop_back()
-		if pieces.has(k) and pieces[k].type == "switch" and not pieces[k].open:
+		if not through_off and pieces.has(k) and pieces[k].type == "switch" and not pieces[k].open:
 			continue  # an open switch stops the power here
 		for n in links.get(k, []):
 			if not reached.has(n):

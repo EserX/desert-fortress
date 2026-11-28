@@ -3464,6 +3464,7 @@ func _process(_delta: float) -> bool:
 			_test_spring_sprinklers()
 			_test_piped_purifier()
 			_test_water_map()
+			_test_base_status()
 			_test_events()
 			_start_shelter()
 		4280:
@@ -3479,6 +3480,112 @@ func _process(_delta: float) -> bool:
 				print("== %d TEST(S) FAILED ==" % failures.size())
 				quit(1)
 	return false
+
+## v2.9: the base status page lists the machines and why they're idle.
+func _test_base_status() -> void:
+	var BS = load("res://scripts/base_status.gd")
+	var b = main.building
+	var inv = main.inventory
+	b.load_data([])
+	inv.load_data({})
+	var day: int = main.day_night.day
+	main.day_night.restore(day, 10.0)
+	check(BS.entries(b, main.water, main.oases).is_empty() and BS.summary([]).begins_with("No machines"), "with nothing built the page says so")
+	var gs := {"kind": "obj", "cx": -9, "cz": 9, "dir": 0, "level": 0}
+	var gk: String = b.place("generator", gs, b.evaluate("generator", gs).y)
+	var g: Dictionary = b.pieces[gk]
+	g.fuel = 0.0
+	var ss := {"kind": "obj", "cx": -6, "cz": 9, "dir": 0, "level": 0}
+	var sk: String = b.place("sawmill", ss, b.evaluate("sawmill", ss).y)
+	var saw: Dictionary = b.pieces[sk]
+	var find := func(key: String) -> Dictionary:
+		for e in BS.entries(b, main.water, main.oases):
+			if e.key == key:
+				return e
+		return {}
+	main.power.tick(0.25)
+	var e: Dictionary = find.call(sk)
+	check(e.get("state") == BS.STUCK and e.text.contains("empty: load log"), "an empty sawmill is stuck for logs: " + str(e.get("text")))
+	check(e.name == "Sawmill" and e.where.contains("south-west"), "it says what and where: %s, %s" % [e.name, e.where])
+	saw.input = 2
+	main.power.tick(0.25)
+	e = find.call(sk)
+	check(e.state == BS.STUCK and e.text.contains("cable it to a generator"), "with logs but no cable (6 m off the generator): " + e.text)
+	check(b.connect_cable(gk, sk), "a cable to the generator")
+	main.power.tick(0.25)
+	e = find.call(sk)
+	check(e.state == BS.STUCK and e.text.contains("generator is out of fuel"), "cabled to an empty generator: " + e.text)
+	check(find.call(gk).state == BS.STUCK and find.call(gk).text.contains("out of fuel"), "and the generator says it's out of fuel")
+	g.fuel = 3.0
+	main.power.tick(0.25)
+	e = find.call(sk)
+	check(saw.powered and e.state == BS.RUNNING and e.text.contains("2 log in"), "with fuel it runs: " + e.text)
+	check(find.call(gk).state == BS.RUNNING and find.call(gk).text.contains("3/10 cans"), "and so does the generator: " + find.call(gk).text)
+	# Through a switch.
+	b.disconnect_all(sk)
+	var ws := {"kind": "obj", "cx": -7, "cz": 7, "dir": 0, "level": 0}
+	var wk: String = b.place("switch", ws, b.evaluate("switch", ws).y)
+	check(b.connect_cable(gk, wk) and b.connect_cable(wk, sk), "cables through a switch")
+	b.pieces[wk].open = false
+	main.power.tick(0.25)
+	e = find.call(sk)
+	check(not saw.powered and e.state == BS.STUCK and e.text.contains("switch on its cable is off"), "a switch turned off says so: " + e.text)
+	b.pieces[wk].open = true
+	main.power.tick(0.25)
+	check(find.call(sk).state == BS.RUNNING, "turned on, it runs again")
+	# Full, then full with a full chest next to it.
+	saw.output = b.MACHINE_OUT_MAX
+	e = find.call(sk)
+	check(e.state == BS.STUCK and e.text.contains("set a chest next to it"), "a full sawmill: " + e.text)
+	var cs := {"kind": "obj", "cx": -5, "cz": 9, "dir": 0, "level": 0}
+	var ck: String = b.place("chest", cs, b.evaluate("chest", cs).y)
+	var store = b.storage_of(ck)
+	for i in store.slots.size():
+		store.slots[i] = {"item": "sand", "count": 99}
+	e = find.call(sk)
+	check(e.state == BS.STUCK and e.text.contains("so is the chest next to it"), "with the chest next to it full too: " + e.text)
+	# Problems come first.
+	var list: Array = BS.entries(b, main.water, main.oases)
+	check(list[0].state == BS.STUCK and list[list.size() - 1].state != BS.STUCK, "stuck ones are listed first: " + str(list.map(func(x): return x.state)))
+	saw.output = 0
+	store.load_data({})
+	saw.input = 0
+	main.power.tick(0.25)
+	main.power.tick(0.25)
+	check(find.call(gk).state == BS.IDLE and find.call(gk).text.contains("standing by"), "with no work by day the generator stands by: " + find.call(gk).text)
+	# A furnace.
+	var fs := {"kind": "obj", "cx": -9, "cz": 5, "dir": 0, "level": 0}
+	var fk: String = b.place("furnace", fs, b.evaluate("furnace", fs).y)
+	var f: Dictionary = b.pieces[fk]
+	check(find.call(fk).state == BS.IDLE and find.call(fk).text.contains("nothing loaded"), "an empty furnace is idle: " + find.call(fk).text)
+	f.smelt = "clay"
+	f.load = 4
+	f.heat = 0.0
+	check(find.call(fk).state == BS.STUCK and find.call(fk).text.contains("out of fuel"), "loaded with no fuel it's stuck: " + find.call(fk).text)
+	f.heat = 100.0
+	check(find.call(fk).state == BS.RUNNING and find.call(fk).text.contains("clay to bricks"), "with fuel it smelts: " + find.call(fk).text)
+	# A purifier far from water.
+	var ps := {"kind": "obj", "cx": -11, "cz": 2, "dir": 0, "level": 0}
+	var pk: String = b.place("purifier", ps, b.evaluate("purifier", ps).y)
+	main.power.tick(0.25)
+	check(find.call(pk).state == BS.STUCK and find.call(pk).text.contains("set it by the main well"), "a purifier away from water: " + find.call(pk).text)
+	# Where.
+	check(BS.where(Vector3(3.0, 0, -3.0)) == "by the main well" and BS.where(Vector3(0, 0, -20)) == "20 m north" and BS.where(Vector3(15, 0, 0)) == "15 m east", "places: %s, %s, %s" % [BS.where(Vector3(3.0, 0, -3.0)), BS.where(Vector3(0, 0, -20)), BS.where(Vector3(15, 0, 0))])
+	# The page.
+	var ui = main.base_status_ui
+	if main.map_ui.is_open():
+		main.map_ui.toggle()
+	ui._unhandled_input(_action("base_status"))
+	check(ui.is_open() and ui.list.size() == 4, "J opens the page with the 4 machines (%d)" % ui.list.size())
+	main.map_ui.toggle()
+	check(main.map_ui.is_open() and not ui.is_open(), "opening the map closes it")
+	ui.toggle()
+	check(ui.is_open() and not main.map_ui.is_open(), "and opening it closes the map")
+	ui._unhandled_input(_action("base_status"))
+	check(not ui.is_open(), "J closes it")
+	b.load_data([])
+	inv.load_data({})
+	main.day_night.restore(day, 10.0)
 
 
 ## v1.13: the main well, the watering can, soil turning green, pipes and sprinklers.

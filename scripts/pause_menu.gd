@@ -14,7 +14,7 @@ const CONTROLS := [
 	["Left click", "Swing, shoot, build (drag for a line), hammer, dig"], ["Right click", "Aim; hammer: demolish; shovel: fill; build: undo"],
 	["R", "Reload; turn piece; hammer: repair nearby; lock a metal door"], ["G", "Build mode: move a piece; hammer: upgrade all like it nearby"], ["Z / X", "Build mode: turn the piece (objects 15°)"], ["T", "Build mode: blueprint menu (T again: single pieces)"], ["E", "Search, open, use"], ["Tab / I", "Inventory"],
 	["1-9, wheel", "Hotbar (build mode: piece)"], ["F", "Eat, drink, bandage, medkit"], ["Q", "Drop stack"],
-	["B", "Build mode"], ["M", "Map"], ["F5 / F9", "Quicksave / quickload"], ["F11", "Fullscreen"],
+	["B", "Build mode"], ["M", "Map"], ["J", "Base status: machines and why they are idle"], ["F5 / F9", "Quicksave / quickload"], ["F11", "Fullscreen"],
 ]
 
 

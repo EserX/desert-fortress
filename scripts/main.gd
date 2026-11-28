@@ -16,6 +16,7 @@ const InventoryUI = preload("res://scripts/inventory_ui.gd")
 const Survival = preload("res://scripts/survival.gd")
 const DeathScreen = preload("res://scripts/death_screen.gd")
 const MapUI = preload("res://scripts/map_ui.gd")
+const BaseStatusUI = preload("res://scripts/base_status_ui.gd")
 const Building = preload("res://scripts/building.gd")
 const BuildMode = preload("res://scripts/build_mode.gd")
 const BaseZone = preload("res://scripts/base_zone.gd")
@@ -105,6 +106,7 @@ var death_screen: DeathScreen
 var in_shade := false
 var _shade_timer := 0.0
 var map_ui: MapUI
+var base_status_ui: BaseStatusUI  # v2.9: J, machines and why they're idle
 var building: Building
 var build_mode: BuildMode
 var base_zone: BaseZone
@@ -447,6 +449,10 @@ func _ready() -> void:
 	map_ui.name = "MapUI"
 	map_ui.main = self
 	add_child(map_ui)
+	base_status_ui = BaseStatusUI.new()
+	base_status_ui.name = "BaseStatusUI"
+	base_status_ui.main = self
+	add_child(base_status_ui)
 
 	survival.died.connect(_on_died)
 	terrain.ground_changed.connect(_on_ground_changed)

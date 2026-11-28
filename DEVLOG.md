@@ -2,6 +2,28 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v2.9.0 (2026-11-28): Base status page (J)
+No player feedback was waiting and every roadmap item is done, so this run took the idea that has been on the "next" list since v2.8.5: a page listing machines that are idle and why.
+- **Checked first:** all tests passed with no Godot errors before any change.
+- **New: press J for the base status page.** One line for every **sawmill, rock crusher, nail press, water purifier, furnace and fuel generator** you've built: what it is, where it stands ("by the main well", "15 m south-west", "at outpost 2") and how it's doing. Stuck ones (red, `[!]`) come first, then idle ones (`[ ]`), then the working ones (green, `[x]`). The reasons:
+  - empty: "empty: load log with E"; a purifier says where its water should come from ("waiting for water from the main well", "the main well is empty today", "its pipes need the main well's hand pump", or "set it by the main well or a spring, pipe it, or pour a can in");
+  - no power, told apart: "cable it to a generator", "its generator is out of fuel", or "a switch on its cable is off";
+  - full: "take them, or set a chest next to it", or "full, and so is the chest next to it";
+  - furnaces: nothing loaded, out of fuel with something in, full, or smelting; generators: running, standing by (with cans left) or out of fuel.
+  The page refreshes four times a second while it's open, and the game goes on behind it (like the map). J or Esc closes it; opening the map closes it and the other way round. Added to the map legend, the controls list in the pause menu, the HUD key line and the README.
+- **Decisions:**
+  - New `scripts/base_status.gd` works the lines out with the very helpers the machines run on (`MACHINES`, `run_machine` rules, `furnace.can_work`, `purifier.piped/near_well/near_spring`, `chest_feed.chest_for`), and `scripts/base_status_ui.gd` draws them. main.gd: +6 lines (creates the page).
+  - To tell an off switch from a missing cable, `building.power_network()` got an optional `through_off` flag (walk on through switches that are off) rather than a second copy of the cable walk.
+  - A machine with work and a fuelled generator joined to it counts as working even in the quarter second before the generator starts up (generators start by day for machines with work).
+  - Turrets, floodlights and fences aren't listed: they only work at night or in a wave, so "idle" would be the normal state for them by day. Could be added later.
+  - New key J (free before). No save changes.
+- **Tests (25 new):** nothing built; an empty sawmill, then with logs but no cable, cabled to an empty generator, then running; the generator's out-of-fuel, running and standing-by lines; a switch turned off and on; a full sawmill and a full chest next to it; stuck ones listed first; a furnace empty, out of fuel and smelting; a purifier away from water; place names; J opens and closes the page and the map and page close each other.
+- New screenshot view `94_base_status` (eight pieces in different states).
+- **Found, not fixed (written under Player feedback for the next run):** the test "every one of 16 full-speed stones hurts the walker it hits" fails about 1 run in 10 on the old code too, and Godot often warns about audio objects leaked at exit after the tests (also on the old code). All tests passed on the final runs.
+
+**Try:** press J at your base. Anything red needs you: walk over and fix what it says, and watch it turn green.
+**Next:** the flaky stone test and the audio leak from Player feedback. Ideas for the owner to pick from afterwards (write them under Player feedback to ask for one): turrets, lights and fences on the status page (with ammo left); outposts' pipes on a zoomed map round the outpost; a map layer marking spare sprinklers.
+
 ## v2.8.9 (2026-11-28): The hammer counts a sprinkler's own squares
 No player feedback was waiting and every roadmap item is done, so this run took one of the ideas from v2.8.8's list: the hammer on a built sprinkler saying how many of its squares no other one waters.
 - **Checked first:** all tests passed with no Godot errors before any change.
@@ -240,7 +262,7 @@ Every scheduled milestone is done and no player feedback was waiting, so this ru
   - The material you pick isn't saved (it's a build-mode setting like the piece you have selected); each blueprint's material is.
 - **Saved:** each blueprint's `tier` (new field). Older saves load their blueprints as wood; a broken value falls back to wood, too high is clamped to concrete. No `SAVE_VERSION` bump.
 - Code: building.gd `step_cost`, `tier_for`, `cost_at_tier`, `prefab_cost`, `site_tier`, the site's `tier`, prompt and save; build_mode.gd `prefab_tier` and `cycle_prefab_tier`; main.gd `build_site_step` raises the piece and G cycles the material (+13 lines).
-- **Tests (24 new):** wood prices unchanged, a stone wall costing the wood price plus both upgrades, fixed pieces and roofs, a wooden blueprint costing what it did and concrete needing cement, G cycling and the HUD/key text, laying a stone shelter, its price and prompt, wood alone not being enough, building it in full with every piece in stone at full strength using up exactly the price, and saving (a concrete blueprint, an older save, a broken and a too-high tier).
+- **Tests (25 new):** wood prices unchanged, a stone wall costing the wood price plus both upgrades, fixed pieces and roofs, a wooden blueprint costing what it did and concrete needing cement, G cycling and the HUD/key text, laying a stone shelter, its price and prompt, wood alone not being enough, building it in full with every piece in stone at full strength using up exactly the price, and saving (a concrete blueprint, an older save, a broken and a too-high tier).
 - New screenshot view `82_blueprint_tiers` (the five buildings in different materials, build mode set to a stone shelter).
 - Bug noted under Player feedback: the throwables test "a thrown stone hits a walker" failed once again this session (then passed). The next run looks into it before new features.
 

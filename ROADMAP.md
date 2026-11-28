@@ -3,6 +3,7 @@
 ## Player feedback
 <!-- Write bugs, feelings and ideas here. Each run handles these BEFORE roadmap items. -->
 <!-- Example: - Sprint feels too slow. - Fell through the ground near a big rock. -->
+- (Found by the v2.9 run, not the owner) Flaky test: "every one of 16 full-speed stones hurts the walker it hits (1 did no harm)" failed about 1 run in 10 on unchanged v2.8.9 code; the v2.0-era fix for stones slowing before they report the touch doesn't catch every case. Also "ObjectDB instances leaked at exit" (AudioStreamWAV / playbacks) shows after most test runs, before and after v2.9: sounds still playing when the test quits.
 
 ## Milestones
 One version per development run, in this order. The full plan with reasons is in the "Desert Fortress: Version Plan" doc. Player feedback above always comes first.
@@ -77,6 +78,7 @@ Resource gathering and processing: trees and an axe, rocks to pick up, machines 
 - [x] v2.8.4: **Water on the map:** pipes, sprinklers, purifiers and dew collectors on the map (blue with water, grey without, dark when off), and the mouse wheel zooms the map in on the base
 - [x] v2.8.5: **Reach circles while placing:** a sprinkler, dew collector or weather station shows a dashed circle of what it waters (like the turret's range), each in its own colour, and the build line says how far
 - [x] v2.8.6: **Reach circles with the hammer:** pointing the hammer at a built sprinkler, dew collector, weather station or turret shows its reach circle again, and the hammer prompt says how far
+- [x] v2.9: **Base status page (J):** every machine, furnace and generator with where it stands and whether it is working, idle or stuck, and why (no input, no power and which part of the power is missing, full, full chest), stuck ones first
 
 ### New direction (owner, 2026-11-27): terraform the desert
 The aim of the game shifts from pure base defence to **turning the dead desert green and making it livable**. A **main well** at the centre (the spawn point) is the heart of the base: all water starts there, it greens the land through a watering system, and its water is what draws the mutants in at night. Water brings life: **animals by day** (food), **mutants by night**. Seeds are bought, crops are grown and sold, and cash buys food and goods (grow exotic crops, sell them, buy what you need). Base defence stays as one part of the game, not the whole of it. M10 comes **before** the rest of M9 (v2.0 to v2.3 wait until M10 is done, unless the owner says otherwise).

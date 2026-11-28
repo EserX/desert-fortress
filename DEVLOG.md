@@ -2,6 +2,22 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v2.8.8 (2026-11-28): New squares counted while placing
+No player feedback was waiting and every roadmap item is done, so this run took one of the ideas from v2.8.7's list: counting the squares a new sprinkler would add.
+- **Checked first:** all tests passed with no Godot errors before any change.
+- **New: the build line counts squares.** In build mode, with a **sprinkler** or **dew collector** picked, the line under the crosshair now says how many 4 m ground squares it would water and how many are new: "Waters 4 squares: 3 new, 1 already watered by another" (or "all new" / "all already watered by another"). Built sprinklers and dew collectors both count as already watering a square, as both green the ground. Move the preview until the "new" number is as high as you want.
+- **Decisions:**
+  - All in build_mode.gd: `watered_cells()` uses the very helpers the game waters with (`Water.spray_cells` for sprinklers, `Weather.cells_within` with `DEW_R` for dew collectors), so the count matches the real watering exactly, unlike the circle, which is only a guide. `count_squares()` gives Vector2i(new, already).
+  - It counts whether another piece covers the square, not whether that piece has water today (a sprinkler with no pipe still counts as covering it). Simpler to read, and you'll usually pipe it later.
+  - Only worked out when the preview moves, the piece type changes or the base changes (`building.revision`), and only the sprinklers and dew collectors within reach look at their squares.
+  - Not shown while carrying a piece with G (as with the reach text). main.gd untouched. No save changes.
+- **Tests (9 new):** a sprinkler on top of a built one adds no new squares; one far away waters only new ones; one 4 m from a built one shares some; a dew collector counts its 8 m of squares; a sprinkler at a dew collector's edge counts shared squares; a turret counts none; the build line shows the count; after building one there the same spot adds fewer; a wall's line says nothing.
+- Screenshot view `93_kin_rings` now shows the count on the build line.
+- **Screenshot tool fixed:** in a full run, the reach-circle views (`91_reach_ring`, `93_kin_rings`) showed a red bunker blueprint instead, because an earlier view left build mode on ready-made buildings. The ring views now switch back to single pieces first. (Only the tool; the game was fine.)
+
+**Try:** press B, pick the sprinkler and slide it round the edge of your green patch: watch the "new" number and drop it where it's highest.
+**Next:** more bug hunting and rough edges. Ideas for the owner to pick from (write them under Player feedback to ask for one): a "base status" page listing machines that are idle and why; outposts' pipes on a zoomed map round the outpost; the hammer prompt on a built sprinkler saying how many of its squares no other one waters.
+
 ## v2.8.7 (2026-11-28): Every circle at once while placing
 No player feedback was waiting and every roadmap item is done, so this run took one of the ideas from v2.8.6's list: showing the built pieces' circles while placing a new one.
 - **Checked first:** all tests passed with no Godot errors before any change.

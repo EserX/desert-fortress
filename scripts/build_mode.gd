@@ -94,6 +94,10 @@ const OTHER_RANGE := 70.0  # m from the preview
 var other_rings: MultiMeshInstance3D
 var other_centres: Array = []  # [centre, type, first dash, colour] of each circle drawn (headless can't read a MultiMesh back)
 var _others_key := ""  # what the circles were drawn for; redraw when it changes
+## v2.8.8: how many ground squares a sprinkler or dew collector placed at the
+## preview would water that no built one already does: Vector2i(new, already).
+var square_counts := Vector2i(-1, -1)
+var _squares_key := ""  # what square_counts was worked out for
 
 
 func _ready() -> void:
@@ -406,6 +410,7 @@ static func ring_radius(type: String) -> float:
 func _update_ring(type: String) -> void:
 	_draw_ring(type, _ghost.global_position, _ghost.visible)
 	_draw_others(type, _ghost.global_position, _ghost.visible)
+	_count_squares(type, _ghost.global_position, _ghost.visible)
 
 
 ## v2.8.7: the fainter circles of the built pieces that do the same job as the
@@ -454,6 +459,68 @@ func _draw_others(type: String, c: Vector3, show: bool) -> void:
 			n += 1
 	mm.visible_instance_count = n
 	other_rings.visible = n > 0
+
+
+## The ground squares a sprinkler or dew collector at pos waters (the same
+## helpers the sprinklers and the morning dew use), or [] for other pieces.
+static func watered_cells(type: String, pos: Vector3) -> Array:
+	match type:
+		"sprinkler":
+			return Water.spray_cells(pos)
+		"dew_collector":
+			return Weather.cells_within(Vector2(pos.x, pos.z), Weather.DEW_R)
+	return []
+
+
+## v2.8.8: counts the squares a sprinkler or dew collector at pos would water:
+## Vector2i(new, already watered by a built sprinkler or dew collector).
+## Loops over all pieces (a few hundred at most) and the 9 to 21 squares of
+## each nearby waterer; called only when the preview moves, the piece type
+## or the base changes (see _count_squares).
+func count_squares(type: String, pos: Vector3) -> Vector2i:
+	var mine := watered_cells(type, pos)
+	if mine.is_empty():
+		return Vector2i(-1, -1)
+	var reach := ring_radius(type) + Weather.DEW_R + Water.CELL * 2.0
+	var taken := {}
+	for k in building.pieces.keys():
+		var rec: Dictionary = building.pieces[k]
+		if not (rec.type == "sprinkler" or rec.type == "dew_collector") or not is_instance_valid(rec.node):
+			continue
+		var pc: Vector3 = (rec.node as Node3D).global_position
+		if Vector2(pc.x - pos.x, pc.z - pos.z).length() > reach:
+			continue
+		for c in watered_cells(rec.type, pc):
+			taken[c] = true
+	var old := 0
+	for c in mine:
+		if taken.has(c):
+			old += 1
+	return Vector2i(mine.size() - old, old)
+
+
+func _count_squares(type: String, c: Vector3, show: bool) -> void:
+	if not show or watered_cells(type, c).is_empty():
+		square_counts = Vector2i(-1, -1)
+		_squares_key = ""
+		return
+	var key := "%s|%d|%.2f|%.2f" % [type, building.revision, c.x, c.z]
+	if key == _squares_key:
+		return
+	_squares_key = key
+	square_counts = count_squares(type, c)
+
+
+## The build line's count of squares ("Waters 7 squares: 5 new, 2 already watered"), or "".
+func squares_text() -> String:
+	if square_counts.x < 0:
+		return ""
+	var total := square_counts.x + square_counts.y
+	if square_counts.y == 0:
+		return "Waters %d squares, all new" % total
+	if square_counts.x == 0:
+		return "Waters %d squares, all already watered by another" % total
+	return "Waters %d squares: %d new, %d already watered by another" % [total, square_counts.x, square_counts.y]
 
 
 ## Hides the built pieces' circles (and forgets them, so they redraw next time).
@@ -699,4 +766,7 @@ func status_text() -> String:
 		line += "\nSupport here: %d%%" % int(support_preview)
 	if REACH_RINGS.has(type) and carrying.is_empty() and not slot.is_empty():
 		line += "\n" + reach_text(type)
+		var sq := squares_text()
+		if sq != "":
+			line += "\n" + sq
 	return line + "\n" + keys_text()

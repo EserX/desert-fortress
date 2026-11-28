@@ -756,6 +756,8 @@ func _ring_sample(type: String, kin := false) -> void:
 	main.inventory.add_all({"scrap": 40, "nails": 20, "wood": 10, "kit_dew": 1})
 	main.shop.unlocked[type] = true
 	main.build_mode.active = true
+	if main.build_mode.prefab_mode:  # an earlier view left ready-made buildings on
+		main.build_mode.toggle_prefabs()
 	main.build_mode.select(b.ORDER.find(type))
 
 

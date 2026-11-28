@@ -3045,6 +3045,7 @@ func _process(_delta: float) -> bool:
 			_check_throws()
 			_test_survival_depth()
 			_test_crafting_chain()
+			_test_events()
 			_start_shelter()
 		4280:
 			_check_shelter()
@@ -4838,3 +4839,165 @@ func _check_shelter() -> void:
 	check(open < 0.2, "on open sand you are not (%.2f)" % open)
 	main.building.load_data([])
 	player.position = Vector3(0, main.terrain.surface_height(0, 8), 8)
+
+
+## v2.3 events: sandstorms, the Behemoth and day raids on outposts.
+func _test_events() -> void:
+	var Events = load("res://scripts/events.gd")
+	var Waves = load("res://scripts/waves.gd")
+	var Mutant = load("res://scripts/mutant.gd")
+	var ev = main.events
+	var dn = main.day_night
+	var mu = main.mutants
+	var t = main.terrain
+	main.building.load_data([])
+	mu.clear()
+	# Planning: the same world and day always plan the same.
+	check(Events.plan_for(7, 12, [0]) == Events.plan_for(7, 12, [0]), "the same seed and day plan the same events")
+	var storms := 0
+	var raids := 0
+	var early := false
+	var in_range := true
+	for d in range(1, 101):
+		var p: Dictionary = Events.plan_for(99, d, [1])
+		if p.has("storm"):
+			storms += 1
+			early = early or d < Events.STORM_FIRST_DAY
+			in_range = in_range and p.storm.start >= Events.STORM_FROM and p.storm.end <= Events.STORM_TO + Events.STORM_MAX_H and p.storm.end < 18.5
+		if p.has("raid"):
+			raids += 1
+			in_range = in_range and p.raid.outpost == 1 and p.raid.hour >= Events.RAID_FROM and p.raid.hour <= Events.RAID_TO
+	check(storms > 15 and storms < 50 and not early, "storms blow on some days, never on the first two (%d in 100)" % storms)
+	check(raids > 20 and raids < 60, "outposts are raided on some days (%d in 100)" % raids)
+	check(in_range, "storms and raids keep to their hours (and storms are over before dusk)")
+	var none := true
+	for d in range(1, 60):
+		none = none and not Events.plan_for(99, d, []).has("raid") and not Events.plan_for(99, d, [0], true).has("raid")
+	check(none, "no raids without an outpost, nor in peaceful mode")
+	var st := {"start": 10.0, "end": 13.0, "dir": 0.0}
+	check(Events.strength_at(st, 9.9) == 0.0 and Events.strength_at(st, 11.5) == 1.0 and Events.strength_at(st, 10.2) > 0.0 and Events.strength_at(st, 10.2) < 1.0, "a storm builds up, blows and dies down")
+	check(Events.dir_name(PI) == "west" and Events.dir_name(0.0) == "east", "wind directions are named")
+	# A storm blowing now.
+	var base_fog: float = main.env.fog_density
+	dn.hour = 11.0
+	ev.plan_day(dn.day)
+	ev.plan = {"storm": {"start": 10.0, "end": 13.0, "dir": 0.0}}
+	var msgs: Array = []
+	var grab := func(text): msgs.append(text)
+	ev.message.connect(grab)
+	ev.tick(0.25)
+	check(ev.strength == 1.0 and is_equal_approx(main.env.fog_density, Events.STORM_FOG) and dn.dust == 1.0, "in a storm the fog closes in and the sky turns brown")
+	check(mu.storm and main.ambience.storm == 1.0 and ev._sand.emitting, "mutants see less, the wind howls and sand blows past")
+	var band: Array = ev.band("storm")
+	check(band.size() == Events.storm_size_for(dn.day) and band.all(func(m): return m.hunter and m.global_position.x > 100.0), "a band of %d mutants comes in on the wind (from the east)" % band.size())
+	check(msgs.any(func(m): return "sandstorm" in m.to_lower()), "a banner warns of the storm")
+	check("Sandstorm" in ev.hud_text(), "the HUD says there is a sandstorm")
+	# Saving and loading keeps who came with the storm.
+	var md: Dictionary = mu.save_data()
+	mu.load_data(md)
+	check(ev.band("storm").size() == band.size(), "storm mutants stay storm mutants when saved and loaded")
+	var sd: Dictionary = ev.save_data()
+	ev.load_data(sd)
+	check(ev.storm_spawned and ev.warned and ev.day == dn.day, "the day's events are saved")
+	check(main.collect_save_data().get("events", {}).get("storm_spawned", false) == true, "and go into the save file")
+	ev.plan = {"storm": {"start": 10.0, "end": 13.0, "dir": 0.0}}
+	ev.load_data({"day": "x", "storm_spawned": 3, "raid": 5})
+	check(not ev.storm_spawned and ev.raid_state == "", "a broken events save falls back to a fresh day")
+	ev.load_data({})
+	check(ev.day == dn.day and ev.raid_state == "", "an older save without events plans the day it loads into")
+	ev.plan = {"storm": {"start": 10.0, "end": 13.0, "dir": 0.0}}
+	ev.storm_spawned = true
+	ev.warned = true
+	ev.tick(0.25)
+	# Drifting sand fills dug holes, never above the old ground.
+	t.load_data({})
+	var hole := Vector2(14.5, 14.5)
+	for i in 4:
+		t.dig(hole.x, hole.y)
+	var c: Vector2i = t.dig_cell(hole.x, hole.y)
+	check(t.dug_cells().has(hole), "the dug hole is found")
+	var depth0: float = t.cell_depth(c)
+	check(ev.drift() >= 1 and t.cell_depth(c) < depth0 - 0.2, "a drift of sand fills the hole a step (%.2f m to %.2f m)" % [depth0, t.cell_depth(c)])
+	for i in 12:
+		ev.drift()
+	check(absf(t.cell_depth(c)) < 0.01 and t.dug_cells().is_empty(), "drifts fill it up to the old ground and no higher")
+	check(not t.silt(20.5, 20.5), "flat ground gets no sand piled on it")
+	for i in 4:
+		t.dig(hole.x, hole.y)
+	var fs := {"kind": "obj", "cx": 7, "cz": 7, "dir": 0, "level": 0}
+	var bev: Dictionary = main.building.evaluate("chest", fs)
+	var ck: String = main.building.place("chest", fs, bev.y) if bev.ok else ""
+	var near: bool = ck != "" and Vector2(main.building.pieces[ck].node.global_position.x, main.building.pieces[ck].node.global_position.z).distance_to(hole) < 1.6
+	var d1: float = t.cell_depth(c)
+	ev.drift()
+	check(not near or absf(t.cell_depth(c) - d1) < 0.001, "holes right by a building piece are left alone (%s)" % ("tested" if near else "chest elsewhere"))
+	main.building.load_data([])
+	t.load_data({})
+	# The storm passes: its mutants sink into the sand and the sky clears.
+	dn.hour = 13.5
+	ev.tick(0.25)
+	check(ev.strength == 0.0 and ev.band("storm").is_empty() and is_equal_approx(main.env.fog_density, base_fog) and dn.dust == 0.0, "when the storm passes its mutants go and the fog lifts")
+	check(not mu.storm and msgs.any(func(m): return "passed" in m), "and a banner says it has passed")
+	mu.clear()
+	# A day raid on an outpost.
+	var oa = main.oases
+	var was_claimed: bool = oa.list[0].claimed
+	oa.list[0].claimed = true
+	dn.hour = 12.0
+	ev.plan_day(dn.day)
+	ev.plan = {"raid": {"outpost": 0, "hour": 11.5, "size": 4}}
+	ev.tick(0.25)
+	var post: Vector3 = oa.list[0].post_pos
+	var raiders: Array = ev.band("raid")
+	check(ev.raid_state == "on" and raiders.size() == 4, "raiders come for the outpost (%s, %d)" % [ev.raid_state, raiders.size()])
+	check(raiders.all(func(m): return m.hunter and Vector2(m.home.x - post.x, m.home.z - post.z).length() < 0.1 and Vector2(m.base_goal.x - post.x, m.base_goal.z - post.z).length() < 0.1), "and stay at the outpost")
+	check(raiders.all(func(m): return Vector2(m.global_position.x - post.x, m.global_position.z - post.z).length() > 40.0), "they start out in the desert")
+	check("Raid on outpost 1: 4 left" in ev.hud_text(), "the HUD counts the raiders")
+	var cash: int = main.shop.cash
+	for m in raiders:
+		m.hurt(99999.0)
+	ev.tick(0.25)
+	check(ev.raid_state == "won" and main.shop.cash == cash + Events.RAID_PAY + 4 * Events.RAID_PAY_EACH, "driving them off pays $%d" % (main.shop.cash - cash))
+	ev.tick(0.25)
+	check(ev.band("raid").is_empty() and ev.raid_state == "won", "a raid happens once a day")
+	ev.plan_day(dn.day)
+	ev.plan = {"raid": {"outpost": 0, "hour": 11.5, "size": 3}}
+	ev.tick(0.25)
+	dn.hour = 19.2
+	ev.tick(0.25)
+	check(ev.raid_state == "gone" and ev.band("raid").is_empty(), "raiders still about at dusk slink off")
+	oa.list[0].claimed = false
+	ev.plan_day(dn.day)
+	ev.plan = {"raid": {"outpost": 0, "hour": 11.5, "size": 3}}
+	dn.hour = 12.0
+	ev.tick(0.25)
+	check(ev.raid_state == "gone" and ev.band("raid").is_empty(), "no raid on an outpost that isn't claimed")
+	oa.list[0].claimed = was_claimed
+	mu.clear()
+	# The Behemoth.
+	check(Waves.boss_night(10) and Waves.boss_night(20) and not Waves.boss_night(9) and not Waves.boss_night(0), "a Behemoth comes every tenth night")
+	var wv = main.waves
+	var w0: int = wv.wave
+	wv.wave = 9
+	var lineup: Array = wv.preview_next()
+	check(lineup.count("behemoth") == 1 and lineup.back() == "behemoth", "night 10's wave ends with a Behemoth (%s)" % Waves.mix_text(lineup))
+	wv.wave = 10
+	check(not wv.preview_next().has("behemoth"), "night 11 has none")
+	wv.wave = 9
+	check(ev.boss_tonight(), "the dusk before night 10 warns of it")
+	wv.wave = w0
+	check("behemoth" in Mutant.WRECKERS and Waves.BOUNTY.behemoth >= 200, "it walks through walls and is worth a big bounty")
+	var b = mu.spawn("behemoth", Vector3(30, 0, 60))
+	check(is_equal_approx(b.health, Mutant.TYPES.behemoth.health * mu.health_mult) and b.stats.wall_damage > 200.0, "a Behemoth has %d health" % int(b.health))
+	check("Behemoth: " in ev.hud_text(), "its health shows on the HUD")
+	var drops: Array = []
+	var grab2 := func(items, _pos): drops.append(items)
+	ev.spilled.connect(grab2)
+	b.hurt(99999.0)
+	check(drops.size() == 1 and drops[0].get("metal_plate", 0) > 0, "it drops a pile of scrap and metal plates")
+	ev.spilled.disconnect(grab2)
+	ev.message.disconnect(grab)
+	mu.clear()
+	ev.plan_day(dn.day)
+	dn.hour = 9.0
+	ev.tick(0.25)

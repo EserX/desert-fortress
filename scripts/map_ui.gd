@@ -117,7 +117,7 @@ func _draw_map() -> void:
 	_canvas.draw_arc(b, main.building.zone_radius * RADIUS_PX / main.terrain.PLAY_RADIUS, 0.0, TAU, 48, Color(0.8, 0.15, 0.1, 0.5), 1.5)
 	if main.waves and main.waves.active:
 		for m in main.waves.hunters():
-			_canvas.draw_circle(to_map(m.global_position), 4.0 if m.type != "brute" else 6.0, Color(0.85, 0.1, 0.05))
+			_canvas.draw_circle(to_map(m.global_position), {"brute": 6.0, "behemoth": 8.0}.get(m.type, 4.0), Color(0.85, 0.1, 0.05))
 	# Player arrow.
 	var pp := to_map(main.player.global_position)
 	var fwd3: Vector3 = -main.player.global_transform.basis.z

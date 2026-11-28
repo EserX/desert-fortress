@@ -294,6 +294,37 @@ func fill(x: float, z: float) -> bool:
 	return _shape_cell(c, func(base: float, d: float) -> float: return minf(maxf(base + d, target) - base, MAX_RAISE))
 
 
+## v2.3: every cell with a corner dug below the original ground, as world
+## (x, z) centres. Scans the whole fine grid (97 x 97 corners), so call it
+## now and then (a sandstorm does every few seconds), not every frame.
+func dug_cells(min_depth := 0.05) -> Array:
+	var n := DIG_CELLS + 1
+	var found := {}
+	for i in delta.size():  # 9,409 corners
+		if delta[i] < -min_depth:
+			var ix := i % n
+			var iz := i / n
+			for o in [Vector2i(0, 0), Vector2i(-1, 0), Vector2i(0, -1), Vector2i(-1, -1)]:
+				var c := Vector2i(ix + o.x, iz + o.y)
+				if c.x >= 0 and c.y >= 0 and c.x < DIG_CELLS and c.y < DIG_CELLS:
+					found[c] = true
+	var out: Array = []
+	for c in found:
+		out.append(cell_center(c))
+	return out
+
+
+## v2.3: drifting sand fills the dug cell at world (x, z) a little: its lowest
+## corner goes up DIG_STEP and the others up to it, but never above the
+## original ground (a drift fills holes, it doesn't pile sand up).
+func silt(x: float, z: float) -> bool:
+	if dig_blocked(x, z) != "":
+		return false
+	var c := dig_cell(x, z)
+	var target: float = cell_corners(c).min() + DIG_STEP
+	return _shape_cell(c, func(base: float, d: float) -> float: return minf(maxf(d, target - base), maxf(d, 0.0)))
+
+
 ## The ground height at world (x, z) before any digging (nearest grid corner).
 func original_height(x: float, z: float) -> float:
 	var ix := roundi(x + DIG_HALF)

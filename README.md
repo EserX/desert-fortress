@@ -2,7 +2,7 @@
 
 A 3D low-poly survival and fortress-defence game for Linux, made with Godot 4.5. Scavenge the desert by day, build and arm a fortress around the flag, and survive a bigger mutant wave every night. Each night pays cash you spend at the shop terminal on supplies, weapons, drone deliveries and base upgrades. Now also: turning the desert green from a main well at the centre, farming it and selling the harvest at the market, and hunting the animals the green land draws in (by night the water draws the mutants); claiming hidden oases as outposts, and green milestones that end with the rain coming back (then free play). A peaceful mode leaves out the mutants altogether.
 
-**Current version: v2.2.0.** See [ROADMAP.md](ROADMAP.md) for the plan and [DEVLOG.md](DEVLOG.md) for what changed in each update.
+**Current version: v2.3.0.** See [ROADMAP.md](ROADMAP.md) for the plan and [DEVLOG.md](DEVLOG.md) for what changed in each update.
 
 ## Play (Linux Mint)
 
@@ -111,6 +111,14 @@ Milestones stay reached even if the green fades later. You can't get to 10% with
 | Runner (night 2+) | Faster than you walk, weak. Sprint or shoot. |
 | Spitter (night 3+) | Keeps its distance and lobs acid that also eats walls. Hide, then rush it. |
 | Brute (night 4+) | Huge, slow, very tough, wrecks walls in a few blows. Kill it before it reaches them. |
+| Behemoth (every 10th night) | A boss twice your height with 2,400 health. Walks straight through walls, tearing one down in a few blows, and its fist sends you flying. Deep pits hold it. Worth $300 and drops scrap and metal plates. |
+
+**Events.** Some days bring trouble by daylight (from day 3 on):
+- **Sandstorms:** a banner warns you an hour ahead and names the side it comes from. In the storm the sky turns brown and you see only about 30 m, the wind howls, and a band of mutants comes in on the wind and heads for the main well (they see as little as at night). Drifting sand slowly fills the holes and trenches you dug (but not the ground within about 3 m of your buildings, so wells and spiked pits are safe). When the storm passes, the mutants in it sink back into the sand. The HUD shows "Sandstorm".
+- **Raids on outposts:** with an outpost claimed, a band of mutants sometimes attacks it by day (the banner says which one and how far). They wreck what you built there and trample its fields. Kill them all for $40 plus $10 a raider; any still there at 19:00 slink off. The HUD counts them.
+- **The Behemoth:** every tenth night (10, 20, 30...) a Behemoth walks at the back of the wave. The dusk banner warns you and its health shows on the HUD.
+
+In Peaceful mode sandstorms still blow (and fill holes) but bring no mutants, and there are no raids or Behemoths.
 
 **Weapons.** Melee costs stamina. Guns are loud and bring mutants running. Hold **right click** to aim (the rifle has a scope), **R** reloads. Headshots do double damage.
 

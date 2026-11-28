@@ -32,6 +32,9 @@ var hour := 9.0            # 0..24
 var time_scale := 1.0      # for testing / debugging
 ## Cloud cover 0..1 (rain, v1.19): a greyer sky and a weaker sun. Set by weather.gd.
 var overcast := 0.0
+## v2.3: a sandstorm's strength (0..1, set by events.gd): the sky and fog turn
+## sandy brown and the sun dims.
+var dust := 0.0
 var sun: DirectionalLight3D
 var moon: DirectionalLight3D
 var env: Environment
@@ -164,6 +167,13 @@ func _apply() -> void:
 		sky_mat.ground_horizon_color = sky_mat.sky_horizon_color
 		sun.light_energy *= 1.0 - overcast * 0.6
 		env.fog_light_color = env.fog_light_color.lerp(grey, overcast * 0.6)
+	if dust > 0.0:
+		var sand := Color(0.72, 0.55, 0.36) * clampf(sun.light_energy, 0.25, 1.0)
+		sky_mat.sky_top_color = sky_mat.sky_top_color.lerp(sand * 0.8, dust * 0.9)
+		sky_mat.sky_horizon_color = sky_mat.sky_horizon_color.lerp(sand, dust * 0.95)
+		sky_mat.ground_horizon_color = sky_mat.sky_horizon_color
+		sun.light_energy *= 1.0 - dust * 0.55
+		env.fog_light_color = env.fog_light_color.lerp(sand, dust * 0.9)
 
 	# Sun arc: rises in the east (+X), peaks at ~70 degrees, sets in the west.
 	var day_frac := (hour - SUNRISE) / (SUNSET - SUNRISE)

@@ -48,6 +48,7 @@ const EndingUI = preload("res://scripts/ending_ui.gd")
 const Throwables = preload("res://scripts/throwables.gd")
 const Camp = preload("res://scripts/camp.gd")
 const Furnace = preload("res://scripts/furnace.gd")
+const Events = preload("res://scripts/events.gd")
 const Sledge = preload("res://scripts/sledge.gd")
 
 ## Testing aid (temporary): a green box by the spawn point that holds a full
@@ -57,7 +58,7 @@ const TEST_BOX := true
 const TEST_CASH := 2000
 
 ## How hard a mutant's blow shoves you (m/s, v2.0). A Brute also lifts you off your feet.
-const PLAYER_SHOVE := {"walker": 1.5, "runner": 1.0, "brute": 7.5}
+const PLAYER_SHOVE := {"walker": 1.5, "runner": 1.0, "brute": 7.5, "behemoth": 11.0}
 const DISCOVER_RANGE := 45.0
 const REFILLS_PER_MORNING := 4
 const SUPPLY_CHANCE := 0.5
@@ -121,6 +122,7 @@ var camp: Camp  # v2.1: warmth round you, cooking, food going bad, heavy loads
 var furnace: Furnace  # v2.2: smelting in furnace pieces
 var sledge: Sledge  # v2.2: the sledgehammer's blows
 var goals: Goals
+var events: Events  # v2.3: sandstorms, the Behemoth, day raids on outposts
 var ending_ui: EndingUI
 var waves: Waves
 var guns: Guns
@@ -513,6 +515,7 @@ func _ready() -> void:
 	_setup_throwables()
 	_setup_camp()
 	_setup_furnace()
+	_setup_events()
 	# Autosave every morning (after the morning loot is in place).
 	day_night.day_started.connect(func(_d): Game.save_game("auto", _screenshot()))
 	Game.saved.connect(func(slot): hud.show_banner("Game saved (%s)" % Game.slot_label(slot)))
@@ -1924,6 +1927,32 @@ func _setup_furnace() -> void:
 	sledge.main = self
 
 
+## v2.3: sandstorms, the Behemoth every tenth night and day raids on outposts.
+func _setup_events() -> void:
+	events = Events.new()
+	events.name = "Events"
+	events.mutants = mutants
+	events.terrain = terrain
+	events.building = building
+	events.day_night = day_night
+	events.ambience = ambience
+	events.oases = oases
+	events.waves = waves
+	events.player = player
+	events.env = env
+	events.world_seed = world_seed
+	events.peaceful = Game.is_peaceful()
+	add_child(events)
+	events.plan_day(day_night.day)
+	events.message.connect(hud.show_banner)
+	events.spilled.connect(loot.spawn_drop)
+	events.paid.connect(shop.add_cash)
+	mutants.mutant_killed.connect(events.on_killed)
+	day_night.day_started.connect(events.on_morning)
+	day_night.dusk_started.connect(events.on_dusk)
+	hud.events = events
+
+
 func _setup_camp() -> void:
 	camp = Camp.new()
 	camp.name = "Camp"
@@ -1992,7 +2021,7 @@ func _on_player_hit(dmg: float, from: Vector3, kind := "walker") -> void:
 	var shove: float = PLAYER_SHOVE.get(kind, 0.0)
 	if shove > 0.0:
 		var away := Vector3(-to.x, 0, -to.z).normalized()
-		player.push(away * shove + Vector3(0, shove * 0.35 if kind == "brute" else 0.0, 0))
+		player.push(away * shove + Vector3(0, shove * 0.35 if kind in ["brute", "behemoth"] else 0.0, 0))
 
 
 var _attack_warned_at := -100000
@@ -2146,6 +2175,7 @@ func collect_save_data() -> Dictionary:
 		"oases": oases.save_data(),
 		"weather": weather.save_data(),
 		"goals": goals.save_data(),
+		"events": events.save_data(),
 	}
 
 
@@ -2264,6 +2294,8 @@ func apply_save_data(data: Dictionary) -> void:
 	weather.load_data(wd2 if wd2 is Dictionary else {})
 	var gd = data.get("goals", {})
 	goals.load_data(gd if gd is Dictionary else {})  # after livable: needs the green %
+	var ed = data.get("events", {})
+	events.load_data(ed if ed is Dictionary else {})  # after the oases (raids need the outposts) and the clock
 
 
 ## Graphics quality: sun shadows and how far you can see.

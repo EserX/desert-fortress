@@ -24,6 +24,8 @@ var night := false
 var kills := 0
 var health_mult := 1.0  # difficulty
 var peaceful := false   # peaceful mode (v1.19): no walkers roam the desert
+## v2.3: a sandstorm is blowing (they see as little as at night).
+var storm := false
 ## Raids' raid_point (plants and pipes for wave mutants to wreck), given to each mutant.
 var raid := Callable()
 var _sounds := {}
@@ -150,6 +152,8 @@ func load_data(data: Dictionary) -> void:
 		var h: Array = d.get("home", [])
 		if h.size() == 3:
 			m.home = Vector3(h[0], h[1], h[2])
+		var ev = d.get("event", "")
+		m.event = ev if ev in ["storm", "raid"] else ""
 		var g = d.get("guard", -1)
 		m.guard_of = int(g) if (g is int or g is float) else -1
 		if d.get("hunter", false):

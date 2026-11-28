@@ -40,7 +40,16 @@ const TYPES := {
 		"skin": Color(0.6, 0.62, 0.3), "scale": Vector3(1.05, 0.95, 1.05), "push": 1.0, "pitch": 1.15, "climb": 0.35,
 		"spit": {"range": 17.0, "keep": 9.0, "cooldown": 3.2, "windup": 0.7, "damage": 14.0, "wall_damage": 25.0, "speed": 15.0},
 	},
+	# v2.3: the boss that walks with every tenth night's wave.
+	"behemoth": {
+		"name": "Behemoth", "health": 2400.0, "walk": 0.8, "march": 1.6, "run": 2.3,
+		"sight": 24.0, "sight_night": 16.0, "hear": 9.0, "lose": 50.0,
+		"damage": 40.0, "reach": 3.0, "windup": 0.95, "cooldown": 2.4, "wall_damage": 220.0,
+		"skin": Color(0.36, 0.3, 0.34), "scale": Vector3(2.3, 2.0, 2.1), "push": 0.05, "pitch": 0.42, "climb": 0.15,
+	},
 }
+## Types that walk straight through walls rather than looking for a way in.
+const WRECKERS := ["brute", "behemoth"]
 const LAYER := 8           # physics layer 4: mutants
 const GRAVITY := 18.0
 const CORPSE_SECONDS := 25.0
@@ -94,6 +103,9 @@ var base_goal := Vector3.ZERO
 ## func(from: Vector3) -> Vector3: the nearest plant or pipe to wreck
 ## (Vector3.INF if none). Set by the manager from raids.gd.
 var raid := Callable()
+## v2.3: "storm" or "raid" when an event sent it (events.gd sends it off when
+## the event is over), "" otherwise. Saved.
+var event := ""
 var target: Node3D            # the player
 var target_dead := func(): return false
 var building  # Building
@@ -199,7 +211,7 @@ func _build_model() -> void:
 		_legs.append(hip)
 	var torso := Node3D.new()
 	torso.position.y = 0.92
-	torso.rotation.x = {"runner": -0.6, "brute": -0.4}.get(type, -0.3)  # hunched forward
+	torso.rotation.x = {"runner": -0.6, "brute": -0.4, "behemoth": -0.45}.get(type, -0.3)  # hunched forward
 	body.add_child(torso)
 	_box(torso, Vector3(0.5, 0.62, 0.28), Vector3(0, 0.33, 0), rags)
 	_box(torso, Vector3(0.3, 0.14, 0.22), Vector3(0.06, 0.08, 0.02), _skin)  # a tear in the shirt
@@ -217,7 +229,7 @@ func _build_model() -> void:
 		_box(shoulder, Vector3(0.13, 0.13, 0.62), Vector3(0, 0, -0.29), _skin)
 		_box(shoulder, Vector3(0.15, 0.15, 0.24), Vector3(0, 0, -0.06), rags)
 		_arms.append(shoulder)
-		if type == "brute":
+		if type in WRECKERS:
 			_box(shoulder, Vector3(0.22, 0.22, 0.24), Vector3(0, 0, -0.62), _skin)  # huge fists
 		elif type == "runner":
 			_box(shoulder, Vector3(0.05, 0.05, 0.14), Vector3(0.03, 0, -0.66), LowPoly.material(Color(0.85, 0.8, 0.7)))  # claws
@@ -225,6 +237,13 @@ func _build_model() -> void:
 		"brute":
 			_box(torso, Vector3(0.62, 0.36, 0.36), Vector3(0, 0.5, 0.02), _skin)  # hulking shoulders
 			_box(torso, Vector3(0.52, 0.12, 0.34), Vector3(0, 0.12, 0), LowPoly.material(Color(0.25, 0.22, 0.2)))  # belt
+		"behemoth":
+			var bone := LowPoly.material(Color(0.86, 0.8, 0.66))
+			_box(torso, Vector3(0.66, 0.4, 0.4), Vector3(0, 0.5, 0.02), _skin)  # hulking shoulders
+			for i in 4:  # a row of bone spikes down its back
+				_box(torso, Vector3(0.07, 0.2 - i * 0.03, 0.07), Vector3(0, 0.62 - i * 0.16, 0.22), bone)
+			_box(head, Vector3(0.05, 0.16, 0.05), Vector3(0.1, 0.26, 0), bone)  # horns
+			_box(head, Vector3(0.05, 0.16, 0.05), Vector3(-0.1, 0.26, 0), bone)
 		"spitter":
 			var sac := StandardMaterial3D.new()
 			sac.albedo_color = Color(0.6, 0.95, 0.2)
@@ -434,7 +453,8 @@ func _physics_process(delta: float) -> void:
 	_cooldown = maxf(_cooldown - delta, 0.0)
 	_spit_cd = maxf(_spit_cd - delta, 0.0)
 	_think -= delta
-	var night: bool = get_parent().get("night") == true
+	# A sandstorm (v2.3) cuts their sight like the dark does.
+	var night: bool = get_parent().get("night") == true or get_parent().get("storm") == true
 	if _think <= 0.0:
 		_think = 0.25
 		_decide(night)
@@ -623,7 +643,7 @@ func _after_move() -> void:
 ## account), or fallback when there is none. Brutes always go straight through.
 func _nav_want(field: String, fallback: Vector3) -> Vector3:
 	nav_field = ""
-	if nav == null or type == "brute":
+	if nav == null or type in WRECKERS:
 		return fallback
 	var d: Vector3 = nav.direction(field, global_position)
 	if d == Vector3.ZERO:
@@ -823,4 +843,4 @@ func _play(name: String, pitch: float) -> void:
 
 func save_data() -> Dictionary:
 	return {"type": type, "pos": [position.x, position.y, position.z], "home": [home.x, home.y, home.z], "hp": health, "hunter": hunter,
-		"base": [base_goal.x, base_goal.y, base_goal.z], "guard": guard_of}
+		"base": [base_goal.x, base_goal.y, base_goal.z], "guard": guard_of, "event": event}

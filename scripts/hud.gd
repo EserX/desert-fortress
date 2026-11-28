@@ -17,6 +17,7 @@ var waves  # Waves
 var guns  # Guns
 var shop  # Shop
 var livable  # Livable: green % and the livable score (v1.17)
+var events  # Events: sandstorms, raids and the Behemoth (v2.3)
 var hint_box: PanelContainer
 var _hint_label: Label
 var _hint_queue: Array = []
@@ -234,6 +235,10 @@ func _process(delta: float) -> void:
 			text += "\nNight"
 		elif left < 120.0:
 			text += "\nNight in %d:%02d" % [int(left) / 60, int(left) % 60]
+		if events:
+			var et: String = events.hud_text()
+			if et != "":
+				text += "\n" + et
 		if waves and waves.active:
 			text += ("\nHorde: %d left" % waves.remaining()) if waves.called else ("\nWave %d: %d left" % [waves.wave, waves.remaining()])
 		clock.text = text

@@ -11,7 +11,9 @@ const CALL_RADIUS := 60.0
 const GROUP_GAP := 9.0      # seconds between groups
 const MAX_SIZE := 30
 ## Cash for each mutant of the wave you kill.
-const BOUNTY := {"walker": 10, "runner": 12, "spitter": 15, "brute": 40}
+const BOUNTY := {"walker": 10, "runner": 12, "spitter": 15, "brute": 40, "behemoth": 300}
+## v2.3: every this many nights a Behemoth walks at the back of the wave.
+const BOSS_EVERY := 10
 
 signal wave_started(n: int, size: int)
 signal wave_ended(summary: Dictionary)
@@ -91,11 +93,19 @@ static func wave_mix(n: int, rng: RandomNumberGenerator, mult := 1.0, extra := 0
 	return out
 
 
+## Night n brings a Behemoth (every BOSS_EVERY nights).
+static func boss_night(n: int) -> bool:
+	return n > 0 and n % BOSS_EVERY == 0
+
+
 ## The lineup the next wave will bring (the same roll start_wave() will make).
 func preview_next() -> Array:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash("wave:%d:%d" % [world_seed, wave + 1])
-	return wave_mix(wave + 1, rng, size_mult, lure)
+	var out := wave_mix(wave + 1, rng, size_mult, lure)
+	if boss_night(wave + 1):
+		out.append("behemoth")
+	return out
 
 
 ## "6 walkers, 2 runners, 1 brute"
@@ -104,7 +114,7 @@ static func mix_text(types: Array) -> String:
 	for t in types:
 		counts[t] = counts.get(t, 0) + 1
 	var parts: Array = []
-	for t in ["walker", "runner", "spitter", "brute"]:
+	for t in ["walker", "runner", "spitter", "brute", "behemoth"]:
 		if counts.has(t):
 			parts.append("%d %s%s" % [counts[t], t, "s" if counts[t] > 1 else ""])
 	return ", ".join(parts)
@@ -136,6 +146,8 @@ func start_wave() -> void:
 	update_lure()
 	_rng.seed = hash("wave:%d:%d" % [world_seed, wave])
 	queue = wave_mix(wave, _rng, size_mult, lure)
+	if boss_night(wave):
+		queue.append("behemoth")  # with the last group
 	to_spawn = queue.size()
 	spawn_timer = 1.0
 	stats = {"kills": 0, "damage": 0.0, "lost": 0, "deaths": 0, "size": to_spawn, "bounty": 0, "pieces": 0, "lure": lure}

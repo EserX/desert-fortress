@@ -6,6 +6,8 @@ const MIX_RATE := 22050.0
 
 var player  # Player (untyped to avoid a circular preload)
 var day_night  # DayNight
+## v2.3: a sandstorm's strength (0..1, set by events.gd): the wind howls.
+var storm := 0.0
 
 var _wind_player: AudioStreamPlayer
 var _wind: AudioStreamGeneratorPlayback
@@ -60,7 +62,7 @@ func _fill_wind(delta: float) -> void:
 	_gust_timer -= delta
 	if _gust_timer <= 0.0:
 		_gust_timer = _rng.randf_range(2.0, 6.0)
-		_gust_target = _rng.randf_range(0.25, 1.0)
+		_gust_target = _rng.randf_range(0.25 + storm * 0.6, 1.0 + storm * 0.6)
 	var night := 1.0
 	if day_night and day_night.is_night():
 		night = 0.6  # calmer at night
@@ -72,7 +74,7 @@ func _fill_wind(delta: float) -> void:
 		var cutoff := 0.015 + _gust * 0.05
 		_lp1 += (white - _lp1) * cutoff
 		_lp2 += (_lp1 - _lp2) * cutoff
-		var s := _lp2 * (2.5 + _gust * 5.0) * night
+		var s := _lp2 * (2.5 + _gust * 5.0) * night * (1.0 + storm * 1.6)
 		_wind.push_frame(Vector2(s, s))
 
 

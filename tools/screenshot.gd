@@ -87,6 +87,8 @@ var shots := [
 	{"name": "77_cold_night", "pos": Vector3(-26, 0, -40), "yaw": PI * 0.5, "pitch": -0.55, "hour": 23.5, "camp": true},
 	{"name": "78_furnace", "pos": Vector3(-26, 0, -40), "yaw": PI * 0.5, "pitch": -0.2, "hour": 19.6, "forge": "furnace"},
 	{"name": "79_sledgehammer", "pos": Vector3(-26, 0, -40), "yaw": PI * 0.5, "pitch": -0.05, "hour": 15.0, "forge": "sledge"},
+	{"name": "80_sandstorm", "pos": Vector3(0, 0, 9), "yaw": -PI * 0.5, "pitch": -0.02, "hour": 12.0, "event": "storm"},
+	{"name": "81_behemoth", "pos": Vector3(0, 0, 9), "yaw": -PI * 0.5, "pitch": 0.1, "hour": 17.6, "event": "boss"},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -227,6 +229,11 @@ func _process(_d: float) -> bool:
 			_camp_sample(p)
 		if s.has("forge"):
 			_forge_sample(p, s.forge)
+		if s.has("event"):
+			_event_sample(p, s.event)
+		elif main.events.plan.has("storm"):
+			main.events.plan = {}
+			main.events.tick(0.25)
 		if s.has("goals"):
 			_goals_sample(s.goals)
 		elif main.ending_ui.is_open():
@@ -1196,3 +1203,49 @@ func _forge_sample(p: Node3D, kind: String) -> void:
 	else:
 		main.inventory.add_all({"sledgehammer": 1, "steel_shovel": 1, "brick": 14})
 		p.head.rotation.x = -0.1
+
+
+## v2.3: a sandstorm at noon with its mutants looming out of the dust, or a
+## Behemoth walking up to the walls at dusk.
+func _event_sample(p: Node3D, kind: String) -> void:
+	var ev = main.events
+	var ms = main.mutants
+	ms.clear()
+	main.building.load_data([])
+	main.building.sites_load_data([])
+	var b = main.building
+	var fwd := -p.global_transform.basis.z
+	var side := p.global_transform.basis.x
+	ev.plan_day(main.day_night.day)
+	if kind == "storm":
+		ev.plan = {"storm": {"start": 10.0, "end": 14.0, "dir": 0.0}}
+		ev.warned = true
+		ev.tick(0.25)
+		var band: Array = ev.band("storm")
+		for i in band.size():
+			var m = band[i]
+			var at: Vector3 = p.position + fwd * (8.0 + i * 5.0) + side * ([0.0, -1.6, 1.8, -0.4][i % 4] * (1.0 + i * 0.3))
+			m.global_position = Vector3(at.x, main.terrain.surface_height(at.x, at.z), at.z)
+			m.rotation.y = p.rotation.y + PI
+			m.set_physics_process(false)
+			m._anim_t = i * 0.7
+			m._animate(0.0, 1.5)
+		for i in [-3, -2, 2, 3]:
+			var slot: Dictionary = b.slot_for("wall", p.position + fwd * 5.0 + side * (2.0 * i), 1)
+			b.place("wall", slot, b.evaluate("wall", slot).y)
+	else:
+		ev.tick(0.25)
+		for i in [-3, -2, 2, 3]:
+			var type := "brick_wall" if absi(i) == 3 else "wall"
+			var slot: Dictionary = b.slot_for(type, p.position + fwd * 6.0 + side * (2.0 * i), 1)
+			b.place(type, slot, b.evaluate(type, slot).y)
+		var at: Vector3 = p.position + fwd * 10.0 + side * 0.5
+		var boss = ms.spawn("behemoth", at)
+		boss.rotation.y = p.rotation.y + PI
+		boss.set_physics_process(false)
+		boss._animate(0.0, 1.2)
+		var w = ms.spawn("walker", at + side * -3.5 + fwd * -1.0)
+		w.rotation.y = p.rotation.y + PI
+		w.set_physics_process(false)
+		w._animate(0.0, 1.2)
+		main.hud.show_banner("The ground shakes. A Behemoth walks with tonight's wave!")

@@ -12,6 +12,7 @@ No player feedback was waiting and every roadmap item is done, so this run took 
   - The circle keeps its 90 dashes, but they get shorter on small circles (a 5 m one would otherwise be a solid ring). It is only redrawn when the preview moves or the piece changes.
   - Watering works on 4 m squares whose middle is inside the reach, so the circle is a close guide, not an exact edge.
   - main.gd untouched. No save changes.
+- **Flaky test fixed:** one of the final test runs failed once on "and its blast hurt the walker 2.5 m away (83 left)", a check older than this change (passes about 7 runs in 8). The test's pipe bomb gets the random spin every throw gets, and the 17 damage means it went off about 6 m from the walker: it had rolled away before its fuse ran out. The test now drops the bomb without spin, as the check is about the blast, not the roll; 12 more full runs all passed. (The v2.8.5 commit went up just before the failing run was read; this fix followed straight after.)
 - **Tests (14 new):** the turret's build line; for a sprinkler, dew collector and weather station: the circle shows, has the right radius and the build line says the reach; each kind has its own colour; a wall shows none and says nothing; looking at the sky hides it.
 - New screenshot view `91_reach_ring` (placing a dew collector next to the main well and a sprinkler, teal circle on the sand).
 

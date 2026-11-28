@@ -4788,6 +4788,9 @@ func _start_throws() -> void:
 	throw.bomb_w = ms.spawn("walker", bc + Vector3(2.5, 0, 0))
 	throw.bomb_w.set_physics_process(false)
 	throw.bomb = th.throw("pipe_bomb", g.call(bc) + Vector3(0, 1.5, 0), Vector3(0, -3, 0))
+	# The throw gives the bomb a random spin; one drop in a few dozen rolled it
+	# 3-4 m off and the blast check below failed. This check is about the blast.
+	throw.bomb.angular_velocity = Vector3.ZERO
 	throw.bomb_top = 0.0
 	throw.bag = main.loot.spawn_drop({"wood": 1}, g.call(bc + Vector3(0, 0, 2.0)))
 	throw.bag_from = main.loot.drops[throw.bag].node.global_position

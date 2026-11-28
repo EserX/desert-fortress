@@ -2,6 +2,23 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v2.8.2 (2026-11-28): Sprinklers at an outpost run on the spring
+No player feedback was waiting and every roadmap item is done, so this run did a bug check and took the next small idea from v2.8.1's list.
+- **Checked first:** all tests pass with no Godot errors. The full screenshot run (about 15 minutes here, all 88 views) showed one script error, fixed below; its one `ERR_CANT_OPEN` line is just the sandbox having no ALSA audio device.
+- **Bug fixed: a script error from a stale prompt.** Found by the screenshot run: for one frame after a piece is removed, the crosshair can still hit its old body, and if a new piece took the same key (a sprinkler where a purifier stood), the machine prompt read the new piece as a machine and Godot logged a script error. The machine and furnace prompts now check the piece's type and show nothing for a piece of another kind. Tests written first and seen failing.
+- **New: a sprinkler by a claimed outpost's spring waters by day on spring water.** Build it within 9 m of the pond's middle (the same reach as the purifier). It needs **no hand pump** and **no pipe from the main well**, takes nothing from the main well's store and adds nothing to the night's lure (only the main well's water counts for that).
+- **Pipe it on:** lay water pipes from it to more sprinklers in the same outpost's build zone and they run on the spring too, so you can green the whole 16 m zone round the post. A sprinkler in an outpost's zone without water says how to get it ("set it within 9 m of the spring, or pipe it to a sprinkler that is").
+- **Decisions:**
+  - Spring water stays inside outpost zones: a pipe chain from the outpost back to the base doesn't carry it, so springs can't replace the main well and its upgrades. A sprinkler piped to both the main well and a spring uses the free spring water.
+  - No hand pump needed: a spring flows by itself, and the hand pump is an upgrade of the main well.
+  - Code: water.gd got `springs` (a callable, `oases.claimed_springs`, set in main.gd with one line, like power.gd's), `spring_sprinklers()` (a queue with a visited set over the pipes, like `fed_sprinklers()`) and `_in_outpost()`. The sprinkler tick, state and prompt use them. The claimed spring's own morning watering is unchanged.
+- No save changes (sprinklers and pipes already save).
+- **Tests (16 new):** a machine or furnace prompt for a piece of another kind being empty (the bug fix); a sprinkler by the spring, fed with no pipe, its prompt without the hand pump, watering by day without touching the main well or the water drawn today, still going with the main well dry, nothing at night, a second one in the zone saying how to get water, then fed through a pipe, spring water not piped out of the zone, turning it off, an unclaimed spring feeding nothing, junk spring data ignored.
+- New screenshot view `88_sprinkler_spring` (a sprinkler by an outpost's pond spraying, piped on to a second one, its prompt showing).
+
+**Try:** at a claimed outpost, build a sprinkler (build mode, 3 scrap, 2 nails) a few steps from the pond on the post's side, and another near the edge of the zone; lay a water pipe between them. Come back over a few mornings to see the green spread.
+**Next:** more bug hunting and rough edges. Ideas for the owner to pick from (write them under Player feedback to ask for one): a pipe from the main well to a purifier further away; a "base status" page listing machines that are idle and why; a dew collector that shows on the map.
+
 ## v2.8.1 (2026-11-28): A purifier at an outpost, and no building in ponds
 No player feedback was waiting and every roadmap item is done, so this run did a bug check and one small idea from v2.8's list.
 - **Checked first:** all tests pass with no Godot errors; the soak test (wave 8, 11,000 frames) plays out cleanly (all 18 wave mutants killed, 1 wall lost to a Brute, 3.0 ms a frame headless; the 5 "left" at the end are oasis guards, not wave mutants); the flow test was not needed (no menus, saving or scene flow touched).
@@ -50,7 +67,7 @@ No player feedback was waiting and every scheduled item is done, so this run too
   - The logic is one small new script, `scripts/chest_feed.gd` (`chest_for`, `feed`), called by power.gd after each machine step and by furnace.gd after each smelting step. It works on the existing piece records and `Inventory.add`, so no second copy of storage code. main.gd changed by one argument (the furnace prompt gets `building`).
   - No new model: the chest you already build is the link, and the prompt says it's working.
 - No save changes (it only moves items between things that are already saved).
-- **Tests (13 new):** no chest, a chest two squares away not counting, a chest on the corner square counting, the sawmill's wood going in, the prompt, nothing being taken out of the chest (logs kept there stay), a full chest leaving the wood in the mill and taking it once there's room, a fed sawmill working past its own 60, a furnace's bricks going in and its prompt, and nothing fed once the chest is gone.
+- **Tests (14 new):** no chest, a chest two squares away not counting, a chest on the corner square counting, the sawmill's wood going in, the prompt, nothing being taken out of the chest (logs kept there stay), a full chest leaving the wood in the mill and taking it once there's room, a fed sawmill working past its own 60, a furnace's bricks going in and its prompt, and nothing fed once the chest is gone.
 - New screenshot view `85_chest_feed` (a sawmill with a chest beside it, its prompt showing).
 
 **Try:** buy a sawmill by drone (or take one from the green test box), put it by a generator, build a storage chest on the square next to it, load it with logs and walk away. Open the chest a minute later.

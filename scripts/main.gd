@@ -1264,12 +1264,12 @@ func _prompt_for(id: String) -> String:
 		return building.prompt(id) + camp.cook_prompt(building.pieces.get(id.trim_prefix("fire:"), {}))
 	if id.begins_with("furnace:"):
 		var frec: Dictionary = building.pieces.get(id.trim_prefix("furnace:"), {})
-		return "" if frec.is_empty() else Furnace.prompt(frec, inventory.selected_stack().get("item", ""), building)
+		return "" if frec.get("type", "") != "furnace" else Furnace.prompt(frec, inventory.selected_stack().get("item", ""), building)
 	if id.begins_with("machine:"):
 		var mk := id.trim_prefix("machine:")
 		var mrec: Dictionary = building.pieces.get(mk, {})
-		if mrec.is_empty():
-			return ""
+		if mrec.is_empty() or not Building.MACHINES.has(mrec.get("type", "")):
+			return ""  # a stale id: the body under the crosshair is a freed piece whose key is now another piece's
 		if mrec.type == "purifier":
 			return Purifier.prompt(building, water, mrec, inventory.count_of("watering_can") > 0, oases.claimed_springs())
 		return building.machine_prompt(mk, inventory.count_of(Building.MACHINES[mrec.type].in))
@@ -1897,6 +1897,7 @@ func _setup_oases() -> void:
 	oases.water = water
 	oases.building = building
 	power.springs = oases.claimed_springs  # v2.8.1: a purifier by an outpost's spring
+	water.springs = oases.claimed_springs  # v2.8.2: and sprinklers
 	oases.mutants = mutants
 	oases.inventory = inventory
 	oases.survival = survival

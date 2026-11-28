@@ -72,6 +72,7 @@ Resource gathering and processing: trees and an axe, rocks to pick up, machines 
 - [x] v2.7: **Machines feed a chest:** a sawmill, rock crusher, nail press or furnace with a storage chest on a square next to it puts what it makes straight into the chest
 - [x] v2.8: **Water purifier:** a machine by drone (unlocked at 2.5% green with the dew collector) that filters main-well water, or a watering can poured in, into bottles of drinking water
 - [x] v2.8.1: **Purifier at an outpost:** a purifier by a claimed outpost's pond fills from the spring; fix: nothing can be built in an oasis pond any more
+- [x] v2.8.2: **Sprinklers at an outpost:** a sprinkler by a claimed outpost's pond runs on the spring (no hand pump, no main-well water), and passes it on through pipes to sprinklers in that outpost's zone
 
 ### New direction (owner, 2026-11-27): terraform the desert
 The aim of the game shifts from pure base defence to **turning the dead desert green and making it livable**. A **main well** at the centre (the spawn point) is the heart of the base: all water starts there, it greens the land through a watering system, and its water is what draws the mutants in at night. Water brings life: **animals by day** (food), **mutants by night**. Seeds are bought, crops are grown and sold, and cash buys food and goods (grow exotic crops, sell them, buy what you need). Base defence stays as one part of the game, not the whole of it. M10 comes **before** the rest of M9 (v2.0 to v2.3 wait until M10 is done, unless the owner says otherwise).

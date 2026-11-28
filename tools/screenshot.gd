@@ -95,6 +95,7 @@ var shots := [
 	{"name": "85_chest_feed", "pos": Vector3(-8, 0, 12.5), "yaw": 0.1, "pitch": -0.3, "hour": 14.0, "machines": true, "feed": true},
 	{"name": "86_purifier", "pos": Vector3(5, 0, 2), "yaw": 0.0, "pitch": -0.3, "hour": 14.0, "purifier": true},
 	{"name": "87_purifier_spring", "pos": Vector3(5, 0, 2), "yaw": 0.0, "pitch": -0.3, "hour": 14.0, "purifier": true, "spring": true},
+	{"name": "88_sprinkler_spring", "pos": Vector3(5, 0, 2), "yaw": 0.0, "pitch": -0.3, "hour": 11.0, "sprinkler_spring": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -213,6 +214,8 @@ func _process(_d: float) -> bool:
 			_machines_sample(p if s.get("feed", false) else null)
 		if s.get("purifier", false):
 			_purifier_sample(p, s.get("spring", false))
+		if s.get("sprinkler_spring", false):
+			_sprinkler_spring_sample(p)
 		if s.get("blast", false):
 			_blast_sample(p)
 		if s.get("greening", false):
@@ -1169,6 +1172,49 @@ func _purifier_sample(p: Node3D, spring := false) -> void:
 	p.rotation.y = atan2(-d.x, -d.z)
 	p.head.rotation.x = -0.4
 	main.power.tick(0.25)
+
+
+## v2.8.2: two sprinklers at an outpost, one by the spring and one piped on from it, watering by day.
+func _sprinkler_spring_sample(p: Node3D) -> void:
+	var b = main.building
+	var w = main.water
+	main.terrain.load_data({})
+	main.mutants.clear()
+	b.load_data([])
+	b.sites_load_data([])
+	w.pipes = []
+	w.set_pump(false)
+	var oa = main.oases
+	var o: Dictionary = oa.list[0]
+	o.claimed = true
+	o.found = true
+	o.nest = "gone" if o.has_nest else "none"
+	oa._apply_zones()
+	oa._refresh(0)
+	var aw: Vector3 = (o.post_pos - o.pos).normalized()
+	var put := func(dist: float) -> String:
+		for turn in [0.5, 0.8, 0.2, 1.1]:
+			var c: Vector3 = o.pos + aw.rotated(Vector3.UP, turn) * dist
+			var sl := {"kind": "obj", "cx": int(floor(c.x / b.CELL)), "cz": int(floor(c.z / b.CELL)), "dir": 0, "level": 0}
+			var ev: Dictionary = b.evaluate("sprinkler", sl)
+			if ev.ok:
+				return b.place("sprinkler", sl, ev.y)
+		return ""
+	var a: String = put.call(7.0)
+	var c2: String = put.call(14.0)
+	if a == "":
+		push_warning("screenshot: no room for the spring sprinkler")
+		return
+	if c2 != "":
+		w.connect_pipe(a, c2)
+	w._spray_t = 1.0
+	w.tick(0.0, true)
+	var at: Vector3 = b.pieces[a].node.global_position + aw.rotated(Vector3.UP, 0.5 + PI * 0.5) * 2.5
+	at.y = main.terrain.surface_height(at.x, at.z)
+	p.position = at
+	var d: Vector3 = b.pieces[a].node.global_position - at
+	p.rotation.y = atan2(-d.x, -d.z)
+	p.head.rotation.x = -0.4
 
 
 ## The oases (v1.18): stand back from a wild one, a nest (burning), or a claimed outpost.

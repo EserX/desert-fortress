@@ -27,6 +27,7 @@ const SAND_DAYS := 4          # dry mornings bare soil takes to go back to sand
 const SPRAY_R := 5.0          # sprinklers water squares whose centre is this close
 const SPRAY_LPS := 0.02       # litres a second a sprinkler gives each square
 const SPRAY_TO := 6.0         # and it stops for a square that has had this much today
+const SPRING_REACH := 9.0     # v2.8.2: a sprinkler this close to a claimed outpost's pond centre is fed by its spring
 const PIPE_MAX := 24.0        # longest single pipe
 const PIPE_PER := 2.0         # metres of pipe one water pipe item covers
 const MAX_GRASS := 14         # grass tufts on a fully green square
@@ -46,6 +47,9 @@ var player  # Player (looking at the ground, the well and sprinklers)
 var inventory  # Inventory (the can, water pipes)
 ## main.piece_under_crosshair: key of the built piece under the crosshair, or "".
 var piece_at_crosshair := func() -> String: return ""
+## v2.8.2: func() -> Array of claimed outposts' pond centres (oases.claimed_springs).
+## Sprinklers by one, and those piped on from them inside an outpost's zone, run on spring water.
+var springs := Callable()
 ## Water pipe being laid: the end clicked first ("main" is the main well).
 var pipe_from := ""
 var store := STORE_BASE
@@ -604,6 +608,51 @@ func fed_sprinklers() -> Dictionary:
 	return seen
 
 
+## v2.8.2: sprinklers fed by a claimed outpost's spring: those within SPRING_REACH of
+## its pond centre, and any piped on from them that stand in an outpost's build
+## zone (so spring water can't be piped back to the base). A spring never runs
+## dry, needs no hand pump and isn't the main well, so these take nothing from
+## the store and don't add to the night's lure.
+func spring_sprinklers() -> Dictionary:
+	var seen := {}
+	var list: Variant = springs.call() if springs.is_valid() else []
+	if not (list is Array) or (list as Array).is_empty():
+		return seen
+	var todo: Array = []
+	# Every sprinkler (a handful) times the claimed springs (5 at most), once a second.
+	for key in building.keys_of(["sprinkler"]):
+		var rec: Dictionary = building.pieces[key]
+		if not is_instance_valid(rec.get("node")):
+			continue
+		var p: Vector3 = rec.node.global_position
+		for s in list:
+			if s is Vector3 and Vector2(p.x, p.z).distance_to(Vector2(s.x, s.z)) <= SPRING_REACH:
+				seen[key] = true
+				todo.append(key)
+				break
+	# On through the pipes (a few dozen at most), a queue with a visited set.
+	while not todo.is_empty():
+		var at: String = todo.pop_back()
+		for pp in pipes:
+			if at in pp:
+				var other: String = pp[1] if pp[0] == at else pp[0]
+				if other != "main" and not seen.has(other) and _valid_end(other) and _in_outpost(other):
+					seen[other] = true
+					todo.append(other)
+	return seen
+
+
+func _in_outpost(key: String) -> bool:
+	var rec: Dictionary = building.pieces.get(key, {})
+	if rec.is_empty() or not is_instance_valid(rec.get("node")):
+		return false
+	var p: Vector3 = rec.node.global_position
+	for o in building.outposts:
+		if o is Array and o.size() >= 2 and Vector2(p.x, p.z).distance_to(o[0]) <= float(o[1]):
+			return true
+	return false
+
+
 ## Squares a sprinkler at this point waters.
 static func spray_cells(pos: Vector3) -> Array:
 	var out: Array = []
@@ -623,6 +672,10 @@ func sprinkler_state(key: String) -> String:
 		return "gone"
 	if not rec.get("open", true):
 		return "turned off"
+	if spring_sprinklers().has(key):
+		return ""
+	if _in_outpost(key) and not (pump and fed_sprinklers().has(key)):
+		return "no water: set it within %d m of the spring, or pipe it to a sprinkler that is" % int(SPRING_REACH)
 	if not pump:
 		return "no hand pump on the main well (shop: base upgrades)"
 	if not fed_sprinklers().has(key):
@@ -638,6 +691,8 @@ func sprinkler_prompt(key: String) -> String:
 		return ""
 	var why := sprinkler_state(key)
 	var text := "Sprinkler: " + ("watering by day" if why == "" else why)
+	if why == "" and spring_sprinklers().has(key):
+		text += " from the outpost's spring"
 	return text + ("\n[E] Turn it off" if rec.get("open", true) else "\n[E] Turn it on")
 
 
@@ -656,18 +711,22 @@ func tick(delta: float, daytime: bool) -> void:
 	_spray_t = 0.0
 	prune_pipes()
 	var fed := fed_sprinklers() if pump else {}
+	var spring := spring_sprinklers()
 	# Once a second: every sprinkler (a handful) times the 4 to 9 squares round it.
 	for key in building.keys_of(["sprinkler"]):
 		var rec: Dictionary = building.pieces[key]
-		var on: bool = daytime and rec.get("open", true) and fed.has(key) and store > 0.05
+		var free: bool = spring.has(key)
+		var on: bool = daytime and rec.get("open", true) and (free or (fed.has(key) and store > 0.05))
 		var sprayed := false
 		if on:
 			for c in spray_cells(rec.node.global_position):
 				var e := cell_info(c)
 				if e.wet >= SPRAY_TO:
 					continue
-				var n := water_cell(c, minf(minf(SPRAY_LPS * dt, SPRAY_TO - e.wet), store))
-				store -= n
+				var want := minf(SPRAY_LPS * dt, SPRAY_TO - e.wet)
+				var n := water_cell(c, want if free else minf(want, store))
+				if not free:
+					store -= n
 				sprayed = sprayed or n > 0.0
 		if rec.has("spray"):
 			rec.spray.emitting = sprayed

@@ -3315,6 +3315,7 @@ func _process(_delta: float) -> bool:
 			_test_crafting_chain()
 			_test_chest_feed()
 			_test_purifier()
+			_test_spring_sprinklers()
 			_test_events()
 			_start_shelter()
 		4280:
@@ -5165,6 +5166,92 @@ func _test_purifier() -> void:
 	w.store = old_store
 	w.can = old_can
 	main.day_night.restore(day, 10.0)
+
+
+## v2.8.2: sprinklers at a claimed outpost run on its spring (no hand pump, no main-well water).
+func _test_spring_sprinklers() -> void:
+	var b = main.building
+	var w = main.water
+	var oa = main.oases
+	b.load_data([])
+	w.pipes = []
+	var old_store: float = w.store
+	var old_pump: bool = w.pump
+	w.set_pump(false)
+	var was_claimed: bool = oa.list[0].claimed
+	oa.list[0].claimed = true
+	oa._apply_zones()
+	var pond: Vector3 = oa.list[0].pos
+	var post: Vector3 = oa.list[0].post_pos
+	var away := Vector2(post.x - pond.x, post.z - pond.z).normalized()
+	var place_at := func(dists: Array) -> String:
+		for dist in dists:
+			for turn in [0.0, 0.3, -0.3, 0.6, -0.6]:
+				var d: Vector2 = away.rotated(float(turn)) * float(dist)
+				var ss := {"kind": "obj", "cx": int(floor((pond.x + d.x) / b.CELL)), "cz": int(floor((pond.z + d.y) / b.CELL)), "dir": 0, "level": 0}
+				var ev: Dictionary = b.evaluate("sprinkler", ss)
+				if ev.ok:
+					return b.place("sprinkler", ss, ev.y)
+		return ""
+	var sk: String = place_at.call([7.0, 6.0, 8.0])
+	check(sk != "", "a sprinkler can stand by an outpost's spring")
+	if sk == "":
+		oa.list[0].claimed = was_claimed
+		oa._apply_zones()
+		return
+	check(w.spring_sprinklers().has(sk) and not w.fed_sprinklers().has(sk), "the spring feeds it, with no pipe from the main well")
+	check(w.sprinkler_prompt(sk).contains("watering by day from the outpost's spring"), "its prompt says so, even without the hand pump: " + w.sprinkler_prompt(sk).replace("\n", " / "))
+	var cells: Array = w.spray_cells(b.pieces[sk].node.global_position)
+	var wet_sum := func() -> float:
+		var t := 0.0
+		for c in cells:
+			t += float(w.cell_info(c).wet)
+		return t
+	for c in cells:
+		if w.cells.has(c):
+			w.cells[c].wet = 0.0
+	w.store = 50.0
+	var drawn: float = w.drawn_today()
+	w.tick(1.0, true)
+	var got: float = wet_sum.call()
+	check(got > 0.05 and is_equal_approx(w.store, 50.0) and is_equal_approx(w.drawn_today(), drawn), "by day it waters the land round it (%.2f L) without touching the main well (%.0f L)" % [got, w.store])
+	w.store = 0.0
+	w.tick(1.0, true)
+	check(wet_sum.call() > got + 0.05, "and keeps going when the main well is dry")
+	got = wet_sum.call()
+	w.tick(1.0, false)
+	check(is_equal_approx(wet_sum.call(), got), "not at night")
+	# A second sprinkler further out in the zone, piped on from the first.
+	var sk2: String = place_at.call([15.0, 14.0, 16.0, 13.0])
+	check(sk2 != "", "a second sprinkler in the outpost's zone, away from the pond")
+	if sk2 != "":
+		check(not w.spring_sprinklers().has(sk2) and w.sprinkler_prompt(sk2).contains("within %d m of the spring" % int(w.SPRING_REACH)), "on its own it says how to get water: " + w.sprinkler_prompt(sk2).replace("\n", " / "))
+		check(w.connect_pipe(sk, sk2) and w.spring_sprinklers().has(sk2), "piped to the first, the spring feeds it too")
+		# Spring water stays in the outpost's zone: shrink the zone so the second one is outside it.
+		var zones: Array = b.outposts.duplicate(true)
+		b.outposts = [[zones[0][0], 0.5]]
+		check(w.spring_sprinklers().has(sk) and not w.spring_sprinklers().has(sk2), "but spring water isn't piped on out of the zone")
+		b.outposts = zones
+	# Bug fix (v2.8.2): a stale "machine:" id (a machine picked up, a sprinkler now on its square) gave a script error.
+	check(main._prompt_for("machine:" + sk) == "", "a machine prompt for a piece that isn't a machine is empty")
+	check(main._prompt_for("furnace:" + sk) == "", "and a furnace prompt for one that isn't a furnace")
+	b.pieces[sk].open = false
+	check(w.sprinkler_prompt(sk).contains("turned off"), "E still turns it off")
+	b.pieces[sk].open = true
+	oa.list[0].claimed = false
+	check(w.spring_sprinklers().is_empty(), "a spring that isn't a claimed outpost's feeds nothing")
+	var keep: Callable = w.springs
+	w.springs = func(): return ["junk", 3]
+	check(w.spring_sprinklers().is_empty(), "junk spring data is ignored")
+	w.springs = func(): return 5
+	check(w.spring_sprinklers().is_empty(), "and so is a spring list that isn't a list")
+	w.springs = keep
+	oa.list[0].claimed = was_claimed
+	oa._apply_zones()
+	w.pipes = []
+	b.load_data([])
+	w.store = old_store
+	w.set_pump(old_pump)
 
 
 ## v2.2 crafting chain: the furnace, brick pieces, glass panes and steel tools.

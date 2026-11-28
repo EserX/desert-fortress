@@ -3,7 +3,6 @@
 ## Player feedback
 <!-- Write bugs, feelings and ideas here. Each run handles these BEFORE roadmap items. -->
 <!-- Example: - Sprint feels too slow. - Fell through the ground near a big rock. -->
-- (found by the v2.4 run) The test "a thrown stone hits a walker" fails now and then (once in v2.2's session, once in v2.4's out of three runs; the next runs passed). Find out whether a thrown stone can really pass through a mutant in play (the stone is a small box with continuous collision and a random spin; the test spawns the walker and throws in the same frame) and fix the cause, with a test that throws many stones
 
 ## Milestones
 One version per development run, in this order. The full plan with reasons is in the "Desert Fortress: Version Plan" doc. Player feedback above always comes first.

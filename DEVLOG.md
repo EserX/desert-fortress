@@ -2,6 +2,17 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v2.4.1 (2026-11-28): Thrown stones always hurt
+Player feedback first: the v2.4 run noted that the test "a thrown stone hits a walker" failed now and then. It was a real bug in play, not just a test hiccup.
+- **What was wrong:** about one full-speed stone in fourteen hit a mutant and did no harm. When a fast stone would cross a mutant's body within one physics step, Godot's continuous collision moves it up to the body and **cuts its speed** so it touches softly on the next step. The touch is only reported on that next step, and by then the speed the game had noted for the stone was under the 5 m/s a stone needs to hurt. So the stone bumped off the mutant at walking pace and fell at its feet. It never passed *through* a mutant: it always stopped on the body (0.42 m from its middle, the capsule's edge plus half a stone).
+- **Fix:** a stone's hit is now judged on its **fastest speed over the last 3 physics frames** (`SPEED_FRAMES`, `_note_speed` in throwables.gd), so the slow-down just before the touch no longer counts. The damage and shove still scale with that speed, so a stone that is really rolling slowly still does nothing.
+- **How it was found:** a new tool, `tools/throw_probe.gd`, throws 8 rounds of 24 stones at standing walkers with the test's shot and logs every touch. Before the fix 174 to 179 of 192 hit, and every miss showed the stone touching the walker at 0.2 to 1.5 m/s. After it, 192 of 192 hit. Keep it for checking throwables after physics changes.
+- **Tests:** a new check throws 16 full-speed stones at a row of 16 walkers and needs every one to hurt. It failed on the old code (3 and 1 harmless stones in two runs) and passes with the fix (4 full runs green). "and then lies on the sand as a stone" now follows the test's own stone, because one of the 16 extra stones can still be rolling off a frozen walker after 3 s.
+- No change to saves or controls.
+
+**Try:** hold a stone (the green test box has some), go up to a walker and throw a few hard ones. Every hit should make it flinch and take damage.
+**Next:** the remaining building ideas: a blueprint menu with pictures, and more ready-made buildings (a walled compound, a bunker with a well).
+
 ## v2.4.0 (2026-11-28): Blueprint materials
 Every scheduled milestone is done and no player feedback was waiting, so this run took the first unscheduled building idea: choosing the material of a ready-made building.
 - **G in ready-made building mode** (build mode, T) picks the material the building goes up in: **wood, scrap metal, stone, concrete**, then round to wood. The HUD line says "BUILDING: Cabin (2×2) in stone" with the whole price, and the key help lists G.

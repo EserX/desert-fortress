@@ -4566,7 +4566,16 @@ func _start_throws() -> void:
 	throw.stone_w = ms.spawn("walker", c + Vector3(12, 0, 0))
 	throw.stone_w.set_physics_process(false)
 	var sw: Vector3 = throw.stone_w.global_position
-	th.throw("stone", sw + Vector3(0, 1.3, -4.0), Vector3(0, 0, 18))
+	throw.stone = th.throw("stone", sw + Vector3(0, 1.3, -4.0), Vector3(0, 0, 18))
+	# A row of walkers, each hit by the same full-speed throw: continuous
+	# collision slows a stone a frame before it reports the touch, which used
+	# to make about one throw in fourteen do no harm.
+	throw.row = []
+	for i in 16:
+		var rw = ms.spawn("walker", Vector3(-75 + i * 5.0, 0, -8))
+		rw.set_physics_process(false)
+		throw.row.append(rw)
+		th.throw("stone", rw.global_position + Vector3(0, 1.3, -4.0), Vector3(0, 0, 18))
 	throw.fire_in = ms.spawn("walker", c + Vector3(0.8, 0, 0))
 	throw.fire_out = ms.spawn("walker", c + Vector3(6, 0, 0))
 	for w in [throw.fire_in, throw.fire_out]:
@@ -4585,7 +4594,9 @@ func _check_throws() -> void:
 	var th = main.throwables
 	var sw = throw.stone_w
 	check(sw.health < 100.0, "a thrown stone hits a walker (%.0f health left)" % sw.health)
-	check(not th.flying.any(func(r): return r.item == "stone") and main.loot.drops.values().any(func(d): return d.items.has("stone")), "and then lies on the sand as a stone")
+	var missed: Array = throw.row.filter(func(w): return w.health >= 100.0)
+	check(missed.is_empty(), "every one of %d full-speed stones hurts the walker it hits (%d did no harm)" % [throw.row.size(), missed.size()])
+	check(not th.flying.any(func(r): return r.node == throw.stone) and main.loot.drops.values().any(func(d): return d.items.has("stone")), "and then lies on the sand as a stone")
 	check(throw.fire_in.health < 40.0, "a molotov's fire burns a walker standing in it (%.0f left)" % throw.fire_in.health)
 	check(is_equal_approx(throw.fire_out.health, 100.0), "but not one 6 m away")
 	check(th.fires.size() == 1, "the fire is still burning after 3 s")

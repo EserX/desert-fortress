@@ -26,6 +26,7 @@ const UP_TILT := 0.12          # throws leave a little above the crosshair
 const STONE_HIT_SPEED := 5.0   # m/s a stone needs to hurt
 const STONE_SETTLE := 0.4      # m/s: slower than this a stone is lying still
 const MAX_FLIGHT := 8.0        # seconds before anything still moving lands anyway
+const SPEED_FRAMES := 3       # a hit is judged on the fastest of the last few physics frames
 const MERGE_DIST := 1.0        # a landed stone joins a stone pile this close
 const FIRE_RADIUS := 2.6
 const FIRE_SECONDS := 8.0
@@ -53,7 +54,10 @@ var traps      # Traps (the blast)
 var oases      # Oases (nests)
 var loot       # Loot (landed stones become stone piles)
 var terrain    # Terrain
-## In the air or rolling: {"node": RigidBody3D, "item", "age", "speed", "fuse", "hit": {id: true}}.
+## In the air or rolling: {"node": RigidBody3D, "item", "age", "speed", "recent": [m/s, ...],
+## "fuse", "hit": {id: true}}. "speed" is the fastest of "recent" (the last
+## SPEED_FRAMES physics frames): continuous collision slows a fast stone down
+## a frame *before* it reports the touch, so the speed right then is too low.
 var flying: Array = []
 ## Burning pools: {"pos": Vector3, "left": seconds, "node": Node3D}.
 var fires: Array = []
@@ -179,7 +183,7 @@ func throw(item: String, from: Vector3, v: Vector3) -> RigidBody3D:
 	body.global_position = from
 	body.linear_velocity = v
 	body.angular_velocity = Vector3(randf_range(-6, 6), randf_range(-3, 3), randf_range(-6, 6))
-	var rec := {"node": body, "item": item, "age": 0.0, "speed": v.length(), "fuse": float(k.get("fuse", 0.0)), "hit": {}}
+	var rec := {"node": body, "item": item, "age": 0.0, "speed": v.length(), "recent": [v.length()], "fuse": float(k.get("fuse", 0.0)), "hit": {}}
 	body.body_entered.connect(_on_body.bind(rec))
 	flying.append(rec)
 	return body
@@ -240,12 +244,21 @@ func _physics_process(delta: float) -> void:
 				if rec.fuse <= 0.0:
 					explode(rec)
 					continue
-		rec.speed = body.linear_velocity.length()
+		_note_speed(rec, body.linear_velocity.length())
 	_tick -= delta
 	if _tick <= 0.0:
 		_tick = TICK
 		_burn(TICK)
 	_player_burn = maxf(_player_burn - delta, 0.0)
+
+
+## Keeps the last SPEED_FRAMES speeds of a throwable and its fastest as "speed".
+static func _note_speed(rec: Dictionary, now: float) -> void:
+	var recent: Array = rec.recent
+	recent.append(now)
+	while recent.size() > SPEED_FRAMES:
+		recent.pop_front()
+	rec.speed = recent.max()
 
 
 func _process(delta: float) -> void:

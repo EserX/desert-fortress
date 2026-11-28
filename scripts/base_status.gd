@@ -1,6 +1,7 @@
 extends RefCounted
 ## v2.9: the base status page (J). One line for every machine, furnace and
-## generator you have built: where it stands and whether it is working, and if
+## generator you have built (and since v2.9.2 every turret and floodlight, with
+## electric fences grouped into one line per state): where it stands and whether it is working, and if
 ## not, why ("no logs loaded", "its generator is out of fuel", "a switch on its
 ## cable is off", "full: the chest next to it is full too"...). The reasons use
 ## the same rules the machines run on (building.gd, power.gd, furnace.gd,
@@ -19,20 +20,24 @@ const IDLE := "idle"        # nothing to do, nothing wrong (an empty furnace, a 
 const RUNNING := "running"
 const ORDER := [STUCK, IDLE, RUNNING]
 
+const DEFENCES := ["turret", "floodlight", "electric_fence"]
+const LOW_AMMO := 40        # a turret with fewer rounds than this is flagged (about 9 s of firing)
+
 const COMPASS := ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"]
 
 
 ## Every entry: {"key", "name", "where", "state", "text"}, problems first, then
 ## by distance from the base. Runs only while the page is open (four times a
-## second), over the machines, furnaces and generators (a few dozen at most)
-## plus one walk of the cables.
+## second), over the machines, furnaces, generators and defences (a few hundred
+## at most, most of them fence pieces) plus a few walks of the cables.
 static func entries(building, water = null, oases = null) -> Array:
 	var out: Array = []
 	if building == null:
 		return out
 	var power := power_reach(building)
 	var springs: Array = oases.claimed_springs() if oases != null else []
-	for key in building.keys_of(building.MACHINES.keys() + ["furnace", "generator"]):
+	var fences := {}  # state + text -> one grouped entry
+	for key in building.keys_of(building.MACHINES.keys() + ["furnace", "generator"] + DEFENCES):
 		var rec: Dictionary = building.pieces.get(key, {})
 		if rec.is_empty() or not is_instance_valid(rec.get("node")):
 			continue
@@ -42,10 +47,33 @@ static func entries(building, water = null, oases = null) -> Array:
 				st = furnace_state(building, rec)
 			"generator":
 				st = generator_state(building, rec)
+			"turret":
+				st = turret_state(building, rec, key, power)
+			"floodlight", "electric_fence":
+				st = powered_state(rec, key, power)
 			_:
 				st = machine_state(building, water, rec, key, power, springs)
+		var dist := Vector2(rec.node.global_position.x, rec.node.global_position.z).length()
+		if rec.type == "electric_fence":
+			# A fence is many short pieces: one line per state, placed at the nearest piece.
+			var gid: String = st[0] + "|" + st[1]
+			if not fences.has(gid):
+				fences[gid] = {"key": key, "keys": [], "name": "", "where": "", "state": st[0], "text": st[1], "dist": INF}
+			var grp: Dictionary = fences[gid]
+			grp.keys.append(key)
+			if dist < grp.dist:
+				grp.dist = dist
+				grp.key = key
+				grp.where = where(rec.node.global_position, oases)
+			continue
 		out.append({"key": key, "name": building.PIECES[rec.type].name, "where": where(rec.node.global_position, oases),
-				"state": st[0], "text": st[1], "dist": Vector2(rec.node.global_position.x, rec.node.global_position.z).length()})
+				"state": st[0], "text": st[1], "dist": dist})
+	for grp in fences.values():
+		var n: int = grp.keys.size()
+		grp.name = "Electric fence" if n == 1 else "Electric fence (%d pieces)" % n
+		if n > 1:
+			grp.where = "nearest " + grp.where
+		out.append(grp)
 	out.sort_custom(func(a, b):
 		var ra := ORDER.find(a.state)
 		var rb := ORDER.find(b.state)
@@ -56,7 +84,7 @@ static func entries(building, water = null, oases = null) -> Array:
 ## "3 machines: 1 running, 1 stuck, 1 idle" (or that there are none yet).
 static func summary(list: Array) -> String:
 	if list.is_empty():
-		return "No machines, furnaces or generators built yet"
+		return "No machines, defences, furnaces or generators built yet"
 	var n := {STUCK: 0, IDLE: 0, RUNNING: 0}
 	for e in list:
 		n[e.state] += 1
@@ -82,8 +110,9 @@ static func power_reach(building) -> Dictionary:
 			out[k] = "empty"
 	for k in building.power_network(fueled):
 		out[k] = "fuel"
-	# Plugged straight in: within PLUG_RANGE of a generator, no cable needed.
-	for mk in building.keys_of(building.MACHINES.keys()):
+	# Plugged straight in: within PLUG_RANGE of a generator, no cable needed
+	# (power.gd's rule; machines and defences, a few hundred at most).
+	for mk in building.keys_of(building.MACHINES.keys() + DEFENCES):
 		var m: Dictionary = building.pieces[mk]
 		if out.get(mk, "") == "fuel" or not is_instance_valid(m.get("node")):
 			continue
@@ -150,6 +179,42 @@ static func furnace_state(building, rec: Dictionary) -> Array:
 			return [STUCK, "full, and so is the chest next to it: empty the chest"]
 		return [STUCK, "full: take what's ready, or set a chest next to it"]
 	return [STUCK, "needs %d %s to go on (%d in)" % [int(s.need), Items.display_name(rec.smelt).to_lower(), rec.load]]
+
+
+## [state, text] for an auto-turret (turrets.gd): it fires without power, so
+## only its rounds can stop it; power only makes it turn and fire faster.
+static func turret_state(building, rec: Dictionary, key: String, power: Dictionary) -> Array:
+	var rounds := "%d/%d rounds" % [rec.ammo, building.TURRET_AMMO]
+	if rec.ammo <= 0:
+		return [STUCK, "no rounds: load 9mm ammo with E"]
+	if rec.ammo < LOW_AMMO:
+		return [STUCK, "low, %s: load 9mm ammo with E" % rounds]
+	if rec.get("powered", false):
+		return [RUNNING, "ready, %s, on power (aims and fires faster)" % rounds]
+	match power.get(key, ""):
+		"fuel":
+			return [RUNNING, "ready, %s (power at night makes it faster)" % rounds]
+		"switch":
+			return [RUNNING, "ready, %s (a switch on its cable is off: power makes it faster)" % rounds]
+		"empty":
+			return [RUNNING, "ready, %s (its generator is out of fuel: power makes it faster)" % rounds]
+	return [RUNNING, "ready, %s (no power: a cable to a generator makes it faster)" % rounds]
+
+
+## [state, text] for a floodlight or electric fence: they only work on power,
+## and generators only run at night or in a wave (power.gd).
+static func powered_state(rec: Dictionary, key: String, power: Dictionary) -> Array:
+	var on := "lit" if rec.type == "floodlight" else "live"
+	if rec.get("powered", false):
+		return [RUNNING, on]
+	match power.get(key, ""):
+		"fuel":
+			return [IDLE, "ready: its generator has fuel and runs at night and in waves"]
+		"switch":
+			return [STUCK, "no power: a switch on its cable is off"]
+		"empty":
+			return [STUCK, "no power: its generator is out of fuel"]
+	return [STUCK, "no power: cable it to a generator"]
 
 
 ## [state, text] for a fuel generator.

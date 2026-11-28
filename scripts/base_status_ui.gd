@@ -1,6 +1,6 @@
 extends CanvasLayer
-## v2.9: the base status page (J). A list of every machine, furnace and
-## generator: where it is and whether it is working, and why not (the lines
+## v2.9: the base status page (J). A list of every machine, furnace,
+## generator and defence (turrets, floodlights, fences): where it is and whether it is working, and why not (the lines
 ## come from base_status.gd). Like the map, it only shows; the game goes on.
 
 const BaseStatus = preload("res://scripts/base_status.gd")

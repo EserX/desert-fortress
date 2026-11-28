@@ -2,6 +2,23 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v2.9.2 (2026-11-28): Turrets, floodlights and fences on the base status page
+No player feedback was waiting and every roadmap item is done, so this run took the first idea from the v2.9.1 "next" list.
+- **Checked first:** all tests passed with no Godot errors before any change.
+- **New: the base status page (J) now lists your defences too.**
+  - **Auto-turrets** show their rounds ("ready, 180/240 rounds"). Empty ("no rounds: load 9mm ammo with E") or under 40 rounds ("low, 15/240 rounds") is red, so you see it before the night. A turret fires without power, so it's never "stuck" for power; the line just says whether it's on power (aims and fires faster), gets power at night, or why not (no cable, a switch off, its generator empty).
+  - **Floodlights** and **electric fences**: "lit" / "live" when they have power; by day, with a fuelled generator joined to them, "ready: its generator has fuel and runs at night and in waves" (idle); otherwise red with the reason: "cable it to a generator", "a switch on its cable is off", "its generator is out of fuel".
+  - **Fence pieces are grouped**: one line per state, "Electric fence (12 pieces), nearest 18 m west: live", so a long fence doesn't fill the page. A piece you forgot to cable gets its own red line.
+- **Decisions:**
+  - Same rules as the game: the reasons come from `power_reach()` (now also checks defences plugged straight into a generator within 4 m, as power.gd does) and turrets' real `ammo` / `powered`.
+  - The low-ammo mark (40 rounds, about 9 s of firing) is flagged as stuck (red) rather than a new state, so it sorts to the top.
+  - main.gd untouched. No save changes. Pause-menu, map legend and README lines updated.
+- **Tests (21 new checks in one new test):** empty, low and loaded turrets; a floodlight with no cable, on an empty generator, waiting for the night, and lit at night; the turret saying its generator is empty and then "on power"; two cabled fence pieces sharing a line and a lone uncabled one on its own; a turret plugged in next to the generator; the summary counting defences. All tests passed, flow test passed.
+- Screenshot view `94_base_status` now includes two turrets, two floodlights and a four-piece fence.
+
+**Try:** press J before dusk: anything red (an empty turret, an uncabled fence piece, a dry generator) is worth fixing before the siren.
+**Next:** no player feedback left and the roadmap is done. Ideas for the owner to pick from (write one under Player feedback to ask for it): outposts' pipes on a zoomed map round the outpost; a map layer marking spare sprinklers; the status page's red lines shown as markers on the map.
+
 ## v2.9.1 (2026-11-28): Every hard-thrown stone lands its hit; clean quits
 This run handled the two items under Player feedback (both found by the v2.9 run).
 - **Checked first:** `tools/throw_probe.gd` (now 30 rounds of 24 throws) missed 1 of 720 full-speed stones on the old code: the stone touched the walker, bounced up off it, and Godot only reported the touch later, when it was lying on the walker's head at 0.6 m/s, too slow to hurt. A new test with the touch report switched off failed on the old code (and the old flaky test failed in that same run).

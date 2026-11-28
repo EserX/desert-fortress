@@ -823,6 +823,20 @@ func _base_status_sample() -> void:
 	b.pieces[f].heat = 0.0
 	put.call("furnace", 4, 9)
 	put.call("purifier", 2, -3)
+	# v2.9.2: defences.
+	var t1: String = put.call("turret", -9, 8)
+	b.pieces[t1].ammo = 180
+	b.connect_cable(g, t1)
+	var t2: String = put.call("turret", 9, 9)
+	b.pieces[t2].ammo = 15
+	var fl: String = put.call("floodlight", -9, 6)
+	b.connect_cable(g, fl)
+	put.call("floodlight", 6, -9)
+	for i in 4:
+		var slot := {"kind": "edge", "cx": -10 + i, "cz": 11, "dir": 0, "level": 0}
+		var fk: String = b.place("electric_fence", slot, b.evaluate("electric_fence", slot).y)
+		if i < 3:
+			b.connect_cable(g, fk)
 	for i in 3:
 		main.power.tick(0.25)
 	if not main.base_status_ui.is_open():

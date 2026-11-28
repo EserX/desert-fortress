@@ -166,7 +166,7 @@ func _draw_map() -> void:
 	_canvas.draw_colored_polygon(PackedVector2Array([pp + f * 12, pp - f * 7 + s * 7, pp - f * 3, pp - f * 7 - s * 7]), Color(0.1, 0.3, 0.9))
 	# Legend.
 	var y := 120.0
-	for line in ["MAP", "Brown block: wreck", "Grey corner: ruin", "Green dot: still has loot", "Green square: supply crate", "Blue: oasis (purple: nest)", "Red dots: tonight's wave", "Blue arrow: you", "Brown to green: your land", "Blue lines: water pipes", "Blue dots: sprinklers", "Blue squares: purifiers", "  (grey: no water, dark: off)", "Teal ring: dew collector", "Mouse wheel: zoom (x%d)" % int(zoom), "", "J: base status (machines)", "M or Esc closes"]:
+	for line in ["MAP", "Brown block: wreck", "Grey corner: ruin", "Green dot: still has loot", "Green square: supply crate", "Blue: oasis (purple: nest)", "Red dots: tonight's wave", "Blue arrow: you", "Brown to green: your land", "Blue lines: water pipes", "Blue dots: sprinklers", "Blue squares: purifiers", "  (grey: no water, dark: off)", "Teal ring: dew collector", "Mouse wheel: zoom (x%d)" % int(zoom), "", "J: base status (machines, defences)", "M or Esc closes"]:
 		_canvas.draw_string(font, Vector2(30, y), line, HORIZONTAL_ALIGNMENT_LEFT, -1, 22 if line == "MAP" else 16, Color(1, 0.95, 0.85))
 		y += 26.0
 	_draw_livable(font)

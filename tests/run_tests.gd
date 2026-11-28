@@ -3465,6 +3465,7 @@ func _process(_delta: float) -> bool:
 			_test_piped_purifier()
 			_test_water_map()
 			_test_base_status()
+			_test_base_status_defences()
 			_test_events()
 			_start_shelter()
 		4280:
@@ -3603,6 +3604,86 @@ func _test_base_status() -> void:
 	b.load_data([])
 	inv.load_data({})
 	main.day_night.restore(day, 10.0)
+
+
+## v2.9.2: turrets, floodlights and electric fences on the base status page.
+func _test_base_status_defences() -> void:
+	var BS = load("res://scripts/base_status.gd")
+	var b = main.building
+	var inv = main.inventory
+	b.load_data([])
+	inv.load_data({})
+	main.mutants.clear()
+	var day: int = main.day_night.day
+	main.day_night.restore(day, 10.0)
+	var put := func(t: String, slot: Dictionary) -> String:
+		var ev: Dictionary = b.evaluate(t, slot)
+		check(ev.ok, "a %s can be built (%s)" % [t, ev.reason])
+		return b.place(t, slot, ev.y)
+	var find := func(key: String) -> Dictionary:
+		for e in BS.entries(b, main.water, main.oases):
+			if e.key == key or e.get("keys", []).has(key):
+				return e
+		return {}
+	var tk: String = put.call("turret", {"kind": "obj", "cx": -9, "cz": 9, "dir": 0, "level": 0})
+	var t: Dictionary = b.pieces[tk]
+	main.power.tick(0.25)
+	var e: Dictionary = find.call(tk)
+	check(e.get("state") == BS.STUCK and e.text.contains("no rounds"), "an empty turret is stuck: " + str(e.get("text")))
+	check(e.name == "Auto-turret", "it's named: " + str(e.get("name")))
+	t.ammo = 12
+	e = find.call(tk)
+	check(e.state == BS.STUCK and e.text.contains("low, 12/%d rounds" % b.TURRET_AMMO), "a turret low on rounds is flagged: " + e.text)
+	t.ammo = 200
+	e = find.call(tk)
+	check(e.state == BS.RUNNING and e.text.contains("200/") and e.text.contains("no power"), "loaded with no power it's ready, and says power helps: " + e.text)
+	var fl: String = put.call("floodlight", {"kind": "obj", "cx": -5, "cz": 9, "dir": 0, "level": 0})
+	main.power.tick(0.25)
+	e = find.call(fl)
+	check(e.state == BS.STUCK and e.text.contains("cable it to a generator"), "a floodlight with no cable: " + e.text)
+	var gk: String = put.call("generator", {"kind": "obj", "cx": -7, "cz": 5, "dir": 0, "level": 0})
+	b.pieces[gk].fuel = 0.0
+	check(b.connect_cable(gk, fl) and b.connect_cable(gk, tk), "cables to the floodlight and the turret")
+	main.power.tick(0.25)
+	e = find.call(fl)
+	check(e.state == BS.STUCK and e.text.contains("out of fuel"), "cabled to an empty generator: " + e.text)
+	check(find.call(tk).text.contains("out of fuel") and find.call(tk).state == BS.RUNNING, "the turret still fires, and says its generator is empty: " + find.call(tk).text)
+	b.pieces[gk].fuel = 2.0
+	main.power.tick(0.25)
+	e = find.call(fl)
+	check(not b.pieces[fl].powered and e.state == BS.IDLE and e.text.contains("runs at night"), "by day with a fuelled generator it waits for the night: " + e.text)
+	# Fence pieces, grouped.
+	var f1: String = put.call("electric_fence", {"kind": "edge", "cx": -9, "cz": 3, "dir": 0, "level": 0})
+	var f2: String = put.call("electric_fence", {"kind": "edge", "cx": -8, "cz": 3, "dir": 0, "level": 0})
+	var f3: String = put.call("electric_fence", {"kind": "edge", "cx": -12, "cz": 3, "dir": 0, "level": 0})
+	check(b.connect_cable(gk, f1) and b.connect_cable(gk, f2), "cables to two fence pieces")
+	main.power.tick(0.25)
+	var list: Array = BS.entries(b, main.water, main.oases)
+	var fence_lines: Array = list.filter(func(x): return x.name.begins_with("Electric fence"))
+	check(fence_lines.size() == 2, "fences group into one line per state (%d lines)" % fence_lines.size())
+	e = find.call(f1)
+	check(e.name == "Electric fence (2 pieces)" and e.state == BS.IDLE and e.where.begins_with("nearest "), "the two cabled pieces share a line: %s, %s: %s" % [e.name, e.where, e.text])
+	var lone: Dictionary = find.call(f3)
+	check(lone.name == "Electric fence" and lone.state == BS.STUCK and lone.text.contains("cable it"), "the lone piece without a cable: %s: %s" % [lone.name, lone.text])
+	# Night: the generator runs and they work.
+	main.day_night.restore(day, 22.0)
+	main.power.tick(0.25)
+	check(find.call(fl).state == BS.RUNNING and find.call(fl).text == "lit", "at night the floodlight is lit: " + find.call(fl).text)
+	check(find.call(f1).state == BS.RUNNING and find.call(f1).text == "live", "and the fence is live: " + find.call(f1).text)
+	check(find.call(tk).text.contains("on power"), "and the turret is on power: " + find.call(tk).text)
+	# Plugged straight in (within PLUG_RANGE of a generator, no cable).
+	b.disconnect_all(tk)
+	var ts2 := {"kind": "obj", "cx": -8, "cz": 6, "dir": 0, "level": 0}
+	var tk2: String = put.call("turret", ts2)
+	b.pieces[tk2].ammo = 100
+	main.day_night.restore(day, 10.0)
+	main.power.tick(0.25)
+	check(find.call(tk2).text.contains("power at night"), "a turret right next to the generator is plugged in: " + find.call(tk2).text)
+	check(BS.summary(list).begins_with("%d pieces" % list.size()), "the summary counts defences too: " + BS.summary(list))
+	b.load_data([])
+	inv.load_data({})
+	main.day_night.restore(day, 10.0)
+	main.power.tick(0.25)
 
 
 ## v1.13: the main well, the watering can, soil turning green, pipes and sprinklers.

@@ -18,6 +18,8 @@ var player: Node3D  # gates don't close on you
 var day_night  # DayNight
 var waves  # Waves
 var water  # Water: the main well a water purifier draws from (v2.8)
+## func() -> Array of claimed outposts' pond centres a purifier can draw from (v2.8.1; oases.claimed_springs).
+var springs := Callable()
 var _t := 0.0
 var _hums := {}   # generator key -> AudioStreamPlayer3D
 var _hum: AudioStreamWAV
@@ -91,7 +93,7 @@ func tick(dt: float) -> void:
 					break
 		if building.MACHINES.has(rec.type):
 			if rec.type == "purifier":
-				Purifier.draw(building, water, rec)  # v2.8: tops its tank up from the main well
+				Purifier.draw(building, water, rec, springs.call() if springs.is_valid() else [])  # tops its tank up from the main well or a spring
 			building.set_powered(rec, on)
 			rec.working = building.run_machine(rec, dt)
 			ChestFeed.feed(building, rec)  # v2.7: into a chest next to it

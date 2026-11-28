@@ -146,6 +146,7 @@ func setup(avoid: Array) -> void:
 		_nodes.append(_build(i, rng))
 	for i in list.size():
 		_refresh(i)
+	_apply_zones()
 
 
 func _on_ground(c: Vector3, a: float, d: float) -> Vector3:
@@ -501,12 +502,23 @@ func claim(i: int) -> bool:
 	return true
 
 
+## Pond centres of the claimed outposts (a water purifier by one draws from it, v2.8.1).
+func claimed_springs() -> Array:
+	var out: Array = []
+	for o in list:
+		if o.claimed:
+			out.append(o.pos)
+	return out
+
+
 ## Gives the building system every claimed outpost's build zone.
 func _apply_zones() -> void:
 	if building == null:
 		return
 	building.outposts = []
+	building.ponds = []
 	for o in list:
+		building.ponds.append([Vector2(o.pos.x, o.pos.z), POND_R])
 		if o.claimed:
 			building.outposts.append([Vector2(o.post_pos.x, o.post_pos.z), OUTPOST_R])
 

@@ -2,7 +2,7 @@
 
 A 3D low-poly survival and fortress-defence game for Linux, made with Godot 4.5. Scavenge the desert by day, build and arm a fortress around the flag, and survive a bigger mutant wave every night. Each night pays cash you spend at the shop terminal on supplies, weapons, drone deliveries and base upgrades. Now also: turning the desert green from a main well at the centre, farming it and selling the harvest at the market, and hunting the animals the green land draws in (by night the water draws the mutants); claiming hidden oases as outposts, and green milestones that end with the rain coming back (then free play). A peaceful mode leaves out the mutants altogether.
 
-**Current version: v2.8.0.** See [ROADMAP.md](ROADMAP.md) for the plan and [DEVLOG.md](DEVLOG.md) for what changed in each update.
+**Current version: v2.8.1.** See [ROADMAP.md](ROADMAP.md) for the plan and [DEVLOG.md](DEVLOG.md) for what changed in each update.
 
 ## Play (Linux Mint)
 
@@ -95,7 +95,7 @@ Green land spreads by itself: a fully green square keeps the sand next to it tur
 
 **Goals and the ending.** The green % of the whole desert (on the HUD as "Green 0.3% / 1%", with the next goal) has four milestones, shown in the GOALS panel on the map (M). Each one is announced and unlocks new drone orders at the shop terminal (locked orders say which goal they need):
 - **1%, First green:** olive saplings (a fruit tree: shade, olives, pushes the green out, needs only 2 L a day) and prickly pear pads (hardy food, 2 L a day).
-- **2.5%, Green belt:** the **dew collector** machine: build it anywhere you can build (base or outpost), and every morning it waters the ground within 8 m with a day's water, no pipes needed. Also the **water purifier**: cable it to a generator and it turns well water into bottles of drinking water (2 L a bottle, one every 12 s). Set it within 6 m of the main well and it fills its 30 L tank from the well by itself (that water no longer greens the land that day, and counts as water drawn for the night); anywhere else, press E with a watering can to pour water in. Put a storage chest next to it and the bottles go straight in.
+- **2.5%, Green belt:** the **dew collector** machine: build it anywhere you can build (base or outpost), and every morning it waters the ground within 8 m with a day's water, no pipes needed. Also the **water purifier**: cable it to a generator and it turns well water into bottles of drinking water (2 L a bottle, one every 12 s). Set it within 6 m of the main well and it fills its 30 L tank from the well by itself (that water no longer greens the land that day, and counts as water drawn for the night). Set it by the pond of an outpost you've claimed (within 9 m of the pond's middle) and it fills from the spring instead, which never runs dry and takes nothing from the main well. Anywhere else, press E with a watering can to pour water in. Put a storage chest next to it and the bottles go straight in.
 - **5%, Clouds gather:** the **weather station**: most mornings (60%) a rain shower falls on everything within 40 m of it, enough to turn sand to soil in one go. The rain stops at 10:00.
 - **10%, The rain returns:** the ending. Rain comes back over the whole desert: on about half the mornings every watered square on the map gets rain, and green land keeps spreading from there. Then you keep playing (free play).
 

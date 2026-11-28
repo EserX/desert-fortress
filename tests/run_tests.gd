@@ -5118,6 +5118,48 @@ func _test_purifier() -> void:
 	w.can = 10.0
 	got = main.use_machine(fk)
 	check(got[0] == 5 and far.input == b.MACHINE_IN_MAX and is_equal_approx(w.can, 5.0), "only as much as the tank takes (%d L, %.1f left in the can)" % [got[0], w.can])
+	b.remove(fk, false)
+	# v2.8.1: by a claimed outpost's spring it fills from the spring, not the well.
+	var oa = main.oases
+	var was_claimed: bool = oa.list[0].claimed
+	oa.list[0].claimed = true
+	oa._apply_zones()
+	var pond: Vector3 = oa.list[0].pos
+	var post: Vector3 = oa.list[0].post_pos
+	var away := Vector2(post.x - pond.x, post.z - pond.z).normalized()
+	var sk := ""
+	for dist in [7.0, 6.0, 8.0, 5.5]:
+		for turn in [0.0, 0.5, -0.5, 1.0, -1.0]:
+			if sk != "":
+				break
+			var d: Vector2 = away.rotated(float(turn)) * float(dist)
+			var ss := {"kind": "obj", "cx": int(floor((pond.x + d.x) / b.CELL)), "cz": int(floor((pond.z + d.y) / b.CELL)), "dir": 0, "level": 0}
+			var sev: Dictionary = b.evaluate("purifier", ss)
+			if sev.ok:
+				sk = b.place("purifier", ss, sev.y)
+	check(sk != "", "a purifier can stand by an outpost's spring")
+	# Bug fix (v2.8.1): nothing can be built in the pond itself.
+	var mid := {"kind": "obj", "cx": int(floor(pond.x / b.CELL)), "cz": int(floor(pond.z / b.CELL)), "dir": 0, "level": 0}
+	var pev: Dictionary = b.evaluate("chest", mid)
+	check(not pev.ok and "pond" in str(pev.reason), "nothing can be built in an outpost's pond (%s)" % pev.reason)
+	var fmid: Dictionary = {"kind": "cell", "cx": mid.cx, "cz": mid.cz, "dir": 0, "level": 0}
+	check(not b.evaluate("foundation", fmid).ok, "not even a foundation")
+	if sk != "":
+		var sp: Dictionary = b.pieces[sk]
+		check(Purifier.near_spring(sp, oa.claimed_springs()) and not Purifier.near_well(sp), "it is by the spring (%.1f m from the pond's middle)" % Vector2(sp.node.global_position.x - pond.x, sp.node.global_position.z - pond.z).length())
+		w.store = 50.0
+		var drawn: float = w.drawn_today()
+		main.power.tick(0.25)
+		check(sp.input == b.MACHINE_IN_MAX and is_equal_approx(w.store, 50.0) and is_equal_approx(w.drawn_today(), drawn), "it fills its tank from the spring, leaving the main well alone (%d L, well %.0f L)" % [sp.input, w.store])
+		check(main._prompt_for("machine:" + sk).contains("drawing from the outpost's spring"), "its prompt says so: " + main._prompt_for("machine:" + sk).replace("\n", " / "))
+		check(main.power.machines_have_work(), "a full tank is work, so a generator would start for it by day")
+		sp.input = 0
+		oa.list[0].claimed = false
+		main.power.tick(0.25)
+		check(sp.input == 0 and not Purifier.near_spring(sp, oa.claimed_springs()), "a spring that isn't a claimed outpost's gives nothing")
+	check(Purifier.near_spring({}, [pond]) == false and Purifier.near_spring(b.pieces.get(sk, {}), ["junk", 3]) == false, "bad input is ignored")
+	oa.list[0].claimed = was_claimed
+	oa._apply_zones()
 	b.load_data([])
 	inv.load_data({})
 	w.store = old_store

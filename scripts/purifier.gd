@@ -8,14 +8,20 @@ extends RefCounted
 ##   (a float valve: no power needed for that), so every litre it takes is a
 ##   litre that won't green the land today, and counts as water drawn for the
 ##   night's lure;
-## - E with a watering can pours the can in (from an oasis spring, say).
+## - set within SPRING_REACH of a claimed outpost's spring (v2.8.1), it draws
+##   from the spring, which never runs dry and isn't the main well, so it takes
+##   nothing from the well and doesn't add to the night's lure;
+## - E with a watering can pours the can in.
 ## power.gd calls draw() before each work step; main.gd calls pour_can() and
-## prompt() for E.
+## prompt() for E. `springs` is oases.gd's claimed_springs() (pond centres).
 
 const Items = preload("res://scripts/items.gd")
 
 ## Furthest the purifier's middle may be from the main well's (flat distance).
 const REACH := 6.0
+## Furthest its middle may be from a claimed outpost's pond centre (the pond is
+## 4.5 m across, so this is within about 4.5 m of the water's edge).
+const SPRING_REACH := 9.0
 
 
 ## True if the purifier piece `rec` stands close enough to draw from the main well.
@@ -26,8 +32,25 @@ static func near_well(rec: Dictionary) -> bool:
 	return Vector2(p.x, p.z).distance_to(preload("res://scripts/water.gd").WELL_POS) <= REACH
 
 
-## Tops the tank up from the main well's store, whole litres only. Returns litres drawn.
-static func draw(building, water, rec: Dictionary) -> int:
+## True if the purifier piece `rec` stands by one of `springs` (claimed outposts' pond centres).
+static func near_spring(rec: Dictionary, springs: Array) -> bool:
+	if rec.is_empty() or not is_instance_valid(rec.get("node")):
+		return false
+	var p: Vector3 = rec.node.global_position
+	for s in springs:
+		if s is Vector3 and Vector2(p.x, p.z).distance_to(Vector2(s.x, s.z)) <= SPRING_REACH:
+			return true
+	return false
+
+
+## Tops the tank up from the main well's store (whole litres only), or from an
+## outpost's spring when it stands by one. Returns litres drawn.
+static func draw(building, water, rec: Dictionary, springs: Array = []) -> int:
+	if not near_well(rec) and near_spring(rec, springs):
+		var free: int = building.MACHINE_IN_MAX - int(rec.input)
+		if free > 0:
+			rec.input += free  # a spring never runs dry and isn't the main well's store
+		return maxi(free, 0)
 	if water == null or not near_well(rec):
 		return 0
 	var n := mini(building.MACHINE_IN_MAX - int(rec.input), int(floor(water.store)))
@@ -51,7 +74,7 @@ static func pour_can(building, water, rec: Dictionary) -> int:
 
 
 ## "Water purifier (running): 24 L in the tank, 3 bottles ready, drawing from the main well"
-static func prompt(building, water, rec: Dictionary, has_can: bool) -> String:
+static func prompt(building, water, rec: Dictionary, has_can: bool, springs: Array = []) -> String:
 	var m: Dictionary = building.MACHINES.purifier
 	# A generator only runs by day while a machine has work, so an empty tank
 	# is said first: "no power" would send you looking for a cable that's fine.
@@ -66,6 +89,9 @@ static func prompt(building, water, rec: Dictionary, has_can: bool) -> String:
 	var near := near_well(rec)
 	if near:
 		text += ", drawing from the main well"
+	elif near_spring(rec, springs):
+		near = true
+		text += ", drawing from the outpost's spring"
 	if preload("res://scripts/chest_feed.gd").chest_for(building, rec) != "":
 		text += ", feeding the chest next to it"
 	var acts: Array = []
@@ -74,7 +100,7 @@ static func prompt(building, water, rec: Dictionary, has_can: bool) -> String:
 	if rec.output > 0:
 		acts.append("take the water bottles")
 	if acts.is_empty():
-		var how := "" if near else "\nSet it within %d m of the main well, or pour water in with a watering can" % int(REACH)
+		var how := "" if near else "\nSet it within %d m of the main well or by an outpost's spring, or pour water in with a watering can" % int(REACH)
 		return text + "\n%d L make a bottle of drinking water every %d s" % [m.need, int(m.secs)] + how
 	var act: String = ", ".join(acts)
 	return text + "\n[E] " + act.left(1).to_upper() + act.substr(1)

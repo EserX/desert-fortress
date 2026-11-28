@@ -951,7 +951,7 @@ func use_machine(key: String) -> Array:
 	if take > 0:
 		lines.append("+%d %s" % [take, Items.display_name(m.out)])
 	if lines.is_empty():
-		var bring := "Bring water in a watering can, or set it by the main well" if rec.type == "purifier" else "Bring %s to feed it" % Items.display_name(m.in).to_lower()
+		var bring := "Bring water in a watering can, or set it by the main well or an outpost's spring" if rec.type == "purifier" else "Bring %s to feed it" % Items.display_name(m.in).to_lower()
 		hud.show_banner(bring if int(rec.output) == 0 else "No room in your bag")
 	else:
 		hud.show_pickup(lines)
@@ -1271,7 +1271,7 @@ func _prompt_for(id: String) -> String:
 		if mrec.is_empty():
 			return ""
 		if mrec.type == "purifier":
-			return Purifier.prompt(building, water, mrec, inventory.count_of("watering_can") > 0)
+			return Purifier.prompt(building, water, mrec, inventory.count_of("watering_can") > 0, oases.claimed_springs())
 		return building.machine_prompt(mk, inventory.count_of(Building.MACHINES[mrec.type].in))
 	for prefix in ["gate:", "hatch:", "chest:", "bench:", "gen:", "fire:", "turret:", "well:", "switch:"]:
 		if id.begins_with(prefix):
@@ -1896,6 +1896,7 @@ func _setup_oases() -> void:
 	oases.terrain = terrain
 	oases.water = water
 	oases.building = building
+	power.springs = oases.claimed_springs  # v2.8.1: a purifier by an outpost's spring
 	oases.mutants = mutants
 	oases.inventory = inventory
 	oases.survival = survival

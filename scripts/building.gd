@@ -172,6 +172,8 @@ var _by_type := {}
 var zone_radius := ZONE_RADIUS
 ## v1.18: claimed outposts' build zones, [Vector2 centre, radius] (set by oases.gd).
 var outposts: Array = []
+## v2.8.1: the oases' ponds, [Vector2 centre, radius] (set by oases.gd): nothing is built in them.
+var ponds: Array = []
 var chest_slots := CHEST_SLOTS
 ## main slot key -> {"type", "slot", "y", "node", "open" (gates), "tier", "hp", "built_at"}
 var pieces := {}
@@ -476,6 +478,8 @@ func evaluate(type: String, slot: Dictionary) -> Dictionary:
 			return {"y": piece_at(k).y, "ok": false, "reason": "Something is already built here"}
 	if not in_zone(type, slot):
 		return {"y": _ground_level(type, slot).y, "ok": false, "reason": "Outside the base zone (stay within %d m of the flag)" % int(zone_radius)}
+	if in_pond(type, slot):
+		return {"y": _ground_level(type, slot).y, "ok": false, "reason": "Not in the pond"}
 	if slot.get("level", 0) > 0:
 		if type in FOUNDATIONS:
 			return {"y": 0.0, "ok": false, "reason": "Foundations go on the ground"}
@@ -494,6 +498,15 @@ func evaluate(type: String, slot: Dictionary) -> Dictionary:
 		if terrain.depth_at(c.x, c.z) < float(PIECES[type].pit) - 0.001:
 			return {"y": g.y, "ok": false, "reason": "Dig a pit at least %s m deep here first (%s)" % [str(PIECES[type].pit).trim_suffix(".0").replace("0.9", "1"), "pickaxe" if PIECES[type].pit > 2.7 else "shovel"]}
 	return {"y": g.y, "ok": true, "reason": ""}
+
+
+## True if a piece in this slot would stand in an oasis pond (its middle on the water).
+func in_pond(type: String, slot: Dictionary) -> bool:
+	var c := slot_center(slot, type)
+	for pd in ponds:
+		if Vector2(c.x, c.z).distance_to(pd[0]) < pd[1]:
+			return true
+	return false
 
 
 ## True if a piece in this slot is inside the base build zone or an outpost's.

@@ -94,6 +94,7 @@ var shots := [
 	{"name": "84_blueprint_menu", "pos": Vector3(6, 0, 16), "yaw": 0.25, "pitch": -0.1, "hour": 16.5, "bpmenu": true},
 	{"name": "85_chest_feed", "pos": Vector3(-8, 0, 12.5), "yaw": 0.1, "pitch": -0.3, "hour": 14.0, "machines": true, "feed": true},
 	{"name": "86_purifier", "pos": Vector3(5, 0, 2), "yaw": 0.0, "pitch": -0.3, "hour": 14.0, "purifier": true},
+	{"name": "87_purifier_spring", "pos": Vector3(5, 0, 2), "yaw": 0.0, "pitch": -0.3, "hour": 14.0, "purifier": true, "spring": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -211,7 +212,7 @@ func _process(_d: float) -> bool:
 		if s.get("machines", false):
 			_machines_sample(p if s.get("feed", false) else null)
 		if s.get("purifier", false):
-			_purifier_sample(p)
+			_purifier_sample(p, s.get("spring", false))
 		if s.get("blast", false):
 			_blast_sample(p)
 		if s.get("greening", false):
@@ -1121,19 +1122,35 @@ func _machines_sample(feeder: Node3D = null) -> void:
 
 
 ## v2.8: a water purifier by the main well, cabled to a generator, a chest beside it.
-func _purifier_sample(p: Node3D) -> void:
+## With spring=true (v2.8.1) it stands by a claimed outpost's spring instead.
+func _purifier_sample(p: Node3D, spring := false) -> void:
 	var b = main.building
 	main.terrain.load_data({})
 	main.mutants.clear()
 	b.load_data([])
 	b.sites_load_data([])
 	main.water.store = main.water.capacity
+	var ox := 0
+	var oz := 0
+	if spring:
+		# The first oasis as an outpost; the purifier on the post's side of the pond.
+		var oa = main.oases
+		var o: Dictionary = oa.list[0]
+		o.claimed = true
+		o.found = true  # no "you found an oasis" banner over the picture
+		o.nest = "gone" if o.has_nest else "none"
+		oa._apply_zones()
+		oa._refresh(0)
+		var aw: Vector3 = (o.post_pos - o.pos).normalized().rotated(Vector3.UP, 0.6)
+		var c: Vector3 = o.pos + aw * 7.0
+		ox = int(floor(c.x / b.CELL)) - 3
+		oz = int(floor(c.z / b.CELL)) + 2
 	var put := func(t: String, cx: int, cz: int, d := 0) -> String:
-		var sl := {"kind": "obj", "cx": cx, "cz": cz, "dir": d, "level": 0}
+		var sl := {"kind": "obj", "cx": cx + ox, "cz": cz + oz, "dir": d, "level": 0}
 		var ev: Dictionary = b.evaluate(t, sl)
 		return b.place(t, sl, ev.y) if ev.ok else ""
 	var pk: String = put.call("purifier", 3, -2, 2)
-	var g: String = put.call("generator", 4, -1)
+	var g: String = put.call("generator", 2 if spring else 4, -1)  # (by the spring, 4 would be in the pond)
 	var ck: String = put.call("chest", 4, -2)
 	if pk == "":
 		push_warning("screenshot: no room for the purifier")

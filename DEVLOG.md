@@ -2,6 +2,23 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v2.8.1 (2026-11-28): A purifier at an outpost, and no building in ponds
+No player feedback was waiting and every roadmap item is done, so this run did a bug check and one small idea from v2.8's list.
+- **Checked first:** all tests pass with no Godot errors; the soak test (wave 8, 11,000 frames) plays out cleanly (all 18 wave mutants killed, 1 wall lost to a Brute, 3.0 ms a frame headless; the 5 "left" at the end are oasis guards, not wave mutants); the flow test was not needed (no menus, saving or scene flow touched).
+- **Bug fixed: you could build in an oasis pond.** The pond is only a flat water disc, so building pieces (foundations, chests, generators...) could be placed on the water at a claimed outpost. Now a piece whose middle is on the water says "Not in the pond". A piece at the edge may still hang over the water a little. (Found while setting up the new screenshot: the generator landed in the pond.) Test written first and seen failing.
+  - Pieces already standing in a pond in an old save stay where they are (loading doesn't re-check placement); pick them up or demolish them if you like.
+- **New: a water purifier by an outpost's spring fills from the spring.** Set it within 9 m of the pond's middle (about 4.5 m from the water's edge) at an outpost you've claimed, and it tops up its 30 L tank by itself. A spring never runs dry and isn't the main well, so it takes nothing from the main well's store and adds nothing to the night's lure. The prompt says "drawing from the outpost's spring".
+- **Decisions:**
+  - Only claimed outposts count: you can't build at a wild oasis anyway, and this keeps the rule simple.
+  - Spring water is free, but the purifier still needs generator power and still makes only one bottle every 12 s, so it's a convenience for outposts (no more carrying watering cans), not a flood of water. Bottles still can't be sold.
+  - Code: `oases.claimed_springs()` gives the pond centres; `purifier.gd` got `near_spring()` and a `springs` argument to `draw()` and `prompt()`; power.gd takes a `springs` callable (main.gd sets it, 1 line). The pond rule is `building.in_pond()`, fed by oases.gd's `_apply_zones()` (now also run when a world's oases are set up).
+- No save changes.
+- **Tests (9 new):** nothing in an outpost's pond (a chest, a foundation), a purifier by the spring, filling from it without touching the main well or the water drawn today, its prompt, a full tank counting as work for the generator, an unclaimed spring giving nothing, bad input ignored.
+- New screenshot view `87_purifier_spring` (a purifier, chest and generator by an outpost's pond).
+
+**Try:** claim an outpost (or take an oasis you already hold), build a water purifier from the test box on the post's side of the pond, cable a generator to it and put a chest next to it. Try putting something on the pond: it won't go.
+**Next:** more bug hunting and rough edges. Ideas for the owner to pick from (write them under Player feedback to ask for one): a pipe from the main well to a purifier further away; a dew collector or sprinkler fed by an outpost's spring; a "base status" page listing machines that are idle and why.
+
 ## v2.8.0 (2026-11-28): Water purifier
 No player feedback was waiting, so this run took the last resource idea: a water purifier.
 - **The water purifier** is a new machine, ordered by drone for $160 once the desert is **2.5% green** (the "Green belt" milestone, next to the dew collector). Like the sawmill it runs on generator power (cable it, or set it within 4 m of a generator) and has a spinning pump wheel and a lamp.

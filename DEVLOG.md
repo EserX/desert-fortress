@@ -2,6 +2,21 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v2.8.9 (2026-11-28): The hammer counts a sprinkler's own squares
+No player feedback was waiting and every roadmap item is done, so this run took one of the ideas from v2.8.8's list: the hammer on a built sprinkler saying how many of its squares no other one waters.
+- **Checked first:** all tests passed with no Godot errors before any change.
+- **New: the hammer counts a built one's squares.** Point the hammer at a built **sprinkler** or **dew collector** and the prompt adds a line: "Waters 4 squares: 2 only by it, 2 by another too". If no other one reaches its squares it says "no other waters them"; if every square is covered by others it says "all watered by another too (spare)", so you know that one could be moved (G in build mode) to a dry spot.
+- **Decisions:**
+  - Reuses v2.8.8's `count_squares()` in build_mode.gd, now with an optional piece to leave out, so the hammer, the build line and the real watering all count the same squares. New `own_squares()` / `own_squares_text()` beside it.
+  - main asks for the prompt every frame, so the count is cached by piece and `building.revision` and only worked out again when you look at another piece or the base changes.
+  - As in v2.8.8, it counts whether another piece covers the square, not whether that one has water today.
+  - main.gd: 3 lines in `hammer_prompt()`. No save changes.
+- **Tests (9 new):** a lone built sprinkler waters only its own squares and the hammer says so; one built 4 m away shares some and the prompt splits the count; the total stays the same; a second neighbour takes more; taking them down gives the squares back at once; a dew collector counts its squares too; a turret counts none.
+- Screenshot view `92_hammer_reach` now has a second sprinkler behind, so the prompt shows the split.
+
+**Try:** hold the hammer and walk round your sprinklers: any that say "spare" can be picked up with G in build mode and put somewhere dry.
+**Next:** more bug hunting and rough edges. Ideas for the owner to pick from (write them under Player feedback to ask for one): a "base status" page listing machines that are idle and why; outposts' pipes on a zoomed map round the outpost; a map layer marking spare sprinklers.
+
 ## v2.8.8 (2026-11-28): New squares counted while placing
 No player feedback was waiting and every roadmap item is done, so this run took one of the ideas from v2.8.7's list: counting the squares a new sprinkler would add.
 - **Checked first:** all tests passed with no Godot errors before any change.

@@ -762,7 +762,8 @@ func _ring_sample(type: String, kin := false) -> void:
 
 
 ## v2.8.6: the hammer pointed at a built sprinkler shows its 5 m reach circle
-## (outside build mode); a dew collector stands further off without one.
+## (outside build mode); a dew collector stands further off without one, and
+## a second sprinkler behind shares some of its squares (the prompt counts them).
 func _hammer_ring_sample(p: Node3D) -> void:
 	var b = main.building
 	b.load_data([])
@@ -773,6 +774,9 @@ func _hammer_ring_sample(p: Node3D) -> void:
 	var key: String = b.place("sprinkler", slot, b.evaluate("sprinkler", slot).y)
 	var dslot := {"kind": "obj", "cx": 9, "cz": -4, "dir": 0, "level": 0}
 	b.place("dew_collector", dslot, b.evaluate("dew_collector", dslot).y)
+	# v2.8.9: a second sprinkler behind it, so the prompt splits the squares.
+	var s2 := {"kind": "obj", "cx": 6, "cz": -3, "dir": 0, "level": 0}
+	b.place("sprinkler", s2, b.evaluate("sprinkler", s2).y)
 	main.inventory.load_data({})
 	main.inventory.add_all({"hammer": 1})
 	main.inventory.selected = 0

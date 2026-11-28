@@ -1123,6 +1123,9 @@ func hammer_prompt(key: String) -> String:
 		text += "   support %d%%" % int(building.support.get(key, 0.0))
 	if BuildMode.REACH_RINGS.has(rec.type):
 		text += "   " + BuildMode.reach_text(rec.type)
+		var own: String = build_mode.own_squares_text(key)
+		if own != "":
+			text += "\n" + own
 	var rep := building.repair_cost(rec)
 	var up := building.upgrade_cost(rec)
 	if not rep.is_empty():

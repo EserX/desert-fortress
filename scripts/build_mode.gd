@@ -98,6 +98,8 @@ var _others_key := ""  # what the circles were drawn for; redraw when it changes
 ## preview would water that no built one already does: Vector2i(new, already).
 var square_counts := Vector2i(-1, -1)
 var _squares_key := ""  # what square_counts was worked out for
+var _own_counts := Vector2i(-1, -1)  # v2.8.9: the hammer's count for a built one
+var _own_key := ""  # piece and revision _own_counts was worked out for
 
 
 func _ready() -> void:
@@ -477,7 +479,9 @@ static func watered_cells(type: String, pos: Vector3) -> Array:
 ## Loops over all pieces (a few hundred at most) and the 9 to 21 squares of
 ## each nearby waterer; called only when the preview moves, the piece type
 ## or the base changes (see _count_squares).
-func count_squares(type: String, pos: Vector3) -> Vector2i:
+## skip_key: a built piece to leave out (v2.8.9: the hammer counting a built
+## one's own squares against the others).
+func count_squares(type: String, pos: Vector3, skip_key := "") -> Vector2i:
 	var mine := watered_cells(type, pos)
 	if mine.is_empty():
 		return Vector2i(-1, -1)
@@ -485,7 +489,7 @@ func count_squares(type: String, pos: Vector3) -> Vector2i:
 	var taken := {}
 	for k in building.pieces.keys():
 		var rec: Dictionary = building.pieces[k]
-		if not (rec.type == "sprinkler" or rec.type == "dew_collector") or not is_instance_valid(rec.node):
+		if k == skip_key or not (rec.type == "sprinkler" or rec.type == "dew_collector") or not is_instance_valid(rec.node):
 			continue
 		var pc: Vector3 = (rec.node as Node3D).global_position
 		if Vector2(pc.x - pos.x, pc.z - pos.z).length() > reach:
@@ -521,6 +525,34 @@ func squares_text() -> String:
 	if square_counts.x == 0:
 		return "Waters %d squares, all already watered by another" % total
 	return "Waters %d squares: %d new, %d already watered by another" % [total, square_counts.x, square_counts.y]
+
+
+## v2.8.9: for the hammer at a built sprinkler or dew collector: Vector2i(squares
+## only it waters, squares another built one waters too), or (-1, -1) for other
+## pieces. Cached by piece and building.revision, as main asks every frame.
+func own_squares(key: String) -> Vector2i:
+	var rec: Dictionary = building.pieces.get(key, {})
+	if rec.is_empty() or not is_instance_valid(rec.node):
+		return Vector2i(-1, -1)
+	var ck := "%s|%d" % [key, building.revision]
+	if ck != _own_key:
+		_own_key = ck
+		_own_counts = count_squares(rec.type, (rec.node as Node3D).global_position, key)
+	return _own_counts
+
+
+## The hammer prompt's count for a built sprinkler or dew collector
+## ("Waters 9 squares: 5 only by it, 4 by another too"), or "".
+func own_squares_text(key: String) -> String:
+	var n := own_squares(key)
+	if n.x < 0:
+		return ""
+	var total := n.x + n.y
+	if n.y == 0:
+		return "Waters %d squares, no other waters them" % total
+	if n.x == 0:
+		return "Waters %d squares, all watered by another too (spare)" % total
+	return "Waters %d squares: %d only by it, %d by another too" % [total, n.x, n.y]
 
 
 ## Hides the built pieces' circles (and forgets them, so they redraw next time).

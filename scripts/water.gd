@@ -684,6 +684,49 @@ func _from_springs() -> Dictionary:
 	return seen
 
 
+## v2.8.4: the water network for the map. "pipes" is a list of [from, to, wet]
+## (ground points, wet while water runs in it), "ends" a list of [pos, type, state]
+## for sprinklers and purifiers (state "wet", "dry" or "off").
+## Only while the map is open: every pipe and sprinkler (a few dozen at most).
+func map_marks() -> Dictionary:
+	var wet := {}
+	if pump and store >= 0.05:
+		wet = _from_main()
+		wet["main"] = true
+	wet.merge(_from_springs())
+	var lines: Array = []
+	for p in pipes:
+		if not (p is Array) or p.size() < 2 or not _valid_end(p[0]) or not _valid_end(p[1]):
+			continue
+		if p[0] != "main" and not is_instance_valid(building.pieces[p[0]].get("node")):
+			continue
+		if p[1] != "main" and not is_instance_valid(building.pieces[p[1]].get("node")):
+			continue
+		if p[0] == "main" or p[1] == "main":
+			if well == null or not is_instance_valid(well):
+				continue
+		lines.append([pipe_anchor(p[0]), pipe_anchor(p[1]), wet.has(p[0]) and wet.has(p[1])])
+	var ends: Array = []
+	for key in building.keys_of(["sprinkler", "purifier"]):
+		var rec: Dictionary = building.pieces[key]
+		if not is_instance_valid(rec.get("node")):
+			continue
+		var state := "wet" if wet.has(key) else "dry"
+		if rec.type == "purifier" and state == "dry":
+			# It may stand by the well or a spring with no pipe at all (purifier.gd).
+			var pur = load("res://scripts/purifier.gd")
+			var spr: Variant = springs.call() if springs.is_valid() else []
+			if (pur.near_well(rec) and store >= 0.05) or (spr is Array and pur.near_spring(rec, spr)):
+				state = "wet"
+		if rec.type == "sprinkler":
+			if not rec.get("open", true):
+				state = "off"
+			elif sprinkler_state(key) != "":
+				state = "dry"
+		ends.append([rec.node.global_position, rec.type, state])
+	return {"pipes": lines, "ends": ends}
+
+
 func _in_outpost(key: String) -> bool:
 	var rec: Dictionary = building.pieces.get(key, {})
 	if rec.is_empty() or not is_instance_valid(rec.get("node")):

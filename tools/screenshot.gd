@@ -97,6 +97,7 @@ var shots := [
 	{"name": "87_purifier_spring", "pos": Vector3(5, 0, 2), "yaw": 0.0, "pitch": -0.3, "hour": 14.0, "purifier": true, "spring": true},
 	{"name": "88_sprinkler_spring", "pos": Vector3(5, 0, 2), "yaw": 0.0, "pitch": -0.3, "hour": 11.0, "sprinkler_spring": true},
 	{"name": "89_purifier_pipe", "pos": Vector3(5, 0, 2), "yaw": 0.0, "pitch": -0.3, "hour": 14.0, "purifier_pipe": true},
+	{"name": "90_water_map", "pos": Vector3(20, 0, 40), "yaw": 0.9, "pitch": 0.0, "hour": 10.0, "map": true, "water_map": true, "zoom": 4.0},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -151,6 +152,7 @@ func _process(_d: float) -> bool:
 			main.interact(main.places[0].key + "_trunk")
 			main.interact(main.places[0].key + "_glovebox")
 			main._on_morning(2)
+			main.map_ui.zoom = s.get("zoom", 1.0)
 			if not main.map_ui.is_open():
 				main.map_ui.toggle()
 		elif main.map_ui.is_open():
@@ -219,6 +221,8 @@ func _process(_d: float) -> bool:
 			_sprinkler_spring_sample(p)
 		if s.get("purifier_pipe", false):
 			_purifier_pipe_sample(p)
+		if s.get("water_map", false):
+			_water_map_sample()
 		if s.get("blast", false):
 			_blast_sample(p)
 		if s.get("greening", false):
@@ -1257,6 +1261,32 @@ func _purifier_pipe_sample(p: Node3D) -> void:
 	p.rotation.y = atan2(-d.x, -d.z)
 	p.head.rotation.x = -0.4
 	main.power.tick(0.25)
+
+
+## v2.8.4: a water network for the map: a sprinkler chain to a purifier, one
+## turned off, one with no pipe, and a dew collector.
+func _water_map_sample() -> void:
+	var b = main.building
+	var w = main.water
+	b.load_data([])
+	w.pipes = []
+	w.set_pump(true)
+	w.store = w.capacity
+	var put := func(t: String, cx: int, cz: int) -> String:
+		var sl := {"kind": "obj", "cx": cx, "cz": cz, "dir": 0, "level": 0}
+		var ev: Dictionary = b.evaluate(t, sl)
+		return b.place(t, sl, ev.y) if ev.ok else ""
+	var s1: String = put.call("sprinkler", 5, 1)
+	var s2: String = put.call("sprinkler", 9, 5)
+	var pk: String = put.call("purifier", 4, 9)
+	var s3: String = put.call("sprinkler", -7, 6)
+	put.call("sprinkler", 1, -11)
+	put.call("dew_collector", -9, -8)
+	for pair in [["main", s1], [s1, s2], [s2, pk], ["main", s3]]:
+		if pair[0] != "" and pair[1] != "":
+			w.connect_pipe(pair[0], pair[1])
+	if s3 != "":
+		w.toggle_sprinkler(s3)
 
 
 ## The oases (v1.18): stand back from a wild one, a nest (burning), or a claimed outpost.

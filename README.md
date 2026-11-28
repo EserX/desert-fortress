@@ -2,7 +2,7 @@
 
 A 3D low-poly survival and fortress-defence game for Linux, made with Godot 4.5. Scavenge the desert by day, build and arm a fortress around the flag, and survive a bigger mutant wave every night. Each night pays cash you spend at the shop terminal on supplies, weapons, drone deliveries and base upgrades. Now also: turning the desert green from a main well at the centre, farming it and selling the harvest at the market, and hunting the animals the green land draws in (by night the water draws the mutants); claiming hidden oases as outposts, and green milestones that end with the rain coming back (then free play). A peaceful mode leaves out the mutants altogether.
 
-**Current version: v2.8.3.** See [ROADMAP.md](ROADMAP.md) for the plan and [DEVLOG.md](DEVLOG.md) for what changed in each update.
+**Current version: v2.8.4.** See [ROADMAP.md](ROADMAP.md) for the plan and [DEVLOG.md](DEVLOG.md) for what changed in each update.
 
 ## Play (Linux Mint)
 
@@ -66,7 +66,7 @@ If `git pull` complains about untracked `.uid` files, they are safe to delete.
 
 **Water well.** Dig a shaft at least **3.5 m** deep (the last metre is stone, so bring the pickaxe; looking straight down into a hole reaches its bottom), then build a **water well** over it (8 stone, 4 wood, 2 scrap). It fills a bottle of water every 75 seconds, up to 6; press **E** on it to take them. Hard work costs **stamina**: a dig 7 (filling 3.5), a pickaxe hit 9, building a piece 6, a hammer repair or upgrade 5. Out of breath, you have to wait.
 
-**The main well and watering.** The big stone well next to the flag holds 200 litres and fills up again every morning (deepen it in the shop for more). Make a **watering can** (workbench: 2 scrap, 2 nails), fill it with **E** at the main well and left click the sand to pour. The ground is a grid of 4 m squares: 6 L turns sand into **soil**, and soil that gets 4 L in a day turns a little greener each morning (grass, then small plants). With the **hand pump** upgrade, lay **water pipes** from the main well to **sprinklers** (build mode), which water the squares round them by day.
+**The main well and watering.** The big stone well next to the flag holds 200 litres and fills up again every morning (deepen it in the shop for more). Make a **watering can** (workbench: 2 scrap, 2 nails), fill it with **E** at the main well and left click the sand to pour. The ground is a grid of 4 m squares: 6 L turns sand into **soil**, and soil that gets 4 L in a day turns a little greener each morning (grass, then small plants). With the **hand pump** upgrade, lay **water pipes** from the main well to **sprinklers** (build mode), which water the squares round them by day. The map (**M**) shows your pipes, sprinklers, purifiers and dew collectors: blue when water reaches them, grey when it doesn't, dark for a sprinkler you turned off. Turn the **mouse wheel** on the map to zoom in on the base (x1, x2, x4, x8).
 
 **Farming.** Seeds come by drone (shop terminal, Drone orders). Hold a seed packet and left click **soil** to dig a seed bed and plant it (four beds to a square). A plant grows one day each morning if its square got enough water the day before (the prompt says how much). At **13:00** the midday heat hurts plants on squares that are still dry, and a plant hurt twice without water in between dies (E clears it). Look at a plant to see how it is doing, and press **E** to harvest it when it is ripe.
 

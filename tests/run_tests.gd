@@ -3317,6 +3317,7 @@ func _process(_delta: float) -> bool:
 			_test_purifier()
 			_test_spring_sprinklers()
 			_test_piped_purifier()
+			_test_water_map()
 			_test_events()
 			_start_shelter()
 		4280:
@@ -5348,6 +5349,83 @@ func _test_piped_purifier() -> void:
 		check(main._prompt_for("machine:" + spk).contains("spring through a pipe"), "its prompt says so: " + main._prompt_for("machine:" + spk).replace("\n", " / "))
 	oa.list[0].claimed = was_claimed
 	oa._apply_zones()
+	w.pipes = []
+	b.load_data([])
+	w.store = old_store
+	w.set_pump(old_pump)
+
+
+## v2.8.4: the water network on the map (water.map_marks()).
+func _test_water_map() -> void:
+	var b = main.building
+	var w = main.water
+	b.load_data([])
+	w.pipes = []
+	var old_store: float = w.store
+	var old_pump: bool = w.pump
+	w.set_pump(false)
+	w.store = 50.0
+	var put := func(type: String, cx: int, cz: int) -> String:
+		var ps := {"kind": "obj", "cx": cx, "cz": cz, "dir": 0, "level": 0}
+		var ev: Dictionary = b.evaluate(type, ps)
+		return b.place(type, ps, ev.y) if ev.ok else ""
+	var find := func(marks: Dictionary, type: String) -> Array:
+		return marks.ends.filter(func(e): return e[1] == type)
+	var sk: String = put.call("sprinkler", 3, -4)
+	var pk: String = put.call("purifier", 3, -8)
+	var nk: String = put.call("purifier", 1, 1)
+	check(sk != "" and pk != "" and nk != "", "a sprinkler and two purifiers for the map")
+	if sk == "" or pk == "" or nk == "":
+		w.store = old_store
+		w.set_pump(old_pump)
+		b.load_data([])
+		return
+	check(w.connect_pipe("main", sk) and w.connect_pipe(sk, pk), "piped main well to sprinkler to purifier")
+	var m: Dictionary = w.map_marks()
+	check(m.pipes.size() == 2 and m.ends.size() == 3, "the map gets 2 pipes and 3 ends (%d, %d)" % [m.pipes.size(), m.ends.size()])
+	check(m.pipes.all(func(l): return not l[2]), "without the hand pump the pipes show dry")
+	check(find.call(m, "sprinkler")[0][2] == "dry", "and so does the sprinkler")
+	var sp: Vector3 = b.pieces[sk].node.global_position
+	check(m.pipes.any(func(l): return l[1].distance_to(sp) < 0.5 or l[0].distance_to(sp) < 0.5), "a pipe ends at the sprinkler")
+	var near: Array = find.call(m, "purifier").filter(func(e): return e[0].distance_to(b.pieces[nk].node.global_position) < 0.1)
+	check(near.size() == 1 and near[0][2] == "wet", "a purifier by the well shows water with no pipe")
+	w.set_pump(true)
+	m = w.map_marks()
+	check(m.pipes.all(func(l): return l[2]), "with the hand pump both pipes show wet")
+	check(find.call(m, "sprinkler")[0][2] == "wet" and find.call(m, "purifier").all(func(e): return e[2] == "wet"), "and the sprinkler and purifiers too")
+	w.toggle_sprinkler(sk)
+	m = w.map_marks()
+	check(find.call(m, "sprinkler")[0][2] == "off" and m.pipes.all(func(l): return l[2]), "a sprinkler turned off shows off (it still passes water on)")
+	w.toggle_sprinkler(sk)
+	w.store = 0.0
+	m = w.map_marks()
+	check(m.pipes.all(func(l): return not l[2]) and find.call(m, "purifier").all(func(e): return e[2] == "dry"), "a dry main well shows everything dry")
+	w.store = 50.0
+	# Junk pipes in a save are dropped on loading, so the map only gets real ones.
+	var wd: Dictionary = w.save_data()
+	wd.pipes = wd.pipes + [["main"], ["nope", sk], 42]
+	w.load_data(wd)
+	m = w.map_marks()
+	check(m.pipes.size() == 2, "junk pipes in a save are left off the map (%d)" % m.pipes.size())
+	# A piece gone: its pipe goes from the map at once.
+	b.remove(pk, false)
+	m = w.map_marks()
+	check(m.pipes.size() == 1 and find.call(m, "purifier").size() == 1, "a purifier taken down leaves the map")
+	check(main.weather.collectors() is Array, "dew collectors are listed for the map")
+	# Zoom (mouse wheel while the map is open).
+	var mu = main.map_ui
+	mu.zoom = 1.0
+	var s1: float = mu.map_scale()
+	mu.zoom_step(1)
+	mu.zoom_step(1)
+	check(mu.zoom == 4.0 and is_equal_approx(mu.map_scale(), s1 * 4.0), "two zoom steps in show the map 4 times bigger")
+	for i in 5:
+		mu.zoom_step(1)
+	check(mu.zoom == 8.0, "zoom stops at x8")
+	for i in 5:
+		mu.zoom_step(-1)
+	check(mu.zoom == 1.0, "and at x1 going out")
+	check(mu.to_map(Vector3.ZERO).is_equal_approx(mu._canvas.size * 0.5), "the base stays in the middle")
 	w.pipes = []
 	b.load_data([])
 	w.store = old_store

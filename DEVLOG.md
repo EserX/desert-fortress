@@ -2,6 +2,22 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v2.8.4 (2026-11-28): Water on the map
+No player feedback was waiting and every roadmap item is done, so this run took one of the ideas from v2.8.3's list: pipes shown on the map.
+- **Checked first:** all tests passed with no Godot errors before any change.
+- **New: the water network on the map (M).** Water pipes are lines, sprinklers dots, water purifiers small squares, and dew collectors a teal diamond with a ring for the 8 m they water. **Blue** means water gets there now, **grey** means it doesn't (no hand pump, no pipe, the main well dry), **dark** is a sprinkler you turned off. A purifier standing by the main well or an outpost's spring shows blue without a pipe. The legend explains it.
+- **New: zoom the map.** Turn the mouse wheel while the map is open: x1, x2, x4, x8, always centred on the base (the base sits in the middle of the map). At x1 a 24 m pipe is only about 30 pixels long, so zooming is what makes the network readable. While zoomed in, whatever lies past the map's edge is covered by a dark frame, and if you are off the edge your arrow sits on the rim pointing your way. The wheel doesn't change the hotbar slot while the map is open. The zoom stays as you left it next time you open the map.
+- **Decisions:**
+  - The logic is in water.gd's new `map_marks()` (pipes as [from, to, wet], ends as [pos, type, state]); map_ui.gd only draws it. A pipe is blue when water reaches both its ends, so a pipe from a spring's sprinkler out of the outpost's zone shows grey, as it carries nothing.
+  - A sprinkler turned off still passes water on (as before), so the pipes after it stay blue.
+  - main.gd untouched.
+- No save changes (the zoom isn't saved).
+- **Tests (18 new):** the map's pipes and ends; dry without the hand pump; wet with it; a purifier by the well wet with no pipe; a sprinkler turned off; a dry well; junk pipes in a save left off; a purifier taken down leaving the map; zoom steps, limits and the base staying in the middle.
+- New screenshot view `90_water_map` (the map at x4: a sprinkler chain to a purifier, one sprinkler turned off, one with no pipe, a dew collector).
+
+**Try:** open the map (M) and turn the mouse wheel to zoom in on the base. Check which of your sprinklers are grey and why (walk up to one: its prompt says). Turn one off with E and see it go dark on the map.
+**Next:** more bug hunting and rough edges. Ideas for the owner to pick from (write them under Player feedback to ask for one): a "base status" page listing machines that are idle and why; outposts' pipes on a zoomed map round the outpost (the zoom is centred on the base for now); a dew collector's reach shown while placing it.
+
 ## v2.8.3 (2026-11-28): Pipe water to a purifier
 No player feedback was waiting and every roadmap item is done, so this run took the idea that has been on the list for three runs: a pipe from the main well to a purifier further away.
 - **Checked first:** all tests passed with no Godot errors before any change.

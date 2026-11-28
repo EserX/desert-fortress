@@ -6,13 +6,15 @@ extends RefCounted
 ## Offsets are grid squares from the square you aim at; the whole layout
 ## turns with R in 90° steps.
 
-const ORDER := ["shelter", "cabin", "long_cabin", "watchtower", "gatehouse"]
+const ORDER := ["shelter", "cabin", "long_cabin", "watchtower", "gatehouse", "compound", "bunker"]
 const NAMES := {
 	"shelter": "Shelter (1×1)",
 	"cabin": "Cabin (2×2)",
 	"long_cabin": "Big cabin (3×3)",
 	"watchtower": "Watchtower",
 	"gatehouse": "Gatehouse",
+	"compound": "Walled compound (5×5)",
+	"bunker": "Bunker with a well (3×3)",
 }
 
 
@@ -34,6 +36,10 @@ static func entries(id: String) -> Array:
 			return _tower()
 		"gatehouse":
 			return _gatehouse()
+		"compound":
+			return _compound(5)
+		"bunker":
+			return _bunker()
 	return []
 
 
@@ -112,6 +118,51 @@ static func _gatehouse() -> Array:
 		out.append(_e("half_wall", "edge", x, 0, 0, 1))
 	out.append(_e("half_wall", "edge", 0, 0, 1, 1))
 	out.append(_e("half_wall", "edge", 3, 0, 1, 1))
+	return out
+
+
+## An open yard n squares across: a ring of foundations with walls round the
+## outside, a gun slit in the middle of the north, west and east sides and a
+## gate in the middle of the south side. The yard inside stays bare sand (to
+## farm, dig or build in).
+static func _compound(n: int) -> Array:
+	var out: Array = []
+	for z in n:
+		for x in n:
+			if x == 0 or z == 0 or x == n - 1 or z == n - 1:
+				out.append(_e("foundation", "cell", x, z))
+	var mid := int(n / 2)
+	for x in n:
+		out.append(_e("slit_wall" if x == mid else "wall", "edge", x, 0, 0))
+		out.append(_e("doorway" if x == mid else "wall", "edge", x, n, 0))
+	for z in n:
+		out.append(_e("slit_wall" if z == mid else "wall", "edge", 0, z, 1))
+		out.append(_e("slit_wall" if z == mid else "wall", "edge", n, z, 1))
+	return out
+
+
+## A squat 3 × 3 strongpoint round a well: foundations on the eight outer
+## squares, the middle one left as sand for the well shaft (dig it 3.5 m deep
+## with the pickaxe, the well goes up last). Gun slits in the middle of three
+## sides, a metal door in the fourth, and a roof over everything.
+static func _bunker() -> Array:
+	var out: Array = []
+	for z in 3:
+		for x in 3:
+			if x != 1 or z != 1:
+				out.append(_e("foundation", "cell", x, z))
+	for x in 3:
+		out.append(_e("slit_wall" if x == 1 else "wall", "edge", x, 0, 0))
+		out.append(_e("metal_door" if x == 1 else "wall", "edge", x, 3, 0))
+	for z in 3:
+		out.append(_e("slit_wall" if z == 1 else "wall", "edge", 0, z, 1))
+		out.append(_e("slit_wall" if z == 1 else "wall", "edge", 3, z, 1))
+	for z in 3:
+		for x in 3:
+			if x != 1 or z != 1:
+				out.append(_e("roof", "cell", x, z, 0, 1))
+	out.append(_e("roof", "cell", 1, 1, 0, 1))
+	out.append(_e("well", "obj", 1, 1))
 	return out
 
 

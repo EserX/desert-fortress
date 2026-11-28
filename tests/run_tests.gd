@@ -2352,6 +2352,94 @@ func _test_blueprint_tiers() -> void:
 	player.stamina = player.STAMINA_MAX
 
 
+## v2.5: the walled compound and the bunker with a well.
+func _test_compound_bunker() -> void:
+	var b = main.building
+	var bm = main.build_mode
+	var inv = main.inventory
+	var player = main.player
+	var t = main.terrain
+	var Prefabs = load("res://scripts/prefabs.gd")
+	t.load_data({})
+	b.load_data([])
+	b.sites_load_data([])
+	inv.load_data({})
+	check(Prefabs.ORDER.has("compound") and Prefabs.ORDER.has("bunker"), "the compound and the bunker are in the list")
+	# The compound: 16 foundations round an open 3 x 3 yard, 20 walls with a gate.
+	var ce: Array = Prefabs.entries("compound")
+	var count := func(list: Array, type: String) -> int: return list.filter(func(e): return e.type == type).size()
+	check(count.call(ce, "foundation") == 16 and count.call(ce, "doorway") == 1 and count.call(ce, "slit_wall") == 3 and count.call(ce, "wall") == 16, "a compound is 16 foundations, 16 walls, 3 gun slits and a gate")
+	check(not ce.any(func(e): return e.type == "foundation" and e.cx in [1, 2, 3] and e.cz in [1, 2, 3]), "its yard is left open")
+	var cev: Dictionary = bm.evaluate_prefab("compound", -5, -11, 0)
+	check(cev.ok, "a compound fits in the base (%s)" % cev.reason)
+	if cev.ok:
+		var cid: int = b.add_site("compound", cev.plan, cev.y)
+		inv.add_all(b.site_cost(cid))
+		player.position = Vector3(-14, t.surface_height(-14, -16), -16)
+		var n := 0
+		for i in 60:
+			player.stamina = player.STAMINA_MAX
+			if not b.sites.has(cid) or main.build_site_step(cid) == "":
+				break
+			n += 1
+		check(not b.sites.has(cid) and n == ce.size(), "the compound goes up in full (%d of %d)" % [n, ce.size()])
+		var standing: Array = b.keys_of(["wall", "slit_wall", "doorway"])
+		check(standing.size() == 20 and standing.all(func(k): return b.support.get(k, 0.0) >= b.MIN_SUPPORT), "all 20 of its walls stand (%d)" % standing.size())
+		check(inv.weight() < 0.01, "it used up exactly its price")
+	b.load_data([])
+	t.load_data({})
+	inv.load_data({})
+	# The bunker: everything but the well goes up; the well waits for its shaft.
+	var be: Array = Prefabs.entries("bunker")
+	check(be.back().type == "well" and be.back().cx == 1 and be.back().cz == 1 and count.call(be, "foundation") == 8 and count.call(be, "metal_door") == 1 and count.call(be, "roof") == 9, "a bunker is 8 foundations round a well, a metal door and a full roof")
+	var at := Vector2i(7, -3)  # clear of earlier tests' pieces (their bodies go at the end of the frame)
+	var bev: Dictionary = bm.evaluate_prefab("bunker", at.x, at.y, 0)
+	check(bev.ok, "a bunker fits in the base (%s)" % bev.reason)
+	if not bev.ok:
+		return
+	var bid: int = b.add_site("bunker", bev.plan, bev.y)
+	inv.add_all(b.site_cost(bid))
+	check(b.site_cost(bid).get("stone", 0) == 8, "its price includes the well's stone")
+	player.position = Vector3(12, t.surface_height(12, -8), -8)
+	var m := 0
+	for i in 60:
+		player.stamina = player.STAMINA_MAX
+		if not b.sites.has(bid) or main.build_site_step(bid) == "":
+			break
+		m += 1
+	check(m == be.size() - 1 and b.sites.has(bid) and b.sites[bid].todo.size() == 1, "all but the well goes up (%d of %d)" % [m, be.size()])
+	check(b.site_prompt(bid, main._cost_text).contains("Dig a pit at least 3.5 m"), "the blueprint says to dig the shaft: " + b.site_prompt(bid, main._cost_text))
+	# Dig the shaft in the middle square from inside, then the well goes up.
+	var mid := Vector2((at.x + 1) * b.CELL + b.CELL * 0.5, (at.y + 1) * b.CELL + b.CELL * 0.5)
+	var left: Dictionary = b.site_cost(bid)
+	check(inv.count_of("wood") == left.get("wood", 0) and inv.count_of("stone") == left.get("stone", 0) and inv.count_of("nails") == 0, "only the well's materials are left in your pockets")
+	inv.load_data({})
+	for i in 20:
+		player.stamina = player.STAMINA_MAX
+		main.dig_at(Vector3(mid.x + 0.5, 0, mid.y + 0.5), false, "pickaxe")
+	inv.load_data({})
+	inv.add_all(left)
+	check(t.depth_at(mid.x, mid.y) >= b.WELL_DEPTH - 0.001, "a shaft dug in the middle (%.2f m)" % t.depth_at(mid.x, mid.y))
+	check(b.keys_of(["foundation"]).size() == 8 and b.keys_of(["roof"]).size() == 9, "digging it doesn't bring the bunker down")
+	player.stamina = player.STAMINA_MAX
+	var wk: String = main.build_site_step(bid)
+	check(wk != "" and b.pieces[wk].type == "well" and not b.sites.has(bid), "then E puts the well up and the bunker is done")
+	check(inv.weight() < 0.01, "it used up exactly its price")
+	# Saved like any other blueprint.
+	var ev2: Dictionary = bm.evaluate_prefab("bunker", 4, 4, 1)
+	var s2: int = b.add_site("bunker", ev2.plan, ev2.y)
+	var data: Dictionary = JSON.parse_string(JSON.stringify(main.collect_save_data()))
+	b.sites_load_data([])
+	main.apply_save_data(data)
+	check(b.sites.size() == 1 and b.sites.values()[0].prefab == "bunker" and b.sites.values()[0].todo.size() == be.size(), "a bunker blueprint is saved and loaded")
+	b.remove_site(s2)
+	b.sites_load_data([])
+	b.load_data([])
+	t.load_data({})
+	inv.load_data({})
+	player.stamina = player.STAMINA_MAX
+
+
 ## v1.9: free turning, ready-made buildings (blueprints) and the horde button.
 func _test_building_v19() -> void:
 	var b = main.building
@@ -3108,6 +3196,7 @@ func _process(_delta: float) -> bool:
 			_test_wiring()
 			_test_building_v19()
 			_test_blueprint_tiers()
+			_test_compound_bunker()
 			_test_resources()
 			_test_water()
 			_test_farming()

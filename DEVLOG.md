@@ -2,6 +2,21 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v2.5.0 (2026-11-28): Walled compound and bunker with a well
+No player feedback was waiting, so this run took the next building idea: two more ready-made buildings (build mode, T).
+- **Walled compound (5×5):** a ring of 16 foundations with walls round the outside, a gun slit wall in the middle of the north, west and east sides and a gate in the middle of the south side. The 3×3 yard inside (6 m across) stays bare sand, to farm, dig or build in. 36 pieces, 125 wood and 125 nails in wood; G picks its material like any other blueprint.
+- **Bunker with a well (3×3):** foundations on the eight outer squares, gun slits in the middle of three sides, a **metal door** in the fourth, and a roof over all nine squares. The middle square is left as sand: everything else goes up with E, then the prompt says "Dig a pit at least 3.5 m deep here first (pickaxe)". Dig the shaft from inside (the roof doesn't get in the way of the pickaxe) and E puts the **water well** up as the last piece. If you dig the shaft first, the well just goes up in order.
+- **Decisions:**
+  - Both are plain lists of existing pieces in prefabs.gd (`_compound`, `_bunker`); no new piece types, no new building code, so blueprints, materials, turning, paying from chests and saving all work as before.
+  - The compound gets foundations under its whole ring (not only at the corners) so the "ground too uneven" check covers every wall and the walls stand level.
+  - The bunker's well comes last and waits for its shaft instead of the blueprint refusing to be laid: you can lay the bunker, build it and dig in shelter. The well keeps its own stone look whatever material you pick (it is a fixed piece), and so does the metal door.
+- No save changes (blueprints already save their prefab name).
+- **Tests (18 new):** the compound's makeup and open yard, it going up in full with all 20 walls standing and using exactly its price; the bunker's makeup, all but the well going up, the prompt asking for the shaft, digging the shaft not bringing anything down, the well then finishing it, and a bunker blueprint being saved and loaded.
+- New screenshot view `83_compound_bunker` (both from above; the roof square over the well is left off so it shows).
+
+**Try:** press B, then T, and roll the wheel to "Walled compound" or "Bunker with a well". Lay a bunker, put wood, nails, scrap and 8 stone in a chest next to it and hold E. When it stops, take the pickaxe inside and dig the middle square down (about 14 digs), then press E at the blueprint for the well.
+**Next:** the last building idea: a blueprint menu with pictures (pick ready-made buildings from a list instead of the mouse wheel).
+
 ## v2.4.1 (2026-11-28): Thrown stones always hurt
 Player feedback first: the v2.4 run noted that the test "a thrown stone hits a walker" failed now and then. It was a real bug in play, not just a test hiccup.
 - **What was wrong:** about one full-speed stone in fourteen hit a mutant and did no harm. When a fast stone would cross a mutant's body within one physics step, Godot's continuous collision moves it up to the body and **cuts its speed** so it touches softly on the next step. The touch is only reported on that next step, and by then the speed the game had noted for the stone was under the 5 m/s a stone needs to hurt. So the stone bumped off the mutant at walking pace and fell at its feet. It never passed *through* a mutant: it always stopped on the body (0.42 m from its middle, the capsule's edge plus half a stone).

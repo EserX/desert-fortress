@@ -90,6 +90,7 @@ var shots := [
 	{"name": "80_sandstorm", "pos": Vector3(0, 0, 9), "yaw": -PI * 0.5, "pitch": -0.02, "hour": 12.0, "event": "storm"},
 	{"name": "81_behemoth", "pos": Vector3(0, 0, 9), "yaw": -PI * 0.5, "pitch": 0.1, "hour": 17.6, "event": "boss"},
 	{"name": "82_blueprint_tiers", "pos": Vector3(6, 0, 16), "yaw": 0.25, "pitch": -0.1, "hour": 16.5, "prefab_tiers": true},
+	{"name": "83_compound_bunker", "pos": Vector3(2, 0, -1), "yaw": 0.0, "pitch": -0.6, "hour": 15.5, "compound": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -362,6 +363,8 @@ func _process(_d: float) -> bool:
 				bm.toggle_prefabs()
 			bm.select(0)  # shelter
 			bm.prefab_tier = 2
+		elif s.get("compound", false):
+			_compound_sample(p)
 		elif s.get("zone", false):
 			main.build_mode.active = true
 			main.build_mode.select(10)
@@ -826,6 +829,43 @@ func _prefabs_sample(half_only := false, tiers := false) -> void:
 			var key: String = b.build_site_piece(id, nxt)
 			while key != "" and b.pieces[key].tier < b.tier_for(nxt.type, tier) and b.upgrade_problem(key) == "":
 				b.upgrade(key)
+
+
+## v2.5: a walled compound and a bunker round its well (the roof square over
+## the well left off so it shows), seen from above.
+func _compound_sample(p: Node3D) -> void:
+	var b = main.building
+	var bm = main.build_mode
+	main.terrain.load_data({})
+	main.mutants.clear()
+	b.load_data([])
+	b.sites_load_data([])
+	if bm.active:
+		bm.toggle()
+	for sp in [["compound", Vector2i(-5, -11)], ["bunker", Vector2i(1, -9)]]:
+		var ev: Dictionary = bm.evaluate_prefab(sp[0], sp[1].x, sp[1].y, 0)
+		if not ev.ok:
+			print("prefab ", sp[0], " does not fit: ", ev.reason)
+			continue
+		if sp[0] == "bunker":
+			var mid := Vector2((sp[1].x + 1) * b.CELL + b.CELL * 0.5, (sp[1].y + 1) * b.CELL + b.CELL * 0.5)
+			for i in 20:
+				main.terrain.dig(mid.x + 0.5, mid.y + 0.5)
+		var id: int = b.add_site(sp[0], ev.plan, ev.y, 2 if sp[0] == "bunker" else 0)
+		for i in 60:
+			if not b.sites.has(id):
+				break
+			var nxt: Dictionary = b.site_next(id)
+			if not nxt.has("i"):
+				print("prefab ", sp[0], " stuck: ", nxt.reason)
+				break
+			var key: String = b.build_site_piece(id, nxt)
+			while key != "" and b.pieces[key].tier < b.tier_for(nxt.type, b.site_tier(id)) and b.upgrade_problem(key) == "":
+				b.upgrade(key)
+			if nxt.type == "roof" and nxt.slot.cx == sp[1].x + 1 and nxt.slot.cz == sp[1].y + 1:
+				b.remove(key, false)
+	main.inventory.selected = 8  # empty hands
+	p.position.y += 9.0
 
 
 ## v1.11: a generator powering a sawmill, a rock crusher and a nail press by

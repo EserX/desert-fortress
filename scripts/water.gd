@@ -222,6 +222,16 @@ func fill_can() -> float:
 	return n
 
 
+## Takes up to `litres` from the store (the water purifier, v2.8). Returns litres taken.
+func drain(litres: float) -> float:
+	var n := clampf(litres, 0.0, store)
+	if n <= 0.0:
+		return 0.0
+	store -= n
+	_set_level()
+	return n
+
+
 func well_prompt(has_can: bool) -> String:
 	var text := "Main well: %d / %d litres (topped up every morning)" % [int(store), int(capacity)]
 	if not has_can:

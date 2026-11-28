@@ -70,6 +70,7 @@ const ITEMS := {
 	"olives": {"name": "Olives", "weight": 0.1, "stack": 40},
 	"prickly_pear": {"name": "Prickly pears", "weight": 0.3, "stack": 20},
 	"kit_dew": {"name": "Dew collector (crate)", "weight": 8.0, "stack": 1},
+	"kit_purifier": {"name": "Water purifier (crate)", "weight": 10.0, "stack": 1},
 	"kit_weather": {"name": "Weather station (crate)", "weight": 14.0, "stack": 1},
 	# v2.0 throwables (a stone can be thrown too).
 	"molotov": {"name": "Molotov", "weight": 0.8, "stack": 5},

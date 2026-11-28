@@ -3314,6 +3314,7 @@ func _process(_delta: float) -> bool:
 			_test_survival_depth()
 			_test_crafting_chain()
 			_test_chest_feed()
+			_test_purifier()
 			_test_events()
 			_start_shelter()
 		4280:
@@ -4437,7 +4438,7 @@ func _test_goals() -> void:
 	for i in sh.DRONE.size():
 		if int(sh.DRONE[i].get("goal", 0)) > 0:
 			locked.append(i)
-	check(locked.size() == 4 and locked.all(func(i): return not sh.order_unlocked(i)), "4 drone orders wait for milestones")
+	check(locked.size() == 5 and locked.all(func(i): return not sh.order_unlocked(i)), "5 drone orders wait for milestones")
 	sh.cash = 5000
 	check(not sh.can_order(locked[0]), "a locked order can't be bought, cash or not")
 	main.shop_ui.refresh()
@@ -4454,7 +4455,7 @@ func _test_goals() -> void:
 	check(banners.size() == 1, "a milestone is announced once")
 	_green_squares(w, int(ceil(land * 0.05)) + 1)
 	g.check()
-	check(g.reached == 3 and banners.size() == 3 and sh.order_unlocked(locked[3]), "5%%: the dew collector and the weather station (%d banners)" % banners.size())
+	check(g.reached == 3 and banners.size() == 3 and sh.order_unlocked(locked[3]) and sh.order_unlocked(locked[4]), "5%%: the dew collector, the water purifier and the weather station (%d banners)" % banners.size())
 	check(ended[0] == 0 and not we.rain_back, "no ending yet")
 	var lines: Array = g.summary_lines()
 	check(lines.size() == G.GOALS.size() and lines[2].begins_with("[x]") and lines[3].begins_with("[ ]"), "the map lists them: " + " | ".join(lines))
@@ -5030,6 +5031,97 @@ func _test_chest_feed() -> void:
 	check(ChestFeed.chest_for(b, saw) == "" and ChestFeed.feed(b, saw).is_empty(), "with the chest gone, nothing is fed")
 	b.load_data([])
 	inv.load_data({})
+	main.day_night.restore(day, 10.0)
+
+
+## v2.8: the water purifier filters main-well water (or a can's) into bottles.
+func _test_purifier() -> void:
+	var Purifier = load("res://scripts/purifier.gd")
+	var b = main.building
+	var inv = main.inventory
+	var w = main.water
+	var sh = main.shop
+	b.load_data([])
+	inv.load_data({})
+	var day: int = main.day_night.day
+	main.day_night.restore(day, 10.0)
+	var old_store: float = w.store
+	var old_can: float = w.can
+	w.store = w.capacity
+	# Bought by drone with the dew collector, and in the test box.
+	var oi := -1
+	for i in sh.DRONE.size():
+		if sh.DRONE[i].items.has("kit_purifier"):
+			oi = i
+	check(oi >= 0 and int(sh.DRONE[oi].get("goal", 0)) == 2, "the water purifier is a drone order unlocked at 2.5% green")
+	check(main.test_items().has("kit_purifier") and b.PIECES.purifier.cost.has("kit_purifier"), "its crate builds it and is in the test box")
+	var ps := {"kind": "obj", "cx": 3, "cz": -2, "dir": 0, "level": 0}
+	var ev: Dictionary = b.evaluate("purifier", ps)
+	check(ev.ok, "a purifier can stand by the main well (%s)" % ev.get("reason", ""))
+	var pk: String = b.place("purifier", ps, ev.y)
+	var pur: Dictionary = b.pieces[pk]
+	check(Purifier.near_well(pur), "it is close enough to draw from the main well")
+	# Without power it still fills its tank from the well, but makes nothing.
+	var before: float = w.store
+	main.power.tick(0.25)
+	check(pur.input == b.MACHINE_IN_MAX and is_equal_approx(w.store, before - b.MACHINE_IN_MAX) and pur.output == 0, "with no power it fills its %d L tank from the well (%d L, the well %d L)" % [b.MACHINE_IN_MAX, pur.input, int(w.store)])
+	check(main._prompt_for("machine:" + pk).contains("no power") and main._prompt_for("machine:" + pk).contains("drawing from the main well"), "its prompt says so: " + main._prompt_for("machine:" + pk).replace("\n", " / "))
+	check(w.drawn_today() >= b.MACHINE_IN_MAX - 0.01, "what it draws counts as water taken from the well today")
+	# With power: 2 L a bottle every 12 s, the tank topped up as it goes.
+	var gs := {"kind": "obj", "cx": 5, "cz": -1, "dir": 0, "level": 0}
+	var gk: String = b.place("generator", gs, b.evaluate("generator", gs).y)
+	b.pieces[gk].fuel = 3.0
+	b.connect_cable(gk, pk)
+	before = w.store
+	for i in 4 * 36 + 1:
+		main.power.tick(0.25)
+	check(pur.output == 3 and pur.input == b.MACHINE_IN_MAX, "powered, it makes a bottle every 12 s (%d in 36 s) and keeps its tank full (%d L)" % [pur.output, pur.input])
+	check(is_equal_approx(w.store, before - 6.0), "the 6 L those took came out of the main well (%.1f L less)" % (before - w.store))
+	check(main._prompt_for("machine:" + pk).contains("running") and main._prompt_for("machine:" + pk).contains("[E] Take the water bottles"), "running, bottles to take: " + main._prompt_for("machine:" + pk).replace("\n", " / "))
+	var got: Array = main.use_machine(pk)
+	check(got[1] == 3 and inv.count_of("water") == 3 and pur.output == 0, "E takes the bottles (%s)" % str(got))
+	# A dry well: the tank runs down and nothing more comes.
+	w.store = 0.0
+	pur.input = 3
+	for i in 4 * 30:
+		main.power.tick(0.25)
+	check(pur.output == 1 and pur.input == 1 and w.store == 0.0, "with the well dry it uses what's left in the tank and stops (%d L, %d made)" % [pur.input, pur.output])
+	check(main._prompt_for("machine:" + pk).contains("waiting for water"), "and says it's waiting for water")
+	# A chest next to it takes the bottles.
+	var cs := {"kind": "obj", "cx": 4, "cz": -2, "dir": 0, "level": 0}
+	var ck: String = b.place("chest", cs, b.evaluate("chest", cs).y)
+	main.power.tick(0.25)
+	check(ck != "" and b.storage_of(ck).count_of("water") == 1 and pur.output == 0, "a chest next to it gets the bottles")
+	# Saved and loaded with the game's pieces.
+	pur.input = 17
+	pur.output = 4
+	var saved: Dictionary = b.piece_data(pk)
+	b.remove(pk, false)
+	b.remove(ck, false)
+	var rk: String = b.restore_piece(saved)
+	check(rk != "" and b.pieces[rk].type == "purifier" and b.pieces[rk].input == 17 and b.pieces[rk].output == 4, "a purifier's tank and bottles are saved")
+	b.remove(rk, false)
+	# Far from the well: fill it from a watering can.
+	var fs := {"kind": "obj", "cx": -9, "cz": 9, "dir": 0, "level": 0}
+	var fk: String = b.place("purifier", fs, b.evaluate("purifier", fs).y)
+	var far: Dictionary = b.pieces[fk]
+	w.store = w.capacity
+	main.power.tick(0.25)
+	check(not Purifier.near_well(far) and far.input == 0, "one far from the main well draws nothing")
+	check(main._prompt_for("machine:" + fk).contains("within %d m of the main well" % int(Purifier.REACH)), "and its prompt says how to fill it: " + main._prompt_for("machine:" + fk).replace("\n", " / "))
+	inv.add("watering_can", 1)
+	w.can = 10.0
+	check(main._prompt_for("machine:" + fk).contains("[E] Pour in the watering can (10 L)"), "with a full can the prompt offers to pour it in")
+	got = main.use_machine(fk)
+	check(got[0] == 10 and far.input == 10 and w.can < 0.01, "E pours the can into its tank (%s, can %.1f L)" % [str(got), w.can])
+	far.input = 25
+	w.can = 10.0
+	got = main.use_machine(fk)
+	check(got[0] == 5 and far.input == b.MACHINE_IN_MAX and is_equal_approx(w.can, 5.0), "only as much as the tank takes (%d L, %.1f left in the can)" % [got[0], w.can])
+	b.load_data([])
+	inv.load_data({})
+	w.store = old_store
+	w.can = old_can
 	main.day_night.restore(day, 10.0)
 
 

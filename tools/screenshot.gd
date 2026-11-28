@@ -93,6 +93,7 @@ var shots := [
 	{"name": "83_compound_bunker", "pos": Vector3(2, 0, -1), "yaw": 0.0, "pitch": -0.6, "hour": 15.5, "compound": true},
 	{"name": "84_blueprint_menu", "pos": Vector3(6, 0, 16), "yaw": 0.25, "pitch": -0.1, "hour": 16.5, "bpmenu": true},
 	{"name": "85_chest_feed", "pos": Vector3(-8, 0, 12.5), "yaw": 0.1, "pitch": -0.3, "hour": 14.0, "machines": true, "feed": true},
+	{"name": "86_purifier", "pos": Vector3(5, 0, 2), "yaw": 0.0, "pitch": -0.3, "hour": 14.0, "purifier": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -209,6 +210,8 @@ func _process(_d: float) -> bool:
 			main.inventory.selected = 0
 		if s.get("machines", false):
 			_machines_sample(p if s.get("feed", false) else null)
+		if s.get("purifier", false):
+			_purifier_sample(p)
 		if s.get("blast", false):
 			_blast_sample(p)
 		if s.get("greening", false):
@@ -1114,6 +1117,40 @@ func _machines_sample(feeder: Node3D = null) -> void:
 		var d: Vector3 = saw.global_position - at
 		feeder.rotation.y = atan2(-d.x, -d.z)
 		feeder.head.rotation.x = -0.6
+	main.power.tick(0.25)
+
+
+## v2.8: a water purifier by the main well, cabled to a generator, a chest beside it.
+func _purifier_sample(p: Node3D) -> void:
+	var b = main.building
+	main.terrain.load_data({})
+	main.mutants.clear()
+	b.load_data([])
+	b.sites_load_data([])
+	main.water.store = main.water.capacity
+	var put := func(t: String, cx: int, cz: int, d := 0) -> String:
+		var sl := {"kind": "obj", "cx": cx, "cz": cz, "dir": d, "level": 0}
+		var ev: Dictionary = b.evaluate(t, sl)
+		return b.place(t, sl, ev.y) if ev.ok else ""
+	var pk: String = put.call("purifier", 3, -2, 2)
+	var g: String = put.call("generator", 4, -1)
+	var ck: String = put.call("chest", 4, -2)
+	if pk == "":
+		push_warning("screenshot: no room for the purifier")
+		return
+	if g != "":
+		b.pieces[g].fuel = 5.0
+		b.connect_cable(g, pk)
+	if ck != "":
+		b.storage_of(ck).add("water", 6)
+	b.pieces[pk].output = 2
+	main.inventory.load_data({})
+	var at: Vector3 = b.pieces[pk].node.global_position + Vector3(-1.6, 0, 3.6)
+	at.y = main.terrain.surface_height(at.x, at.z)
+	p.position = at
+	var d: Vector3 = b.pieces[pk].node.global_position - at
+	p.rotation.y = atan2(-d.x, -d.z)
+	p.head.rotation.x = -0.4
 	main.power.tick(0.25)
 
 

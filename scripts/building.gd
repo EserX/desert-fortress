@@ -34,7 +34,7 @@ const CHEST_SLOTS := 20      # before upgrades
 ## Power: cables (laid with cable from a reel) join wired pieces; power flows from
 ## running generators along them, through switches that are on. Pieces within
 ## PLUG_RANGE of a running generator are plugged straight into it.
-const WIRED := ["generator", "switch", "floodlight", "electric_fence", "turret", "sawmill", "crusher", "nail_press"]
+const WIRED := ["generator", "switch", "floodlight", "electric_fence", "turret", "sawmill", "crusher", "nail_press", "purifier"]
 ## Machines (bought by drone, run on power): E loads what they take from your
 ## pockets and takes what they made. Every `secs` seconds with power they turn
 ## `need` of `in` into `make` of `out`.
@@ -42,6 +42,8 @@ const MACHINES := {
 	"sawmill": {"in": "log", "need": 1, "out": "wood", "make": 5, "secs": 6.0},
 	"crusher": {"in": "stone", "need": 3, "out": "cement", "make": 1, "secs": 15.0},
 	"nail_press": {"in": "scrap", "need": 1, "out": "nails", "make": 8, "secs": 8.0},
+	# v2.8: litres of well water in its tank, not an item (see purifier.gd).
+	"purifier": {"in": "litre", "need": 2, "out": "water", "make": 1, "secs": 12.0},
 }
 const MACHINE_IN_MAX := 30   # items a machine's hopper takes
 const MACHINE_OUT_MAX := 60  # items it holds before it stops
@@ -115,6 +117,7 @@ const PIECES := {
 	"sawmill": {"name": "Sawmill", "slot": "obj", "cost": {"kit_sawmill": 1}, "dirs": 4, "fixed": true, "pickup": true},
 	"crusher": {"name": "Rock crusher", "slot": "obj", "cost": {"kit_crusher": 1}, "dirs": 4, "fixed": true, "pickup": true},
 	"nail_press": {"name": "Nail press", "slot": "obj", "cost": {"kit_press": 1}, "dirs": 4, "fixed": true, "pickup": true},
+	"purifier": {"name": "Water purifier", "slot": "obj", "cost": {"kit_purifier": 1}, "dirs": 4, "fixed": true, "pickup": true},
 	"sprinkler": {"name": "Sprinkler", "slot": "obj", "cost": {"scrap": 3, "nails": 2}, "dirs": 1, "fixed": true},
 	"dew_collector": {"name": "Dew collector", "slot": "obj", "cost": {"kit_dew": 1}, "dirs": 4, "fixed": true, "pickup": true},
 	"weather_station": {"name": "Weather station", "slot": "obj", "cost": {"kit_weather": 1}, "dirs": 4, "fixed": true, "pickup": true},
@@ -124,7 +127,7 @@ const PIECES := {
 	"glass_window": {"name": "Brick wall with glass window", "slot": "edge", "cost": {"brick": 9, "glass_pane": 1, "clay": 2}, "dirs": 2, "fixed": true, "hp": 1000.0, "repair": "brick"},
 	"spiked_pit": {"name": "Spiked pit", "slot": "obj", "cost": {"wood": 4, "nails": 6}, "dirs": 1, "fixed": true, "trap": true, "steep_ok": true, "pit": PIT_DEPTH},
 }
-const ORDER := ["foundation", "wall", "doorway", "window", "floor", "stairs", "ramp", "roof", "chest", "workbench", "spikes", "spike_strip", "barbed_wire", "landmine", "fire_pit", "generator", "electric_fence", "floodlight", "turret", "landing_pad", "sandbags", "ladder", "spiked_pit", "well", "half_wall", "low_wall", "slit_wall", "pillar", "trapdoor", "tri_foundation", "tri_roof", "metal_door", "switch", "log_stakes", "sawmill", "crusher", "nail_press", "sprinkler", "dew_collector", "weather_station", "furnace", "brick_wall", "glass_window"]
+const ORDER := ["foundation", "wall", "doorway", "window", "floor", "stairs", "ramp", "roof", "chest", "workbench", "spikes", "spike_strip", "barbed_wire", "landmine", "fire_pit", "generator", "electric_fence", "floodlight", "turret", "landing_pad", "sandbags", "ladder", "spiked_pit", "well", "half_wall", "low_wall", "slit_wall", "pillar", "trapdoor", "tri_foundation", "tri_roof", "metal_door", "switch", "log_stakes", "sawmill", "crusher", "nail_press", "sprinkler", "dew_collector", "weather_station", "furnace", "brick_wall", "glass_window", "purifier"]
 ## Pieces marked "blueprint" must be unlocked first (blueprints come by drone).
 const TURRET_RANGE := 22.0
 const TURRET_AMMO := 240     # 9mm rounds its ammo box holds
@@ -156,7 +159,7 @@ const PILLAR_T := 0.3
 const HATCH := 1.0    # trapdoor opening, on the north side of its square
 ## Objects that turn freely in TURN_STEP steps (Z / X in build mode), not just
 ## the four grid ways: slot "turn" holds the extra steps (0..5) past "dir".
-const FREE_TURN := ["chest", "workbench", "spikes", "spike_strip", "barbed_wire", "landmine", "fire_pit", "generator", "floodlight", "turret", "switch", "log_stakes", "sawmill", "crusher", "nail_press", "furnace"]
+const FREE_TURN := ["chest", "workbench", "spikes", "spike_strip", "barbed_wire", "landmine", "fire_pit", "generator", "floodlight", "turret", "switch", "log_stakes", "sawmill", "crusher", "nail_press", "furnace", "purifier"]
 const TURN_STEP := PI / 12.0
 ## Blueprints of ready-made buildings (see prefabs.gd) sit on interact layer 2.
 const SITE_LAYER := 2
@@ -670,6 +673,18 @@ static func piece_boxes(type: String) -> Array:
 			out.append([Vector3(0.7, 0.25, 0.5), Vector3(0, 1.75, -0.1), "metal"])      # head
 			out.append([Vector3(0.4, 0.15, 0.4), Vector3(0, 0.88, 0.1), "rust"])        # die
 			out.append([Vector3(0.06, 0.08, 0.02), Vector3(0.3, 0.6, 0.41), "lamp"])
+		"purifier":
+			# A blue tank on a stand, two filter columns, a pump and a tap over a tray.
+			out.append([Vector3(1.4, 0.3, 0.9), Vector3(0, 0.15, 0), "concrete_dark"])  # stand
+			out.append([Vector3(0.8, 0.9, 0.8), Vector3(-0.25, 0.75, 0), "water"])     # tank
+			out.append([Vector3(0.84, 0.06, 0.84), Vector3(-0.25, 1.22, 0), "metal"])   # lid
+			for z in [-0.22, 0.22]:
+				out.append([Vector3(0.22, 1.0, 0.22), Vector3(0.45, 0.8, z), "metal"])  # filters
+				out.append([Vector3(0.26, 0.06, 0.26), Vector3(0.45, 1.33, z), "rust"])
+			out.append([Vector3(0.3, 0.06, 0.06), Vector3(0.15, 1.15, 0), "metal"])     # pipe across
+			out.append([Vector3(0.06, 0.25, 0.06), Vector3(0.62, 0.62, 0.0), "metal"])  # tap
+			out.append([Vector3(0.3, 0.05, 0.3), Vector3(0.62, 0.33, 0.0), "rust"])     # tray
+			out.append([Vector3(0.06, 0.08, 0.02), Vector3(-0.25, 1.0, 0.41), "lamp"])
 		"spike_strip":
 			out.append([Vector3(1.8, 0.05, 0.5), Vector3(0, 0.03, 0), "wood_dark"])
 			for i in 8:
@@ -851,6 +866,8 @@ static func piece_colliders(type: String) -> Array:
 			return [[Vector3(1.5, 1.4, 1.3), Vector3(0, 0.7, 0.1), 0.0]]
 		"nail_press":
 			return [[Vector3(0.9, 1.9, 0.9), Vector3(0, 0.95, 0), 0.0]]
+		"purifier":
+			return [[Vector3(1.4, 1.4, 0.9), Vector3(0, 0.7, 0), 0.0]]
 		"barbed_wire":
 			return [[Vector3(1.8, 0.95, 0.5), Vector3(0, 0.47, 0), 0.0]]
 		"landmine":
@@ -1079,6 +1096,16 @@ func _add_rotor(rec: Dictionary) -> void:
 			c.top_radius = 0.3
 			c.bottom_radius = 0.3
 			c.height = 0.08
+			c.radial_segments = 8
+			mi.mesh = c
+		"purifier":
+			# The pump's flywheel on the side of the tank.
+			rotor.position = Vector3(-0.67, 0.6, 0)
+			rotor.rotation.z = PI * 0.5
+			var c := CylinderMesh.new()
+			c.top_radius = 0.18
+			c.bottom_radius = 0.18
+			c.height = 0.05
 			c.radial_segments = 8
 			mi.mesh = c
 		_:

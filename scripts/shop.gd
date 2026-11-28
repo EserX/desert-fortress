@@ -60,6 +60,7 @@ const DRONE := [
 	{"name": "2 olive saplings (fruit tree, hardy)", "price": 60, "items": {"seed_olive": 2}, "goal": 1},
 	{"name": "4 prickly pear pads (food, hardy)", "price": 30, "items": {"seed_prickly_pear": 4}, "goal": 1},
 	{"name": "Machine: Dew collector (waters 8 m)", "price": 120, "items": {"kit_dew": 1}, "goal": 2},
+	{"name": "Machine: Water purifier (well water to bottles)", "price": 160, "items": {"kit_purifier": 1}, "goal": 2},
 	{"name": "Machine: Weather station (rain)", "price": 400, "items": {"kit_weather": 1}, "goal": 3},
 ]
 ## Blueprint item -> the build piece it unlocks.

@@ -6,6 +6,7 @@ extends Node3D
 ## Fire pits burn down the wood put in them. Wells fill up with water.
 
 const ChestFeed = preload("res://scripts/chest_feed.gd")
+const Purifier = preload("res://scripts/purifier.gd")
 
 const TICK := 0.25
 const POWER_RANGE := 18.0    # the old wireless reach (older saves get cables for it)
@@ -16,6 +17,7 @@ var building  # Building
 var player: Node3D  # gates don't close on you
 var day_night  # DayNight
 var waves  # Waves
+var water  # Water: the main well a water purifier draws from (v2.8)
 var _t := 0.0
 var _hums := {}   # generator key -> AudioStreamPlayer3D
 var _hum: AudioStreamWAV
@@ -88,6 +90,8 @@ func tick(dt: float) -> void:
 					on = true
 					break
 		if building.MACHINES.has(rec.type):
+			if rec.type == "purifier":
+				Purifier.draw(building, water, rec)  # v2.8: tops its tank up from the main well
 			building.set_powered(rec, on)
 			rec.working = building.run_machine(rec, dt)
 			ChestFeed.feed(building, rec)  # v2.7: into a chest next to it

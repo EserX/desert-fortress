@@ -51,6 +51,7 @@ const Camp = preload("res://scripts/camp.gd")
 const Furnace = preload("res://scripts/furnace.gd")
 const Events = preload("res://scripts/events.gd")
 const Sledge = preload("res://scripts/sledge.gd")
+const Purifier = preload("res://scripts/purifier.gd")
 
 ## Testing aid (temporary): a green box by the spawn point that holds a full
 ## stack of every item and tops your cash up to $2000 each time you open it.
@@ -330,6 +331,7 @@ func _ready() -> void:
 	power.building = building
 	power.day_night = day_night
 	power.player = player
+	power.water = water
 	add_child(power)
 
 	waves = Waves.new()
@@ -930,10 +932,14 @@ func use_machine(key: String) -> Array:
 	if rec.is_empty():
 		return [0, 0]
 	var m: Dictionary = Building.MACHINES[rec.type]
-	var load_n := mini(inventory.count_of(m.in), Building.MACHINE_IN_MAX - int(rec.input))
-	if load_n > 0:
-		inventory.remove(m.in, load_n)
-		rec.input += load_n
+	var load_n := 0
+	if rec.type == "purifier":
+		load_n = Purifier.pour_can(building, water, rec) if inventory.count_of("watering_can") > 0 else 0
+	else:
+		load_n = mini(inventory.count_of(m.in), Building.MACHINE_IN_MAX - int(rec.input))
+		if load_n > 0:
+			inventory.remove(m.in, load_n)
+			rec.input += load_n
 	var take := int(rec.output)
 	if take > 0:
 		var over := inventory.add(m.out, take)
@@ -941,11 +947,12 @@ func use_machine(key: String) -> Array:
 		rec.output = over
 	var lines: Array = []
 	if load_n > 0:
-		lines.append("Loaded %d %s" % [load_n, Items.display_name(m.in).to_lower()])
+		lines.append("Poured %d L into the purifier" % load_n if rec.type == "purifier" else "Loaded %d %s" % [load_n, Items.display_name(m.in).to_lower()])
 	if take > 0:
 		lines.append("+%d %s" % [take, Items.display_name(m.out)])
 	if lines.is_empty():
-		hud.show_banner("Bring %s to feed it" % Items.display_name(m.in).to_lower() if int(rec.output) == 0 else "No room in your bag")
+		var bring := "Bring water in a watering can, or set it by the main well" if rec.type == "purifier" else "Bring %s to feed it" % Items.display_name(m.in).to_lower()
+		hud.show_banner(bring if int(rec.output) == 0 else "No room in your bag")
 	else:
 		hud.show_pickup(lines)
 	return [load_n, take]
@@ -1263,6 +1270,8 @@ func _prompt_for(id: String) -> String:
 		var mrec: Dictionary = building.pieces.get(mk, {})
 		if mrec.is_empty():
 			return ""
+		if mrec.type == "purifier":
+			return Purifier.prompt(building, water, mrec, inventory.count_of("watering_can") > 0)
 		return building.machine_prompt(mk, inventory.count_of(Building.MACHINES[mrec.type].in))
 	for prefix in ["gate:", "hatch:", "chest:", "bench:", "gen:", "fire:", "turret:", "well:", "switch:"]:
 		if id.begins_with(prefix):

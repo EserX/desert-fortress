@@ -84,7 +84,7 @@ func _ready() -> void:
 	for i in shop.DRONE.size():
 		var b := UI.button(dgrid, "", order.bind(i))
 		b.add_theme_font_size_override("font_size", 14)
-		b.custom_minimum_size = Vector2(244, 44)  # 8 rows must fit a 720 px window
+		b.custom_minimum_size = Vector2(244, 40)  # 9 rows must fit a 720 px window
 		drone_buttons.append(b)
 	var cat := ""
 	var grid: GridContainer

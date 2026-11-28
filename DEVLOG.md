@@ -2,6 +2,26 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v2.8.0 (2026-11-28): Water purifier
+No player feedback was waiting, so this run took the last resource idea: a water purifier.
+- **The water purifier** is a new machine, ordered by drone for $160 once the desert is **2.5% green** (the "Green belt" milestone, next to the dew collector). Like the sawmill it runs on generator power (cable it, or set it within 4 m of a generator) and has a spinning pump wheel and a lamp.
+- **2 L of water make a bottle of drinking water every 12 s.** Its tank holds 30 L.
+- **Filling the tank:** set it **within 6 m of the main well** and it tops its tank up from the well by itself. Anywhere else (an outpost, say), press **E with a watering can** to pour the can in; fill the can at a spring or the main well.
+- A storage chest on the square next to it takes the bottles (the v2.7 chest feed works for it as for the other machines).
+- **Decisions:**
+  - Water from the main well is the point of the machine: until now the main well's litres only went into the watering can and pipes, and drinking water came from dug wells, loot and the shop. Every litre the purifier takes is a litre that won't green the land today, and it counts in `drawn_today()`, so heavy use also draws the night's mutants a little more. A trade-off, not free water.
+  - Filling from the well needs no power (a float valve), but filtering does. That way a full tank counts as "work" and starts the generator by day like any loaded machine. At most it uses about 100 L a full day if the generator never stops.
+  - Water bottles can't be sold at the market, so the purifier can't be turned into a money machine.
+  - It's a normal entry in building.gd's `MACHINES` (power, cables, the spinning part, saving input and output, picking it up, the chest feed and starting the generator all work as before). Its tank counts litres, not an item, so the few places that differ (drawing from the well, pouring the can, the prompt) live in a new small script, `scripts/purifier.gd`. water.gd got a `drain(litres)` so the store is changed in one place. main.gd: +10 lines (the E action and the prompt).
+  - Its prompt says "waiting for water" before "no power" when the tank is empty, because a generator stops by day once nothing has work, and "no power" would send you looking for a broken cable.
+  - The drone page has 25 orders now (9 rows), so its buttons are 40 px tall to fit a 720 px window.
+- No save changes (a purifier saves its tank and bottles like any machine; no `SAVE_VERSION` bump).
+- **Tests (20 new, 1 changed):** the drone order and its milestone, the crate in the test box, standing by the main well, filling its tank from the well without power (and that counting as water drawn), a bottle every 12 s with power and the well paying for it, taking the bottles with E, a dry well, a chest taking the bottles, saving the tank and bottles, one far from the well drawing nothing and saying how to fill it, pouring in a watering can (only as much as fits). The goals test now counts 5 milestone orders.
+- New screenshot view `86_purifier` (a purifier by the main well, cabled to a generator, a chest next to it, its prompt).
+
+**Try:** take a water purifier crate from the green test box (or green 2.5% of the desert and order one), build it two or three squares from the main well, cable it to a generator with fuel, and put a chest next to it. Come back later for bottles of water; check the main well's litres dropping.
+**Next:** every roadmap item and idea is done. Without player feedback, the next runs will look for bugs and rough edges (soak test, a long play through) and write new ideas under Player feedback for the owner to pick from. Ideas: let a purifier at an outpost draw from its spring, a pipe from the main well to a purifier further away.
+
 ## v2.7.0 (2026-11-28): Machines feed a chest
 No player feedback was waiting and every scheduled item is done, so this run took one of the resource ideas: machines that fill a chest by themselves.
 - **Put a storage chest on a square next to a machine** (sawmill, rock crusher, nail press) **or a furnace**, on its sides or corners and on the same floor, and what it makes goes straight into that chest, four times a second. Load a sawmill with 30 logs, walk off, and come back to 150 wood in the chest.

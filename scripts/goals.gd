@@ -9,7 +9,7 @@ extends Node
 ## The green % each milestone needs, its name and what it gives. The last one is the ending.
 const GOALS := [
 	{"at": 1.0, "name": "First green", "text": "new seeds by drone: olive trees and prickly pears", "short": "olive and prickly pear seeds"},
-	{"at": 2.5, "name": "Green belt", "text": "a new machine by drone: the dew collector", "short": "the dew collector machine"},
+	{"at": 2.5, "name": "Green belt", "text": "new machines by drone: the dew collector and the water purifier", "short": "the dew collector and water purifier"},
 	{"at": 5.0, "name": "Clouds gather", "text": "the weather station by drone: it brings rain showers", "short": "the weather station (rain)"},
 	{"at": 10.0, "name": "The rain returns", "text": "rain falls over the whole desert again", "short": "rain over the whole desert"},
 ]

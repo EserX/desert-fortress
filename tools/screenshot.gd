@@ -102,6 +102,7 @@ var shots := [
 	{"name": "93_kin_rings", "pos": Vector3(13, 0, 12), "yaw": 0.35, "pitch": -0.5, "hour": 15.0, "ring": "sprinkler", "kin": true},
 	{"name": "92_hammer_reach", "pos": Vector3(8, 0, 5), "yaw": 0.0, "pitch": 0.0, "hour": 15.0, "hammer_ring": true},
 	{"name": "94_base_status", "pos": Vector3(-6, 0, 10), "yaw": 2.4, "pitch": -0.1, "hour": 11.0, "base_status": true},
+	{"name": "95_problem_map", "pos": Vector3(-6, 0, 10), "yaw": 2.4, "pitch": 0.0, "hour": 11.0, "base_status": true, "status_map": true, "zoom": 4.0},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -121,7 +122,9 @@ func _process(_d: float) -> bool:
 	if frame < 20:
 		return false
 	if idx >= shots.size():
-		quit(0)
+		if idx == shots.size():  # once: stop the sounds first, like the game does (no leaks at exit)
+			idx += 1
+			root.get_node("Game").quiet_then_quit(self, 0)
 		return false
 	var s: Dictionary = shots[idx]
 	var p: Node3D = main.player
@@ -353,6 +356,10 @@ func _process(_d: float) -> bool:
 			_hammer_ring_sample(p)
 		if s.get("base_status", false):
 			_base_status_sample()
+			if s.get("status_map", false):  # v2.9.3: the same base on the map, stuck ones marked
+				main.map_ui.zoom = s.get("zoom", 1.0)
+				if not main.map_ui.is_open():
+					main.map_ui.toggle()
 		elif main.base_status_ui.is_open():
 			main.base_status_ui.toggle()
 		if s.get("power", false):

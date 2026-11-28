@@ -3466,6 +3466,7 @@ func _process(_delta: float) -> bool:
 			_test_water_map()
 			_test_base_status()
 			_test_base_status_defences()
+			_test_problem_marks()
 			_test_events()
 			_start_shelter()
 		4280:
@@ -3604,6 +3605,54 @@ func _test_base_status() -> void:
 	b.load_data([])
 	inv.load_data({})
 	main.day_night.restore(day, 10.0)
+
+
+## v2.9.3: stuck pieces from the base status page get red marks on the map.
+func _test_problem_marks() -> void:
+	var BS = load("res://scripts/base_status.gd")
+	var b = main.building
+	b.load_data([])
+	main.mutants.clear()
+	var day: int = main.day_night.day
+	main.day_night.restore(day, 10.0)
+	var put := func(t: String, slot: Dictionary) -> String:
+		var ev: Dictionary = b.evaluate(t, slot)
+		return b.place(t, slot, ev.y) if ev.ok else ""
+	check(BS.problem_marks(BS.entries(b, main.water, main.oases)).is_empty(), "nothing built: no marks")
+	var tk: String = put.call("turret", {"kind": "obj", "cx": -9, "cz": 9, "dir": 0, "level": 0})
+	var gk: String = put.call("generator", {"kind": "obj", "cx": -7, "cz": 5, "dir": 0, "level": 0})
+	b.pieces[gk].fuel = 3.0
+	var f1: String = put.call("electric_fence", {"kind": "edge", "cx": -12, "cz": 3, "dir": 0, "level": 0})
+	var f2: String = put.call("electric_fence", {"kind": "edge", "cx": -13, "cz": 3, "dir": 0, "level": 0})
+	check(tk != "" and gk != "" and f1 != "" and f2 != "", "a turret, a generator and two fence pieces are built")
+	main.power.tick(0.25)
+	var marks: Array = BS.problem_marks(BS.entries(b, main.water, main.oases))
+	# Stuck: the empty turret and both uncabled fence pieces; the fuelled generator isn't.
+	check(marks.size() == 3, "three marks: the empty turret and both uncabled fence pieces (%d)" % marks.size())
+	var at := func(key: String) -> bool:
+		var p: Vector3 = b.pieces[key].node.global_position
+		return marks.any(func(m): return m.pos.distance_to(p) < 0.01)
+	check(at.call(tk) and at.call(f1) and at.call(f2) and not at.call(gk), "each mark stands on its piece, none on the generator")
+	var fence_marks: Array = marks.filter(func(m): return m.name.begins_with("Electric fence"))
+	check(fence_marks.size() == 2 and fence_marks.filter(func(m): return m.first).size() == 1, "the fence line's two marks name it once")
+	b.pieces[tk].ammo = b.TURRET_AMMO
+	check(b.connect_cable(gk, f1) and b.connect_cable(gk, f2), "cable the fence")
+	main.power.tick(0.25)
+	check(BS.problem_marks(BS.entries(b, main.water, main.oases)).is_empty(), "loaded and cabled: the marks go")
+	# The map works them out when it opens.
+	b.pieces[tk].ammo = 0
+	var ui = main.map_ui
+	if ui.is_open():
+		ui.toggle()
+	ui.toggle()
+	check(ui.is_open() and ui.problems.size() == 1 and ui.problems[0].name == "Auto-turret", "opening the map marks the empty turret (%d)" % ui.problems.size())
+	b.pieces[tk].ammo = 100
+	ui._process(0.3)
+	check(ui.problems.is_empty(), "and the mark goes within a quarter second of loading it")
+	ui.toggle()
+	b.load_data([])
+	main.day_night.restore(day, 10.0)
+	main.power.tick(0.25)
 
 
 ## v2.9.2: turrets, floodlights and electric fences on the base status page.

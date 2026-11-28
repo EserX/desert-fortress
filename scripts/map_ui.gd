@@ -17,6 +17,14 @@ const DRY := Color(0.5, 0.52, 0.56)    # ...without
 const OFF := Color(0.25, 0.25, 0.28)   # a sprinkler turned off
 const DEW := Color(0.1, 0.6, 0.55)     # dew collectors
 const FRAME := Color(0.12, 0.08, 0.05)  # round the map while zoomed in
+const PROBLEM := Color(0.95, 0.12, 0.08)  # v2.9.3: a stuck piece (base status)
+const BaseStatus = preload("res://scripts/base_status.gd")
+const PROBLEM_REFRESH := 0.25  # seconds between new marks while open (like the J page)
+
+## v2.9.3: where the stuck pieces are (base_status.problem_marks()), worked out
+## four times a second while the map is open.
+var problems: Array = []
+var _problem_t := 0.0
 
 
 func _ready() -> void:
@@ -46,11 +54,25 @@ func toggle() -> void:
 	_root.visible = not _root.visible
 	if _root.visible and main and main.get("base_status_ui") and main.base_status_ui.is_open():
 		main.base_status_ui.toggle()  # v2.9: one full-screen page at a time
+	if _root.visible:
+		refresh_problems()
 
 
-func _process(_d: float) -> void:
+func _process(d: float) -> void:
 	if is_open():
+		_problem_t -= d
+		if _problem_t <= 0.0:
+			refresh_problems()
 		_canvas.queue_redraw()
+
+
+## Works the red marks out again from the base status lines.
+func refresh_problems() -> void:
+	_problem_t = PROBLEM_REFRESH
+	if main == null or main.get("building") == null:
+		problems = []
+		return
+	problems = BaseStatus.problem_marks(BaseStatus.entries(main.building, main.water, main.oases))
 
 
 ## Mouse wheel while the map is open zooms in and out on the base (and doesn't
@@ -150,12 +172,14 @@ func _draw_map() -> void:
 	if main.waves and main.waves.active:
 		for m in main.waves.hunters():
 			_canvas.draw_circle(to_map(m.global_position), {"brute": 6.0, "behemoth": 8.0}.get(m.type, 4.0), Color(0.85, 0.1, 0.05))
+	_draw_problems(font)
 	# Zoomed in: cover what spills past the edge with the rim and a dark frame.
 	if zoom > 1.0:
 		var far := _canvas.size.length()
 		_canvas.draw_arc(c, RADIUS_PX + 8.0, 0.0, TAU, 96, MOUNTAIN, 16.0)
 		_canvas.draw_arc(c, RADIUS_PX + 16.0 + far * 0.5, 0.0, TAU, 96, FRAME, far + 2.0)
 	_canvas.draw_string(font, c + Vector2(-8, -RADIUS_PX - 22), "N", HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color(1, 0.95, 0.85))
+	_draw_problem_count(font)
 	# Player arrow.
 	var pp := to_map(main.player.global_position)
 	if pp.distance_to(c) > RADIUS_PX:  # zoomed in and you're off the edge: on the rim
@@ -166,7 +190,7 @@ func _draw_map() -> void:
 	_canvas.draw_colored_polygon(PackedVector2Array([pp + f * 12, pp - f * 7 + s * 7, pp - f * 3, pp - f * 7 - s * 7]), Color(0.1, 0.3, 0.9))
 	# Legend.
 	var y := 120.0
-	for line in ["MAP", "Brown block: wreck", "Grey corner: ruin", "Green dot: still has loot", "Green square: supply crate", "Blue: oasis (purple: nest)", "Red dots: tonight's wave", "Blue arrow: you", "Brown to green: your land", "Blue lines: water pipes", "Blue dots: sprinklers", "Blue squares: purifiers", "  (grey: no water, dark: off)", "Teal ring: dew collector", "Mouse wheel: zoom (x%d)" % int(zoom), "", "J: base status (machines, defences)", "M or Esc closes"]:
+	for line in ["MAP", "Brown block: wreck", "Grey corner: ruin", "Green dot: still has loot", "Green square: supply crate", "Blue: oasis (purple: nest)", "Red dots: tonight's wave", "Blue arrow: you", "Brown to green: your land", "Blue lines: water pipes", "Blue dots: sprinklers", "Blue squares: purifiers", "  (grey: no water, dark: off)", "Teal ring: dew collector", "Red !: stuck, needs you (J: why)", "Mouse wheel: zoom (x%d)" % int(zoom), "", "J: base status (machines, defences)", "M or Esc closes"]:
 		_canvas.draw_string(font, Vector2(30, y), line, HORIZONTAL_ALIGNMENT_LEFT, -1, 22 if line == "MAP" else 16, Color(1, 0.95, 0.85))
 		y += 26.0
 	_draw_livable(font)
@@ -213,6 +237,39 @@ func _draw_water() -> void:
 			_canvas.draw_rect(Rect2(ep - Vector2(3.5, 3.5), Vector2(7, 7)), col)
 		else:
 			_canvas.draw_circle(ep, 3.0, col)
+
+
+## v2.9.3: a red triangle with "!" at every stuck piece (base status), with
+## its name once zoomed in to x4 or more (a handful of marks, while open).
+## Marks past the edge of a zoomed map are drawn on the rim, like your arrow.
+func _draw_problems(font: Font) -> void:
+	if problems.is_empty():
+		return
+	var c := _canvas.size * 0.5
+	var r := radius_px()
+	for m in problems:
+		var p := to_map(m.pos)
+		var off := p.distance_to(c) > r
+		if off:
+			p = c + (p - c).normalized() * (r - 8.0)
+		var tri := PackedVector2Array([p + Vector2(0, -9), p + Vector2(8, 6), p + Vector2(-8, 6)])
+		_canvas.draw_colored_polygon(tri, PROBLEM)
+		_canvas.draw_polyline(PackedVector2Array([tri[0], tri[1], tri[2], tri[0]]), Color(1, 0.95, 0.85), 1.0)
+		_canvas.draw_string(font, p + Vector2(-2.5, 4.5), "!", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1, 1, 1))
+		if zoom >= 4.0 and not off and m.first:  # one name per line, not per fence piece
+			_canvas.draw_string(font, p + Vector2(10, 4), m.name, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, PROBLEM.darkened(0.3))
+
+
+## "3 pieces need you: J says why", above the N (drawn after the zoom frame).
+func _draw_problem_count(font: Font) -> void:
+	if problems.is_empty():
+		return
+	var c := _canvas.size * 0.5
+	var r := radius_px()
+	var n := problems.size()
+	var line := "%d %s need%s you: J says why" % [n, "piece" if n == 1 else "pieces", "s" if n == 1 else ""]
+	var w := font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x
+	_canvas.draw_string(font, Vector2(c.x - w * 0.5, c.y - r - 44.0), line, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(1.0, 0.55, 0.4))
 
 
 ## The green % and the livable score with its parts and milestones, on the right.

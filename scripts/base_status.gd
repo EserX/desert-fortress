@@ -26,8 +26,10 @@ const LOW_AMMO := 40        # a turret with fewer rounds than this is flagged (a
 const COMPASS := ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"]
 
 
-## Every entry: {"key", "name", "where", "state", "text"}, problems first, then
-## by distance from the base. Runs only while the page is open (four times a
+## Every entry: {"key", "name", "where", "state", "text", "spots"}, problems first, then
+## by distance from the base. "spots" holds where each piece of the line stands
+## (one for most, every piece for a fence line), for the map's marks (v2.9.3).
+## Runs only while the page or the map is open (four times a
 ## second), over the machines, furnaces, generators and defences (a few hundred
 ## at most, most of them fence pieces) plus a few walks of the cables.
 static func entries(building, water = null, oases = null) -> Array:
@@ -58,16 +60,17 @@ static func entries(building, water = null, oases = null) -> Array:
 			# A fence is many short pieces: one line per state, placed at the nearest piece.
 			var gid: String = st[0] + "|" + st[1]
 			if not fences.has(gid):
-				fences[gid] = {"key": key, "keys": [], "name": "", "where": "", "state": st[0], "text": st[1], "dist": INF}
+				fences[gid] = {"key": key, "keys": [], "spots": [], "name": "", "where": "", "state": st[0], "text": st[1], "dist": INF}
 			var grp: Dictionary = fences[gid]
 			grp.keys.append(key)
+			grp.spots.append(rec.node.global_position)
 			if dist < grp.dist:
 				grp.dist = dist
 				grp.key = key
 				grp.where = where(rec.node.global_position, oases)
 			continue
 		out.append({"key": key, "name": building.PIECES[rec.type].name, "where": where(rec.node.global_position, oases),
-				"state": st[0], "text": st[1], "dist": dist})
+				"state": st[0], "text": st[1], "dist": dist, "spots": [rec.node.global_position]})
 	for grp in fences.values():
 		var n: int = grp.keys.size()
 		grp.name = "Electric fence" if n == 1 else "Electric fence (%d pieces)" % n
@@ -78,6 +81,20 @@ static func entries(building, water = null, oases = null) -> Array:
 		var ra := ORDER.find(a.state)
 		var rb := ORDER.find(b.state)
 		return ra < rb if ra != rb else a.dist < b.dist)
+	return out
+
+
+## v2.9.3: the map's red marks: one {"pos", "name", "text", "first"} for every
+## piece on a stuck line (each piece of a stuck fence line), in the page's
+## order; "first" marks the first piece of each line (the map names that one).
+static func problem_marks(list: Array) -> Array:
+	var out: Array = []
+	for e in list:
+		if e.state != STUCK:
+			continue
+		var spots: Array = e.get("spots", [])
+		for i in spots.size():
+			out.append({"pos": spots[i], "name": e.name, "text": e.text, "first": i == 0})
 	return out
 
 

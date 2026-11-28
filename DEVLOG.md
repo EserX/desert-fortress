@@ -2,6 +2,20 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v2.9.3 (2026-11-28): Stuck pieces marked on the map
+No player feedback was waiting and every roadmap item is done, so this run took the third idea from the v2.9.2 "next" list (a small, self-contained one).
+- **Checked first:** all tests passed with no Godot errors before any change.
+- **New: the map (M) marks what needs you.** Every piece the base status page (J) lists as stuck (red) gets a red triangle with a **!** where it stands: an empty sawmill, a dry generator, a turret low on rounds, an uncabled fence piece (each piece of a stuck fence gets its own mark, so you see which stretch). Zoomed in to x4 or more, each mark is named ("Auto-turret", "Electric fence": once per fence line). Marks off the edge of a zoomed map sit on the rim, like your arrow. At the top: "3 pieces need you: J says why". The marks refresh four times a second while the map is open, so loading a turret clears its mark at once. Legend line and a hint on the J page added.
+- **Decisions:**
+  - The marks come straight from `base_status.entries()` (each entry now carries `spots`, where its pieces stand) through a new `base_status.problem_marks()`, so the map can't disagree with the J page. Only stuck pieces are marked; idle ones (a furnace with nothing in) would just be clutter.
+  - map_ui.gd works them out at most four times a second while open, not every frame. main.gd untouched. No save changes.
+  - The screenshot tool now quits the same quiet way as the tests (stops sounds first), so it no longer sometimes warns about leaked objects at exit.
+- **Tests (1 new, 8 checks):** no marks with nothing built; an empty turret and two uncabled fence pieces give three marks on their pieces and none on the fuelled generator; the fence line is named once; loading and cabling clears them; opening the map marks an empty turret and loading it clears the mark within a quarter second. All tests passed, flow test passed.
+- New screenshot view `95_problem_map` (the status base on the map at x4).
+
+**Try:** open the map (M) at your base and zoom in with the mouse wheel: any red ! is something to fix before dusk.
+**Next:** no player feedback left and the roadmap is done. Ideas for the owner to pick from (write one under Player feedback to ask for it): outposts' pipes on a zoomed map round the outpost; a map layer marking spare sprinklers; a HUD warning at dusk when a turret is empty or a generator is dry.
+
 ## v2.9.2 (2026-11-28): Turrets, floodlights and fences on the base status page
 No player feedback was waiting and every roadmap item is done, so this run took the first idea from the v2.9.1 "next" list.
 - **Checked first:** all tests passed with no Godot errors before any change.

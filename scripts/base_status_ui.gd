@@ -109,4 +109,4 @@ func _draw_page() -> void:
 		y += ROW
 	if list.size() > fit:
 		_canvas.draw_string(font, Vector2(x, y), "...and %d more" % (list.size() - fit), HORIZONTAL_ALIGNMENT_LEFT, -1, 16, TEXT)
-	_canvas.draw_string(font, Vector2(x, _canvas.size.y - 50.0), "[!] stuck: needs you    [ ] idle: nothing to do    [x] working        J or Esc closes", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, TEXT)
+	_canvas.draw_string(font, Vector2(x, _canvas.size.y - 50.0), "[!] stuck: needs you (red ! on the map, M)    [ ] idle: nothing to do    [x] working        J or Esc closes", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, TEXT)

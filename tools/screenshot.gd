@@ -99,6 +99,7 @@ var shots := [
 	{"name": "89_purifier_pipe", "pos": Vector3(5, 0, 2), "yaw": 0.0, "pitch": -0.3, "hour": 14.0, "purifier_pipe": true},
 	{"name": "90_water_map", "pos": Vector3(20, 0, 40), "yaw": 0.9, "pitch": 0.0, "hour": 10.0, "map": true, "water_map": true, "zoom": 4.0},
 	{"name": "91_reach_ring", "pos": Vector3(8, 0, 5), "yaw": -0.1, "pitch": -0.32, "hour": 15.0, "ring": "dew_collector"},
+	{"name": "92_hammer_reach", "pos": Vector3(8, 0, 5), "yaw": 0.0, "pitch": 0.0, "hour": 15.0, "hammer_ring": true},
 	{"name": "08_menu", "pos": Vector3(0, 0, 9), "yaw": 0.0, "pitch": 0.0, "hour": 12.0, "menu": true},
 ]
 
@@ -346,6 +347,8 @@ func _process(_d: float) -> bool:
 			_ring_sample(s.ring)
 		elif main.build_mode.range_ring.visible and not s.get("build", false):
 			main.build_mode.range_ring.visible = false
+		if s.get("hammer_ring", false):
+			_hammer_ring_sample(p)
 		if s.get("power", false):
 			_power_sample()
 		if s.get("traps", false):
@@ -748,6 +751,30 @@ func _ring_sample(type: String) -> void:
 	main.shop.unlocked[type] = true
 	main.build_mode.active = true
 	main.build_mode.select(b.ORDER.find(type))
+
+
+## v2.8.6: the hammer pointed at a built sprinkler shows its 5 m reach circle
+## (outside build mode); a dew collector stands further off without one.
+func _hammer_ring_sample(p: Node3D) -> void:
+	var b = main.building
+	b.load_data([])
+	main.mutants.clear()
+	if main.build_mode.active:
+		main.build_mode.toggle()
+	var slot := {"kind": "obj", "cx": 5, "cz": -1, "dir": 0, "level": 0}
+	var key: String = b.place("sprinkler", slot, b.evaluate("sprinkler", slot).y)
+	var dslot := {"kind": "obj", "cx": 9, "cz": -4, "dir": 0, "level": 0}
+	b.place("dew_collector", dslot, b.evaluate("dew_collector", dslot).y)
+	main.inventory.load_data({})
+	main.inventory.add_all({"hammer": 1})
+	main.inventory.selected = 0
+	var t: Vector3 = b.pieces[key].node.global_position + Vector3(0, 0.4, 0)
+	var from := t + Vector3(-1.2, 0, 2.6)
+	from.y = main.terrain.surface_height(from.x, from.z)
+	p.position = from
+	var d := t - from - Vector3(0, p.EYE_HEIGHT, 0)
+	p.rotation.y = atan2(-d.x, -d.z)
+	p.head.rotation.x = atan2(d.y, Vector2(d.x, d.z).length())
 
 
 ## A landing pad with the drone coming down over it, and sandbag walls (v0.23).

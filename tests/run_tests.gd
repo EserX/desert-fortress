@@ -1116,6 +1116,32 @@ func _start_turret() -> void:
 	check(not bm.range_ring.visible, "and hides when you stop building")
 	var slot := {"kind": "obj", "cx": -2, "cz": -8, "dir": 0, "level": 0}
 	turret_key = b.place("turret", slot, b.evaluate("turret", slot).y)
+	# v2.8.6: the hammer at a built turret / sprinkler shows its reach circle.
+	bm.show_reach_of(turret_key)
+	check(bm.range_ring.visible, "the hammer at a built turret shows its range circle")
+	var tc: Vector3 = b.pieces[turret_key].node.global_position
+	var rtp: Vector3 = bm.ring_points[0]
+	check(absf(Vector2(rtp.x - tc.x, rtp.z - tc.z).length() - b.TURRET_RANGE) < 0.1, "round the built turret")
+	check(main.hammer_prompt(turret_key).contains("up to 22 m"), "and the hammer prompt says its reach: " + main.hammer_prompt(turret_key))
+	bm.show_reach_of("")
+	check(not bm.range_ring.visible, "looking away hides the built turret's circle")
+	var sslot: Dictionary = b.slot_for("sprinkler", Vector3(6, 0, -14), 0)
+	var skey: String = b.place("sprinkler", sslot, b.evaluate("sprinkler", sslot).y)
+	bm.show_reach_of(skey)
+	var sc: Vector3 = b.pieces[skey].node.global_position
+	var sp: Vector3 = bm.ring_points[0]
+	check(bm.range_ring.visible and absf(Vector2(sp.x - sc.x, sp.z - sc.z).length() - 5.0) < 0.1, "a built sprinkler shows its 5 m circle")
+	check(bm.range_ring.material_override.albedo_color.is_equal_approx(bm.REACH_RINGS.sprinkler[1]), "in the sprinkler's colour")
+	var wslot: Dictionary = b.slot_for("wall", Vector3(-6, 0, -16), 0)
+	var wkey: String = b.place("wall", wslot, b.evaluate("wall", wslot).y)
+	bm.show_reach_of(wkey)
+	check(not bm.range_ring.visible, "a built wall shows no circle")
+	check(not main.hammer_prompt(wkey).contains("(the circle)"), "and its hammer prompt says nothing about one")
+	bm.show_reach_of(skey)
+	b.remove(skey)
+	bm.show_reach_of(skey)
+	check(not bm.range_ring.visible, "a circle goes when its piece is taken down")
+	b.remove(wkey)
 	check(main._prompt_for("turret:" + turret_key).contains("0/%d rounds, EMPTY" % b.TURRET_AMMO), "turret prompt: " + main._prompt_for("turret:" + turret_key))
 	main.interact("turret:" + turret_key)
 	check(b.pieces[turret_key].ammo == 30 and inv.count_of("ammo_9mm") == 0, "E loads your 9mm rounds into it")

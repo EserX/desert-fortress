@@ -369,10 +369,32 @@ static func ring_radius(type: String) -> float:
 ## Runs every frame in build mode, but only redraws (RING_DASHES dashes) when
 ## the preview moved or the piece changed.
 func _update_ring(type: String) -> void:
-	range_ring.visible = REACH_RINGS.has(type) and _ghost.visible
+	_draw_ring(type, _ghost.global_position, _ghost.visible)
+
+
+## v2.8.6: outside build mode, the hammer pointed at a built sprinkler, dew
+## collector, weather station or turret shows its reach circle round it.
+## key: the piece under the crosshair, or "" to hide. Called every frame by
+## main while the hammer is held; redraws only when the piece changes.
+func show_reach_of(key: String) -> void:
+	if active:
+		return  # build mode draws its own circle
+	var rec: Dictionary = building.pieces.get(key, {})
+	if rec.is_empty() or not REACH_RINGS.has(rec.type) or not is_instance_valid(rec.node):
+		range_ring.visible = false
+		return
+	_draw_ring(rec.type, (rec.node as Node3D).global_position, true)
+
+
+## The reach text for a piece type ("Waters the ground up to 5 m round it (the circle)"), or "".
+static func reach_text(type: String) -> String:
+	return String(REACH_RINGS[type][2]) % int(ring_radius(type)) if REACH_RINGS.has(type) else ""
+
+
+func _draw_ring(type: String, c: Vector3, show: bool) -> void:
+	range_ring.visible = REACH_RINGS.has(type) and show
 	if not range_ring.visible:
 		return
-	var c := _ghost.global_position
 	if type == _ring_type and c.distance_to(_ring_at) < 0.01:
 		return
 	_ring_at = c
@@ -585,5 +607,5 @@ func status_text() -> String:
 	elif slot.get("level", 0) > 0 and support_preview > -INF:
 		line += "\nSupport here: %d%%" % int(support_preview)
 	if REACH_RINGS.has(type) and carrying.is_empty() and not slot.is_empty():
-		line += "\n" + String(REACH_RINGS[type][2]) % int(ring_radius(type))
+		line += "\n" + reach_text(type)
 	return line + "\n" + keys_text()

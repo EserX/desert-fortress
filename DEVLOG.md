@@ -2,6 +2,20 @@
 
 Newest entries on top. Each development run adds one entry.
 
+## v2.8.6 (2026-11-28): Reach circles with the hammer
+No player feedback was waiting and every roadmap item is done, so this run took one of the ideas from v2.8.5's list: the reach circle for pieces already built.
+- **Checked first:** all tests passed with no Godot errors before any change.
+- **New: the hammer shows a built piece's reach.** Hold the hammer (outside build mode) and look at a built **sprinkler**, **dew collector**, **weather station** or **turret**: the same dashed circle you saw while placing it appears round it, in its colour. The hammer prompt adds the reach ("Waters the ground up to 5 m round it (the circle)"). It hides when you look away, switch tools, open a menu, or the piece is taken down.
+- **Decisions:**
+  - Only the hammer, as it is the tool for looking after pieces (and the hammer prompt shows on these pieces). Build mode keeps drawing its own circle for the preview.
+  - build_mode.gd keeps the one circle: the drawing code is now `_draw_ring()`, used by the preview and by the new `show_reach_of(key)`; `reach_text()` gives the line for both the build line and the hammer prompt, so they can't drift apart. main.gd: +5 lines (calls it each frame with the piece under the crosshair).
+  - No save changes.
+- **Tests (9 new):** the hammer at a built turret shows its 22 m circle round it and the prompt says its reach; looking away hides it; a built sprinkler shows its 5 m circle in its colour; a built wall shows none and its prompt says nothing; the circle goes when the piece is taken down.
+- New screenshot view `92_hammer_reach` (hammer pointed at a built sprinkler, blue 5 m circle and the prompt).
+
+**Try:** take the hammer and walk round your sprinklers and dew collectors: look at each one to see what it waters, and spot the gaps between circles.
+**Next:** more bug hunting and rough edges. Ideas for the owner to pick from (write them under Player feedback to ask for one): a "base status" page listing machines that are idle and why; outposts' pipes on a zoomed map round the outpost; showing every sprinkler's circle at once while placing a new one.
+
 ## v2.8.5 (2026-11-28): Reach circles while placing
 No player feedback was waiting and every roadmap item is done, so this run took one of the ideas from v2.8.4's list: a dew collector's reach shown while placing it, done for every piece that works at a distance.
 - **Checked first:** all tests passed with no Godot errors before any change.

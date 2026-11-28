@@ -598,7 +598,9 @@ func _process(delta: float) -> void:
 		animals.tick(delta, day_night.hour)
 	if hud and not get_tree().paused:
 		var text := ""
-		if not inventory_ui.is_open() and not shop_ui.is_open() and not blueprint_menu.is_open():
+		var menus := inventory_ui.is_open() or shop_ui.is_open() or blueprint_menu.is_open()
+		build_mode.show_reach_of(piece_under_crosshair() if holding_hammer() and not menus else "")  # v2.8.6
+		if not menus:
 			# v2.8.3: a water pipe in hand at a pipe end (a sprinkler, purifier, the well) shows what the pipe does there.
 			text = water.held_prompt("water_pipe") if holding("water_pipe") and water.pipe_target() != "" else _prompt_for(player.interact_target())
 			if text == "" and holding_hammer():
@@ -1119,6 +1121,8 @@ func hammer_prompt(key: String) -> String:
 	var text := "%s  %d/%d" % [building.describe(rec), rec.hp, building.max_hp(rec)]
 	if rec.slot.level > 0:
 		text += "   support %d%%" % int(building.support.get(key, 0.0))
+	if BuildMode.REACH_RINGS.has(rec.type):
+		text += "   " + BuildMode.reach_text(rec.type)
 	var rep := building.repair_cost(rec)
 	var up := building.upgrade_cost(rec)
 	if not rep.is_empty():
